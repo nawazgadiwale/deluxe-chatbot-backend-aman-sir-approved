@@ -77,7 +77,7 @@ const addAllJasaniProducts = async (req, res) => {
     try {
         // ensure directory exists
         if (!fs.existsSync(DATA_DIR)) {
-            fs.mkdirSync(DATA_DIR, { recursive: true});
+            fs.mkdirSync(DATA_DIR, { recursive: true });
         }
         const response = await axios.get(
             `${process.env.JASANI_BASE_URL}/${process.env.JASANI_API_KEY}`
@@ -126,70 +126,6 @@ const addAllJasaniProducts = async (req, res) => {
     }
 }
 
-// const getAllProducts = (req, res) => {
-//     try {
-//         const { page = 1, limit = 20, search = "", category} = req.query;
-
-//         const pageNum = Number(page);
-//         const limitNum = Number(limit);
-
-//         let stegienceProducts = readJsonSafe(STEGIENCE_PATH);
-//         let jasaniProducts = readJsonSafe(JASANI_PATH);
-
-//         if (search) {
-//             const q = search.toLowerCase();
-           
-//             const matchSearch = (p) => {
-//                 const name = typeof p.name === "string" ? p.name.toLowerCase() : "";
-//                 const sku = typeof p.sku === "string" ? p.sku.toLowerCase() : ""
-
-//                 return name.includes(q) || sku.includes(q)
-//             }
-
-//             stegienceProducts = stegienceProducts.filter(matchSearch)
-//             jasaniProducts = jasaniProducts.filter(matchSearch)
-//         }
-
-//         if (category) {
-//             stegienceProducts = stegienceProducts.filter(
-//                 p => p.category_name === category
-//             )
-//             jasaniProducts = jasaniProducts.filter(
-//                 p => p.category_name === category         
-//             )
-//         }
-
-//         const halfLimit = Math.floor(limitNum / 2);
-
-//         const stegienceSlice = stegienceProducts.slice(
-//             (pageNum - 1) * halfLimit,
-//             pageNum * halfLimit
-//         )
-
-//         const jasaniSlice = jasaniProducts.slice(
-//             (pageNum - 1) * halfLimit,
-//             pageNum * halfLimit
-//         )
-
-//         const finalProducts = [...stegienceSlice, ...jasaniSlice]
-
-//         res.status(200).json({
-//             success: true,
-//             page: pageNum,
-//             limit: limitNum,
-//             count: stegienceProducts.length + jasaniProducts.length,
-//             returned: finalProducts.length,
-//             products: finalProducts,
-//         })
-//     } catch (error) {
-//         console.error("Error getting all products:", error)
-//         res.status(500).json({
-//             success: false,
-//             message: "Failed to get products"
-//         })
-//     }
-// }
-
 const getAllProducts = (req, res) => {
     try {
         const { page = 1, limit = 20, search = "", category } = req.query;
@@ -212,8 +148,16 @@ const getAllProducts = (req, res) => {
         }
 
         if (category) {
-            stegience = stegience.filter(p => p.category_name === category);
-            jasani = jasani.filter(p => p.category_name === category);
+
+            const categories = decodeURIComponent(category)
+            .split("'").map(c => c.trim().toLowerCase());
+            stegience = stegience.filter(
+                p => categories.includes((p.category_name || "").toLowerCase())
+            );
+
+            jasani = jasani.filter(
+                p => categories.includes((p.category_name || "").toLowerCase())
+            );
         }
 
         const half = Math.floor(limitNum / 2);
@@ -255,43 +199,43 @@ const getAllProducts = (req, res) => {
 }
 
 const getIndividualProductDetails = (req, res) => {
-  try {
-      const { uuid } = req.params;
+    try {
+        const { uuid } = req.params;
 
-    if (!uuid) {
-        return (res.status(400).json({
+        if (!uuid) {
+            return (res.status(400).json({
+                success: false,
+                message: "UUID is required!"
+            }))
+        }
+
+        const stegienceProducts = readJsonSafe(STEGIENCE_PATH);
+        const jasaniProducts = readJsonSafe(JASANI_PATH)
+
+        const allProducts = [...stegienceProducts, ...jasaniProducts];
+
+        const product = allProducts.find(
+            p => p.uuid === uuid
+        )
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found!"
+            })
+        }
+
+        res.status(200).json({
+            success: true,
+            product: product
+        })
+    } catch (error) {
+        console.error("Error getting product by UUID:", error)
+        res.status(500).json({
             success: false,
-            message: "UUID is required!"
-        }))
-    }
-
-    const stegienceProducts = readJsonSafe(STEGIENCE_PATH);
-    const jasaniProducts = readJsonSafe(JASANI_PATH)
-
-    const allProducts = [...stegienceProducts, ...jasaniProducts];
-
-    const product = allProducts.find(
-        p => p.uuid === uuid
-    )
-
-    if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: "Product not found!"
+            message: "Failed to fetch product details!"
         })
     }
-
-    res.status(200).json({
-        success: true,
-        product: product
-    })
-  } catch (error) {
-    console.error("Error getting product by UUID:", error)
-    res.status(500).json({
-        success: false,
-        message: "Failed to fetch product details!"
-    })
-  }
 }
 
 module.exports = { addAllStegienceProducts, addAllJasaniProducts, getAllProducts, getIndividualProductDetails }

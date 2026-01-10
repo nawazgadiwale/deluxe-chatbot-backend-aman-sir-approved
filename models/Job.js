@@ -76,7 +76,7 @@ const jobSchema = new mongoose.Schema({
         type: String,
         enum: ['Huzaifa', 'Aliasgar', 'Nishan', 'Rizwan', 'Arif', 'Nayeem', 'Azmat', 'Ziyad',
             'Umair', 'Wajid', 'Junaid', 'Zohaib', 'Saniya', 'Mohsin', 'Aaliya', 'Zeedan', 'Misba',
-            'Muazzam', 'Hafsa', 'Sharifa', 'Salman'
+            'Muazzam', 'Hafsa', 'Sharifa', 'Salman','Atif'
         ],
         required: true
     },

@@ -1,5 +1,5 @@
 const express = require('express')
-const { getReportsData, getMonthlyOrderGraph, getDivisionWiseGraph } = require('../controllers/reportController')
+const { getReportsData, getMonthlyOrderGraph, getDivisionWiseGraph, getGraphDataBySalesPerson } = require('../controllers/reportController')
 const router = express.Router()
 
 // orders & employees reports data
@@ -14,4 +14,9 @@ router.get("/main", getMonthlyOrderGraph)
 // GET
 router.get("/division", getDivisionWiseGraph)
 
+// salesperson graph
+// GET
+router.get("/sales", getGraphDataBySalesPerson)
+
+// exports
 module.exports = router

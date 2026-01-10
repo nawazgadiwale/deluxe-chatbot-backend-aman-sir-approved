@@ -72,6 +72,7 @@ const getMonthlyOrderGraph = async (req, res) => {
                 $group: {
                     _id: { $month: "$createdAt" },
                     totalCount: { $sum: 1 },
+                    totalQuotesAmount: { $sum: "$amount" },
                     totalInvoices: {
                         $sum: {
                             $cond: [{ $eq: ["$moveToInvoice", true] }, 1, 0]
@@ -101,6 +102,7 @@ const getMonthlyOrderGraph = async (req, res) => {
             return {
                 month,
                 totalInvoices: found ? found.totalInvoices : 0,
+                totalQuotesAmount: found ? Number(found.totalQuotesAmount.toFixed(2)) : 0,
                 totalCount: found ? found.totalCount : 0,
                 totalAmount: found ? Number(found.totalAmount.toFixed(2)) : 0
             }
@@ -122,6 +124,14 @@ const getMonthlyOrderGraph = async (req, res) => {
 
 const getDivisionWiseGraph = async (req, res) => {
     try {
+
+        const year = req.query.year
+            ? Number(req.query.year)
+            : new Date().getFullYear()
+
+        const startDate = new Date(`${year}-01-01T00:00:00.000Z`)
+        const endDate = new Date(`${year}-12-31T23:59:59.999z`)
+
         const ALL_DIVISIONS = [
             "Store Branding",
             "Signage",
@@ -136,25 +146,34 @@ const getDivisionWiseGraph = async (req, res) => {
         const result = await Quote.aggregate([
             {
                 $match: {
-                    moveToInvoice: true
+                    createdAt: { $gte: startDate, $lte: endDate }
                 }
             },
             {
                 $group: {
                     _id: "$division",
-                    totalInvoices: { $sum: 1 }
+                    totalCount: { $sum: 1 },
+                    totalInvoiceCount: {
+                        $sum: {
+                            $cond: [{ $eq: ["$moveToInvoice", true] }, 1, 0]
+                        }
+                    },
                 }
             }
         ])
 
         const divisionMap = {}
         result.forEach(item => {
-            divisionMap[item._id] = item.totalInvoices;
+            divisionMap[item._id] = {
+                totalCount: item.totalCount,
+                totalInvoiceCount: item.totalInvoiceCount
+            }
         })
 
         const finalData = ALL_DIVISIONS.map(div => ({
             division: div,
-            totalInvoices: divisionMap[div] || 0
+            totalCount: divisionMap[div]?.totalCount || 0,
+            totalInvoiceCount: divisionMap[div]?.totalInvoiceCount || 0
         }))
 
         return res.status(200).json({
@@ -169,4 +188,87 @@ const getDivisionWiseGraph = async (req, res) => {
     }
 }
 
-module.exports = { getReportsData, getMonthlyOrderGraph, getDivisionWiseGraph }
+const getGraphDataBySalesPerson = async (req, res) => {
+    try {
+        const year = req.query.year
+            ? Number(req.query.year)
+            : new Date().getFullYear()
+
+        const startDate = new Date(`${year}-01-01T00:00:00.000Z`)
+        const endDate = new Date(`${year}-12-31T23:59:59.999z`)
+
+        const ALL_SALES_PERSON = [
+            "Huzaifa",
+            "Aliasgar",
+            "Nishan",
+            "Rizwan",
+            "Arif",
+            "Nayeem",
+            "Azmat",
+            "Ziyad",
+            "Umair",
+            "Wajid",
+            "Junaid",
+            "Zohaib",
+            "Saniya",
+            "Mohsin",
+            "Aaliya",
+            "Zeedan",
+            "Misba",
+            "Muazzam",
+            "Hafsa",
+            "Sharifa",
+            "Salman",
+            "Atif"
+        ]
+
+        const result = await Quote.aggregate([
+            {
+                $match: {
+                    createdAt: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: "$salesPerson",
+                    totalInvoiceCount: {
+                        $sum: {
+                            $cond: [{ $eq: ["$moveToInvoice", true] }, 1, 0]
+                        }
+                    },
+                    totalPendingCount: {
+                        $sum: {
+                            $cond: [{ $eq: ["$moveToInvoice", false] }, 1, 0]
+                        }
+                    }
+                }
+            }
+        ])
+
+        const salespersonMap = {}
+        result.forEach(item => {
+            salespersonMap[item._id] = {
+                totalInvoiceCount: item.totalInvoiceCount,
+                totalPendingCount: item.totalPendingCount
+            }
+        })
+
+        const finalData = ALL_SALES_PERSON.map(sal => ({
+            salesPerson: sal,
+            totalInvoiceCount: salespersonMap[sal]?.totalInvoiceCount || 0,
+            totalPendingCount: salespersonMap[sal]?.totalPendingCount || 0
+        }))
+
+        return res.status(200).json({
+            success: true,
+            data: finalData
+        })
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch sales person graph data!"
+        })
+    }
+}
+
+module.exports = { getReportsData, getMonthlyOrderGraph, getDivisionWiseGraph, getGraphDataBySalesPerson }
