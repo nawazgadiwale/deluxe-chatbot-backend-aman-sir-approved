@@ -33,7 +33,7 @@ const UserSchema = new mongoose.Schema({
     // role of employee
     role: {
         type: String,
-        enum: ['admin', 'sub-admin', 'sales', 'design', 'production', 'finishing', 'operation'],
+        enum: ['super-admin', 'admin', 'sub-admin', 'sales', 'design', 'production', 'finishing', 'operation'],
         default: 'sales'
     },
     // access of employee

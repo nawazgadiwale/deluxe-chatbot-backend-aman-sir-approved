@@ -1,12 +1,69 @@
 const Job = require('../models/Job')
 const Quote = require('../models/Quote')
+// const MANAGER_BASE_URL = process.env.NEXT_PUBLIC_MANAGER_BASE_URL;
+// const API_KEY = process.env.NEXT_PUBLIC_API_KEY
+// const API_KEY_2 = process.env.NEXT_PUBLIC_API_KEY_2
+
+// const fields = [
+//   // "Image",
+//   // "Attachment",
+//   "IssueDate",
+//   "DueDate",
+//   "Reference",
+//   "SalesQuote",
+//   // "SalesOrder",
+//   "Customer",
+//   "Description",
+//   "Project",
+//   "Division",
+//   // "ClosedInvoice",
+//   // "WithholdingTax",
+//   // "Discount",
+//   "InvoiceAmount",
+//   // "CostOfSales",
+//   "BalanceDue",
+//   // "DaysToDueDate",
+//   "DaysOverdue",
+//   "Status",
+//   "Timestamp",
+// ]
+
+// const salesInvoices = async (skip = 0, pageSize = 20, term = "") => {
+//   try {
+//     // Build fields query string
+//     const queryString = fields.map((f) => `fields=${encodeURIComponent(f)}`).join("&");
+
+//     // Add search term if exists
+//     const termParam = term ? `&term=${encodeURIComponent(term)}` : "";
+
+//     const url = `${MANAGER_BASE_URL}/sales-invoices?skip=${skip}&pageSize=${pageSize}${termParam}&${queryString}`;
+
+//     const response = await axios.get(url, {
+//       headers: {
+//         Accept: "application/json",
+//         "X-API-KEY": API_KEY,
+//       },
+//     });
+
+//     return {
+//       totalRecords: response.data.totalRecords || response.data.length || 0,
+//       salesInvoices: response.data || [],
+//     };
+//   } catch (error) {
+//     // console.error("Error while fetching sales invoices:", error.message);
+//     if (error.response) {
+//       console.error("Response:", error.response.data);
+//     }
+//     return { totalRecords: 0, salesInvoices: [] };
+//   }
+// };
 
 // function to create new order 
 const createNewOrder = async (req, res) => {
    try {
       // body params
       const { createdBy, uuid, invoiceNumber, invoiceDate, emirates, contact_person, companyName, division, emailId, item, main_category,
-         salesPerson, source, type, modes, mobileNo, delivery_address, billing_address, assignToDepartment, designer, production,
+         salesPerson, source, type, modes, mobileNumber, delivery_address, billing_address, assignToDepartment, designer, production,
          operation, description, instruction, payment_status, delivery_date, delivery_time, category, finishing_instruction, multiple_items
       } = req.body
 
@@ -53,7 +110,7 @@ const createNewOrder = async (req, res) => {
          source,
          type,
          modes,
-         mobileNo,
+         mobileNumber,
          main_category,
          billing_address,
          delivery_address,
@@ -562,7 +619,7 @@ const createNewQuote = async (req, res) => {
    try {
       const {
          createdBy, quote_uuid, quoteNumber, emirates, quoteDate, main_category, source,
-         companyName, contactPerson, mobileNumber, emailId, item, category,
+         companyName, contactPerson, mobileNumber, emailId, item, category, description,
          division, billingAddress, deliveryAddress, type, salesPerson, amount,
          currencyType, status, dealStatus, multipleItems, assignToDepartment
       } = req.body
@@ -580,6 +637,7 @@ const createNewQuote = async (req, res) => {
          !contactPerson ||
          !mobileNumber ||
          !emailId ||
+         !description ||
          !item ||
          !category ||
          !division ||
@@ -615,6 +673,7 @@ const createNewQuote = async (req, res) => {
          emailId,
          item,
          category,
+         description,
          division,
          billingAddress,
          deliveryAddress,
@@ -643,7 +702,7 @@ const createNewQuote = async (req, res) => {
 
 const getAllSalesQuotes = async (req, res) => {
    try {
-      const { page = 1, limit = 10, search = "", main_category, department, salesPerson } = req.query
+      const { page = 1, limit = 10, search = "", main_category, department, salesPerson, userName, userRole } = req.query
 
       const pipeline = []
       pipeline.push({ $match: { moveToInvoice: false } })
@@ -676,6 +735,56 @@ const getAllSalesQuotes = async (req, res) => {
       if (main_category) pipeline.push({ $match: { main_category } })
       if (department) pipeline.push({ $match: { division: department } })
       if (salesPerson) pipeline.push({ $match: { salesPerson } })
+
+      // if (userRole && userName) {
+      //    const name = new RegExp(`^${userName}$`, "i")
+
+      //    if (userRole === "sales") {
+      //       pipeline.push({ $match: { salesPerson: name } })
+      //    }
+
+      //    if (userRole === "design") {
+      //       pipeline.push({ $match: { designer: name } })
+      //    }
+      // }
+
+      if (userRole && req.query.access) {
+         let accessArray = []
+
+         try {
+            accessArray = JSON.parse(req.query.access)
+         } catch (e) {
+            accessArray = [req.query.access]
+         }
+
+         const accessRegex = accessArray.map(name => new RegExp(`^${name}$`, "i"))
+
+         if (userRole === "sales") {
+            pipeline.push({
+               $match: {
+                  salesPerson: { $in: accessRegex }
+               }
+            })
+         }
+
+         if (userRole === "design") {
+            const isSakib = userName && userName.toLowerCase() === "sakib"
+
+            pipeline.push({
+               $match: {
+                  designer: { $exists: true, $ne: null }
+               }
+            })
+
+            if (!isSakib) {
+               pipeline.push({
+                  $match: {
+                     designer: { $in: accessRegex }
+                  }
+               })
+            }
+         }
+      }
 
       pipeline.push({ $sort: { createdAt: -1 } })
       pipeline.push({ $skip: (page - 1) * parseInt(limit) })
@@ -728,7 +837,7 @@ const updateSalesQuoteData = async (req, res) => {
    try {
       const { quote_uuid } = req.params
 
-      const { quoteNumber, deliveryAddress, billingAddress, moveToInvoice } = req.body
+      const { quoteNumber, deliveryAddress, billingAddress, moveToInvoice, invoiceNumber, invoiceDate } = req.body
 
       if (!quote_uuid || !quoteNumber) {
          return res.status(400).json({ message: "All requires fields must be filled!" })
@@ -742,7 +851,9 @@ const updateSalesQuoteData = async (req, res) => {
 
       existingQuote.billingAddress = billingAddress || existingQuote.billingAddress
       existingQuote.deliveryAddress = deliveryAddress || existingQuote.deliveryAddress
-      existingQuote.moveToInvoice = moveToInvoice || existingQuote.moveToInvoice
+      existingQuote.moveToInvoice = moveToInvoice ?? existingQuote.moveToInvoice
+      existingQuote.invoiceNumber = invoiceNumber ?? existingQuote.invoiceNumber
+      existingQuote.invoiceDate = invoiceDate ?? existingQuote.invalidate
 
       const updateQuote = await existingQuote.save()
 
@@ -759,7 +870,7 @@ const updateSalesQuoteData = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
    try {
-      const { page = 1, limit = 10, search = "", main_category, department, salesPerson, orderStatus, designer, production, finishing, operation } = req.query
+      const { page = 1, limit = 10, search = "", main_category, department, salesPerson, orderStatus, designer, production, finishing, operation, userRole, userName } = req.query
 
       const pipeline = []
       pipeline.push({ $match: { moveToInvoice: true } })
@@ -817,6 +928,95 @@ const getAllOrders = async (req, res) => {
       if (finishing) pipeline.push({ $match: { finishing } })
       if (operation) pipeline.push({ $match: { operation } })
 
+      // ✅ ROLE BASED FILTERING (IMPORTANT)
+      // if (userRole && userName) {
+      //    const name = new RegExp(`^${userName}$`, "i")
+
+      //    if (userRole === "sales") {
+      //       pipeline.push({ $match: { salesPerson: name } })
+      //    }
+
+      //    if (userRole === "design") {
+      //       pipeline.push({ $match: { designer: name } })
+      //    }
+
+      //    if (userRole === "production") {
+      //       pipeline.push({ $match: { production: name } })
+      //    }
+
+      //    if (userRole === "finishing") {
+      //       pipeline.push({ $match: { finishing: name } })
+      //    }
+
+      //    if (userRole === "operation") {
+      //       pipeline.push({ $match: { operation: name } })
+      //    }
+      // }
+
+      if (userRole && req.query.access) {
+         let accessArray = []
+
+         try {
+            accessArray = JSON.parse(req.query.access)
+         } catch (e) {
+            accessArray = [req.query.access]
+         }
+
+         const accessRegex = accessArray.map(name => new RegExp(`^${name}$`, "i"))
+         if (userRole === "sales") {
+            pipeline.push({
+               $match: {
+                  salesPerson: { $in: accessRegex }
+               }
+            })
+         }
+
+         if (userRole === "design") {
+            const isSakib = userName && userName.toLowerCase() === "sakib"
+
+            pipeline.push({
+               $match: {
+                  designer: { $exists: true, $ne: null }
+               },
+            })
+            if (!isSakib) {
+               pipeline.push({
+                  $match: {
+                     designer: { $in: accessRegex }
+                  }
+               })
+            }
+         }
+
+         if (userRole === "production") {
+            pipeline.push({
+               $match: {
+                  production_departments: {
+                     $exists: true,
+                     $ne: null,
+                     $not: { $size: 0 } // works for arrays
+                  }
+               }
+            })
+         }
+
+         if (userRole === "finishing") {
+            pipeline.push({
+               $match: {
+                  finishing: { $in: accessRegex }
+               }
+            })
+         }
+
+         if (userRole === "operation") {
+            pipeline.push({
+               $match: {
+                  operation: { $in: accessRegex }
+               }
+            })
+         }
+      }
+
       pipeline.push({ $sort: { createdAt: -1 } })
       pipeline.push({ $skip: (page - 1) * parseInt(limit) })
       pipeline.push({ $limit: parseInt(limit) })
@@ -847,11 +1047,11 @@ const updateSalesData = async (req, res) => {
       const { quote_uuid } = req.params
 
       const { invoiceNumber, invoiceDate, quoteNumber, deliveryAddress, billingAddress, modes,
-         paymentStatus, assignToDepartment, designer, production, finishing, operation, multipleItems,
+         paymentStatus, assignToDepartment, designer, designers, production, finishing, operation, multipleItems,
          description, instruction, deliveryDate, deliveryTime, finishingInstruction
       } = req.body
 
-      if (!quote_uuid || !quoteNumber || !invoiceNumber) {
+      if (!quote_uuid || !quoteNumber) {
          return res.status(400).json({ message: "All required fields must be filled!" })
       }
 
@@ -861,7 +1061,17 @@ const updateSalesData = async (req, res) => {
          return res.status(404).json({ message: "Order not found!" })
       }
 
-      existingOrder.invoiceNumber = invoiceNumber || existingOrder.invoiceNumber
+      const status = existingOrder.status?.toLowerCase().trim()
+
+      if (status === "accepted" && !invoiceNumber) {
+         return res.status(400).json({
+            message: "Invoice Number is required when status is Aceepted!"
+         })
+      }
+
+      if (invoiceNumber) {
+         existingOrder.invoiceNumber = invoiceNumber
+      }
       existingOrder.invoiceDate = invoiceDate || existingOrder.invoiceDate
       existingOrder.deliveryAddress = deliveryAddress || existingOrder.deliveryAddress
       existingOrder.billingAddress = billingAddress || existingOrder.billingAddress
@@ -869,8 +1079,22 @@ const updateSalesData = async (req, res) => {
       existingOrder.assignToDepartment = assignToDepartment || existingOrder.assignToDepartment
       existingOrder.modes = modes || existingOrder.modes
 
-      if (assignToDepartment === 'Designer' && designer) {
-         existingOrder.designer = designer
+      // if (assignToDepartment === 'Designer' && designer) {
+      //    existingOrder.designer = designer
+      // }
+
+      if (assignToDepartment === 'Designer') {
+         if (Array.isArray(designers) && designers.length > 0) {
+            existingOrder.designers = designers
+            existingOrder.designer = designers[0]   // ✅ primary
+         } else if (designer) {
+            existingOrder.designer = designer
+            existingOrder.designers = [designer]
+         } else {
+            // optional: clear if nothing selected
+            existingOrder.designer = ""
+            existingOrder.designers = []
+         }
       }
 
       if (assignToDepartment === 'Production' && production) {
@@ -914,11 +1138,11 @@ const addOrUpdateDesignerDetails = async (req, res) => {
       // pass params body
       const { invoiceNumber, quoteNumber, draftDate, proceedDate,
          designImages, draftSource, production_departments, filePath,
-         proceedMultipleItems, extraInstruction
+         proceedMultipleItems, extraInstruction, designer, designers
       } = req.body
 
       // if uuid and invoice number not present
-      if (!quote_uuid || !invoiceNumber || !quoteNumber) {
+      if (!quote_uuid || !quoteNumber) {
          return res.status(400).json({ message: "All required field must be filled!" })
       }
 
@@ -932,6 +1156,42 @@ const addOrUpdateDesignerDetails = async (req, res) => {
       // if job is not exists
       if (!existingOrder) {
          return res.status(404).json({ message: "Order not found!" })
+      }
+
+      const status = existingOrder.status?.toLowerCase().trim()
+
+      if (status === "accepted" && !invoiceNumber) {
+         return res.status(400).json({
+            message: "Invoice Number is required when status is Accepted!"
+         })
+      }
+
+      // Designer update restriction
+      // 🔽 ADD HERE
+      let parsedDesigners = designers;
+
+      try {
+         parsedDesigners = typeof designers === "string"
+            ? JSON.parse(designers)
+            : designers;
+      } catch (err) {
+         parsedDesigners = [];
+      }
+
+      // 🔐 Restrict update
+      if (designer !== undefined) {
+         existingOrder.designer = designer;
+      }
+
+      if (parsedDesigners !== undefined) {
+         existingOrder.designers = Array.isArray(parsedDesigners)
+            ? parsedDesigners
+            : [parsedDesigners];
+      }
+
+
+      if (invoiceNumber) {
+         existingOrder.invoiceNumber = invoiceNumber
       }
 
       if (draftDate) {
@@ -1059,7 +1319,7 @@ const addOrUpdateFinishingDetails = async (req, res) => {
       const { quote_uuid } = req.params
 
       // pass params in body
-      const { quoteNumber, invoiceNumber, finishing, operation } = req.body
+      const { quoteNumber, invoiceNumber, finishing, operation, finishingRecieveDate, finishingCompletionDate } = req.body
 
       if (!quote_uuid || !quoteNumber || !invoiceNumber) {
          return res.status(400).json({ message: "All required field must be filled!" })
@@ -1075,6 +1335,12 @@ const addOrUpdateFinishingDetails = async (req, res) => {
 
       if (finishing) {
          existingOrder.finishing = finishing
+      }
+      if (finishingRecieveDate) {
+         existingOrder.finishingRecieveDate = finishingRecieveDate
+      }
+      if (finishingCompletionDate) {
+         existingOrder.finishingCompletionDate = finishingCompletionDate
       }
 
       existingOrder.assignToDepartment = "Operation"
@@ -1103,7 +1369,7 @@ const addOrUpdateOperationDetails = async (req, res) => {
       const { quote_uuid } = req.params
 
       // body params
-      const { quoteNumber, invoiceNumber, operationDate, operationTime, operationArea, team,
+      const { quoteNumber, invoiceNumber, deliveryDate, deliveryTime, team,
          productionDetails, remarks, packagingInstruction, paymentStatus, isOperationCompleted
       } = req.body
 
@@ -1121,14 +1387,11 @@ const addOrUpdateOperationDetails = async (req, res) => {
          })
       }
 
-      if (operationDate) {
-         existingOrder.operationDate = operationDate
+      if (deliveryDate) {
+         existingOrder.deliveryDate = deliveryDate
       }
-      if (operationTime) {
-         existingOrder.operationTime = operationTime
-      }
-      if (operationArea) {
-         existingOrder.operationArea = operationArea
+      if (deliveryTime) {
+         existingOrder.deliveryTime = deliveryTime
       }
       if (team) {
          existingOrder.team = team

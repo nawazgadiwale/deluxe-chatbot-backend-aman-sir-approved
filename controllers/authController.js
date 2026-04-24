@@ -109,7 +109,7 @@ const login = async (req, res) => {
         if (!isMatch) return res.status(404).json('Incorrect Password')
 
         // generating token 
-        const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' })
+        const token = jwt.sign({ id: user._id, email: user.email, role: user.role, access: user.access }, process.env.JWT_SECRET, { expiresIn: '2h' })
 
         // return the success response
         res.status(200).json({
@@ -119,7 +119,8 @@ const login = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                access: user.access
             }
         })
     } catch (error) {
@@ -132,7 +133,7 @@ const login = async (req, res) => {
 // function to fetch all users
 const allUsers = async (req, res) => {
     try {
-        let { search, role, page = 1, limit = 10, sort="newest" } = req.query
+        let { search, role, page = 1, limit = 10, sort = "newest" } = req.query
 
         page = Number(page)
         limit = Number(limit)

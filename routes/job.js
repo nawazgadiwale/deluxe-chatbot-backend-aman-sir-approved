@@ -1,8 +1,9 @@
 const express = require('express')
-const { createNewOrder, getAllOrders, updateSalesData, getIndividualDetails, addOrUpdateDesignerDetails, addOrUpdateOperationDetails, addOrUpdateProductionDetails, updateMissingOperationDetails, addOrUpdateFinishingDetails, deleteOrder, createNewQuote, getAllSalesQuotes, getQuoteIndividualDetails, updateSalesQuoteData, getAllQuoteIds } = require('../controllers/jobController')
+const { createNewOrder, getAllOrders, updateSalesData, getIndividualDetails, addOrUpdateDesignerDetails, addOrUpdateOperationDetails, addOrUpdateProductionDetails, updateMissingOperationDetails, addOrUpdateFinishingDetails, deleteOrder, createNewQuote, getAllSalesQuotes, getQuoteIndividualDetails, updateSalesQuoteData, getAllQuoteIds, salesInvoices } = require('../controllers/jobController')
 const { default: upload } = require('../middlewares/multerConfig')
 const router = express.Router()
 
+// router.get("/sales-invoices", salesInvoices)
 // job order Route
 // create new order
 // POST

@@ -35,7 +35,7 @@ const quoteSchema = new mongoose.Schema({
     source: {
         type: String,
         enum: ['Whatsapp', 'Whatsapp(Old)', 'Email', 'Google Ads (Email)', 'Google Ads (Whatsapp)', 'Social Media', 'Walk-In', 'Whatsapp - Re',
-            'Email - Re', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (Whatsapp)', 'Repeat', 'Events (Google Ads)'],
+            'Email - Re', 'Google Ads Signage (WA)', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (Whatsapp)', 'Repeat', 'Events (Google Ads)'],
         required: true
     },
     companyName: {
@@ -85,8 +85,8 @@ const quoteSchema = new mongoose.Schema({
     salesPerson: {
         type: String,
         enum: ['Huzaifa', 'Aliasgar', 'Nishan', 'Rizwan', 'Arif', 'Nayeem', 'Azmat', 'Ziyad',
-            'Umair', 'Wajid', 'Junaid', 'Zohaib', 'Saniya', 'Mohsin', 'Aaliya', 'Zeedan',
-            'Misba', 'Muazzam', 'Hafsa', 'Sharifa', 'Salman', 'Atif'
+            'Umair', 'Wajid', 'Junaid', 'Zohaib', 'Saniya', 'Mohsin',
+            'Misba', 'Muazzam', 'Sharifa', 'Salman', 'Atif'
         ],
         required: true
     },
@@ -128,7 +128,6 @@ const quoteSchema = new mongoose.Schema({
         default: "Sales",
         required: true
     },
-
     emirates: {
         type: String,
         enum: ['Abu Dhabi', 'Ajman', 'Dubai', 'Fujairah', 'Sharjah', 'Ras al Khaimah', 'Umm al Quwain', 'International'],
@@ -154,6 +153,10 @@ const quoteSchema = new mongoose.Schema({
     },
     designer: {
         type: String,
+    },
+    designers: {
+        type: [String],
+        default: []
     },
     description: {
         type: String
@@ -226,6 +229,12 @@ const quoteSchema = new mongoose.Schema({
     finishing: {
         type: String
     },
+    finishingRecieveDate: {
+        type: Date
+    },
+    finishingCompletionDate: {
+        type: Date
+    },
     operation: {
         type: String
     },
@@ -235,9 +244,9 @@ const quoteSchema = new mongoose.Schema({
     operationTime: {
         type: String
     },
-    operationArea: {
-        type: String
-    },
+    // operationArea: {
+    //     type: String
+    // },
     team: {
         type: String
     },

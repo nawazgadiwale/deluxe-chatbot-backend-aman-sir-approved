@@ -84,7 +84,7 @@ const jobSchema = new mongoose.Schema({
     source: {
         type: String,
         enum: ['Whatsapp', 'Whatsapp(Old)', 'Email', 'Google Ads (Email)', 'Google Ads (WhatsApp)', 'Social Media', 'Walk-In', 'Whatsapp - Re',
-            'Email - Re', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (WhatsApp)', 'Repeat', 'Events (Google Ads)'],
+            'Email - Re', 'Google Ads Signage (WA)', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (WhatsApp)', 'Repeat', 'Events (Google Ads)'],
         required: true
     },
     // type from manager.io
@@ -100,7 +100,7 @@ const jobSchema = new mongoose.Schema({
         required: true,
     },
     // mobile number from manager.io
-    mobileNo: {
+    mobileNumber: {
         type: String,
         required: true
     },
@@ -267,9 +267,9 @@ const jobSchema = new mongoose.Schema({
         type: Number
     },
     // operation area filled by operation person
-    operationArea: {
-        type: String
-    },
+    // operationArea: {
+    //     type: String
+    // },
     // team filled by operation person
     team: {
         type: String

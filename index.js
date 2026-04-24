@@ -1,3 +1,4 @@
+require("dotenv").config();
 const path = require('path')
 const express = require('express')
 const dotenv = require('dotenv')
@@ -7,8 +8,8 @@ const cors = require('cors')
 const authRoutes = require("./routes/auth")
 const jobRoutes = require("./routes/job")
 const reportRoutes = require("./routes/report")
-const productRoutes = require("./routes/product")
-dotenv.config()
+const curstomerRoutes = require("./routes/customer")
+const managerioRoutes = require("./routes/manager")
 
 const app = express()
 app.use(express.json())
@@ -23,8 +24,11 @@ app.use("/v1/api/job", jobRoutes)
 // reports routes
 app.use("/v1/api/report", reportRoutes)
 
-// products routes
-app.use("/v1/api/products", productRoutes)
+// customer routes
+app.use("/v1/api/customer", curstomerRoutes)
+
+// manager io routes
+app.use("/v1/api/managerio", managerioRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))
