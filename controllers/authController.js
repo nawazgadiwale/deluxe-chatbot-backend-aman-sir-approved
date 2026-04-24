@@ -86,7 +86,6 @@ const createUser = async (req, res) => {
         })
     } catch (error) {
         // if error console the response and return the internal server error
-        console.log("error", error)
         res.status(500).json('Internal Server Error')
     }
 }
