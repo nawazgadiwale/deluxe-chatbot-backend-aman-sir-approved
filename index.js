@@ -16,19 +16,19 @@ app.use(express.json())
 app.use(cors())
 
 // auth routes
-app.use("/api/auth", authRoutes)
+app.use("/v1/api/auth", authRoutes)
 
 // order / job routes
-app.use("/api/job", jobRoutes)
+app.use("/v1/api/job", jobRoutes)
 
 // reports routes
-app.use("/api/report", reportRoutes)
+app.use("/v1/api/report", reportRoutes)
 
 // customer routes
-app.use("/api/customer", curstomerRoutes)
+app.use("/v1/api/customer", curstomerRoutes)
 
 // manager io routes
-app.use("/api/managerio", managerioRoutes)
+app.use("/v1/api/managerio", managerioRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))
