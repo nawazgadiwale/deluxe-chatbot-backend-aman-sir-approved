@@ -10,6 +10,7 @@ const jobRoutes = require("./routes/job")
 const reportRoutes = require("./routes/report")
 const curstomerRoutes = require("./routes/customer")
 const managerioRoutes = require("./routes/manager")
+const dataRoutes = require("./routes/data")
 
 const app = express()
 app.use(express.json())
@@ -29,6 +30,9 @@ app.use("/v1/api/customer", curstomerRoutes)
 
 // manager io routes
 app.use("/v1/api/managerio", managerioRoutes)
+
+// data management routes
+app.use("/v1/api/data", dataRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))

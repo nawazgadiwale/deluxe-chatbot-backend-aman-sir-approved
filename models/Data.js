@@ -1,10 +1,14 @@
 const mongoose = require('mongoose')
 
-const DataSchema = new mongoose.Schema({
+const dataSchema = new mongoose.Schema({
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
+    },
+    uid: {
+        type: String,
+        required: true
     },
     name: {
         type: String,
@@ -57,7 +61,7 @@ const DataSchema = new mongoose.Schema({
     },
     quoteNumber: {
         type: Number,
-        default: 0
+        default: 0,
     },
     initialRemartks: {
         type: String,
@@ -65,10 +69,11 @@ const DataSchema = new mongoose.Schema({
     leadAddedDate: {
         type: Date,
         default: Date.now,
+        required: true
     },
     invoiceNumber: {
         type: Number,
-        default: 0
+        default: 0,
     },
     followUps: [
         {
@@ -94,3 +99,5 @@ const DataSchema = new mongoose.Schema({
         timestamps: true,
     }
 )
+
+module.exports = mongoose.model('Data', dataSchema)
