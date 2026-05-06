@@ -64,7 +64,8 @@ const createNewOrder = async (req, res) => {
       // body params
       const { createdBy, uuid, invoiceNumber, invoiceDate, emirates, contact_person, companyName, division, emailId, item, main_category,
          salesPerson, source, type, modes, mobileNumber, delivery_address, billing_address, assignToDepartment, designer, production,
-         operation, description, instruction, payment_status, delivery_date, delivery_time, category, finishing_instruction, multiple_items
+         operation, description, instruction, payment_status, delivery_date, delivery_time, category, finishing_instruction, multiple_items,
+         outsourcePersonName, outsourcePersonNumber
       } = req.body
 
       // below fields are mandatory
@@ -75,13 +76,22 @@ const createNewOrder = async (req, res) => {
          return res.status(400).json({ message: "All required fields must be filled!" })
       }
 
+      // conditional validation for Courier-Outsource
+      if (modes === "Courier-Outsource") {
+         if (!outsourcePersonName || !outsourcePersonNumber) {
+            return res.status(400).json({
+               message: "Outsource person name and mobile number are required for Courier-Outsource mode!"
+            })
+         }
+      }
+
       // only Designer department allowes
       if (assignToDepartment !== "Designer") {
          return res.status(400).json({ message: "New orders can only be assigned to the Designer department!" })
       }
 
       // if order id exists 
-      const existeduuid = await Job.findOne({ uuid })
+      const existeduuid = await Quote.findOne({ uuid })
       if (existeduuid) {
          return res.status(400).json({ message: "The Invoice is Already Created!" })
       }
@@ -126,11 +136,19 @@ const createNewOrder = async (req, res) => {
          delivery_date,
          delivery_time,
          finishing_instruction,
-         multiple_items
+         multiple_items,
+         outsourcePersonName:
+            modes === "Courier-Outsource"
+               ? outsourcePersonName
+               : null,
+         outsourcePersonNumber:
+            modes === "Courier-Outsource"
+               ? outsourcePersonNumber
+               : null
       })
 
       // save the orders data
-      const savedJob = await newJob.save()
+      const savedJob = await newQuote.save()
 
       // return the status
       res.status(200).json({
@@ -225,14 +243,14 @@ const createNewOrder = async (req, res) => {
 //       pipeline.push({ $limit: parseInt(limit) });
 
 //       // aggregate the filter and search
-//       const orders = await Job.aggregate(pipeline);
+//       const orders = await Quote.aggregate(pipeline);
 
 //       // count pipeline
 //       const countPipeline = pipeline.filter(stage => !("$skip" in stage) && !("$limit" in stage) && !("$sort" in stage));
 //       countPipeline.push({ $count: "total" });
 
 //       // count total result
-//       const countResult = await Job.aggregate(countPipeline);
+//       const countResult = await Quote.aggregate(countPipeline);
 //       const total = countResult.length > 0 ? countResult[0].total : 0;
 
 //       // return the response
@@ -269,38 +287,38 @@ const createNewOrder = async (req, res) => {
 //       }
 
 //       // check order is found by id or not
-//       const existingJob = await Job.findOne({ uuid })
+//       const existingJob = await Quote.findOne({ uuid })
 
 //       // if order is not present
 //       if (!existingJob) {
 //          return res.status(404).json({ message: "Order not found!" })
 //       }
 
-//       existingJob.billing_address = billing_address || existingJob.billing_address
-//       existingJob.delivery_address = delivery_address || existingJob.delivery_address
-//       existingJob.assignToDepartment = assignToDepartment || existingJob.assignToDepartment
-//       existingJob.description = description || existingJob.description
-//       existingJob.instruction = instruction || existingJob.instruction
-//       existingJob.modes = modes || existingJob.modes
-//       existingJob.payment_status = payment_status || existingJob.payment_status
-//       existingJob.delivery_date = delivery_date || existingJob.delivery_date
-//       existingJob.delivery_time = delivery_time || existingJob.delivery_time
-//       existingJob.category = category || existingJob.category
-//       existingJob.finishing_instruction = finishing_instruction || existingJob.finishing_instruction
-//       existingJob.multiple_items = multiple_items || existingJob.multiple_items
+//       existingQuote.billing_address = billing_address || existingQuote.billing_address
+//       existingQuote.delivery_address = delivery_address || existingQuote.delivery_address
+//       existingQuote.assignToDepartment = assignToDepartment || existingQuote.assignToDepartment
+//       existingQuote.description = description || existingQuote.description
+//       existingQuote.instruction = instruction || existingQuote.instruction
+//       existingQuote.modes = modes || existingQuote.modes
+//       existingQuote.payment_status = payment_status || existingQuote.payment_status
+//       existingQuote.delivery_date = delivery_date || existingQuote.delivery_date
+//       existingQuote.delivery_time = delivery_time || existingQuote.delivery_time
+//       existingQuote.category = category || existingQuote.category
+//       existingQuote.finishing_instruction = finishing_instruction || existingQuote.finishing_instruction
+//       existingQuote.multiple_items = multiple_items || existingQuote.multiple_items
 
 //       if (assignToDepartment === "Designer" && designer) {
-//          existingJob.designer = designer
+//          existingQuote.designer = designer
 //       }
 //       if (assignToDepartment === "Production" && production) {
-//          existingJob.production = production
+//          existingQuote.production = production
 //       }
 //       if (assignToDepartment === "Operation" && operation) {
-//          existingJob.operation = operation
+//          existingQuote.operation = operation
 //       }
 
 //       // save the updated data
-//       const updateJob = await existingJob.save()
+//       const updateJob = await existingQuote.save()
 
 //       // return the response
 //       res.status(200).json({
@@ -327,7 +345,7 @@ const getIndividualDetails = async (req, res) => {
       }
 
       // IMPORTANT: use await and .lean() to avoid circular references
-      const order = await Job.findOne({ uuid }).lean()
+      const order = await Quote.findOne({ uuid }).lean()
 
       // order not found
       if (!order) {
@@ -366,46 +384,46 @@ const getIndividualDetails = async (req, res) => {
 //       // }
 
 //       // check if order exist by uuid
-//       const existingJob = await Job.findOne({ uuid })
+//       const existingJob = await Quote.findOne({ uuid })
 //       // if job is not exists
 //       if (!existingJob) {
 //          return res.status(404).json({ message: "Order not found!" })
 //       }
 
 //       if (draftDate) {
-//          existingJob.draftDate = draftDate
+//          existingQuote.draftDate = draftDate
 //       }
 //       if (proceedDate) {
-//          existingJob.proceedDate = proceedDate
+//          existingQuote.proceedDate = proceedDate
 //       }
 //       if (proceed_multiple_items) {
-//          existingJob.proceed_multiple_items = proceed_multiple_items
+//          existingQuote.proceed_multiple_items = proceed_multiple_items
 //       }
 //       if (draft_source) {
-//          existingJob.draft_source = draft_source
+//          existingQuote.draft_source = draft_source
 //       }
 //       if (filePath) {
-//          existingJob.filePath = filePath
+//          existingQuote.filePath = filePath
 //       }
 //       if (production_departments) {
-//          existingJob.production_departments = production_departments
+//          existingQuote.production_departments = production_departments
 //       }
 //       if (extra_instruction) {
-//          existingJob.extra_instruction = extra_instruction
+//          existingQuote.extra_instruction = extra_instruction
 //       }
 
-//       existingJob.assignToDepartment = "Production"
-//       // existingJob.production = production
+//       existingQuote.assignToDepartment = "Production"
+//       // existingQuote.production = production
 
 //       if (req.files && req.files.length > 0) {
 //          const uploadedPaths = req.files.map(
 //             file => `${req.protocol}://${req.get('host')}/uploads/${file.filename}`
 //          )
-//          existingJob.designImages = uploadedPaths
+//          existingQuote.designImages = uploadedPaths
 //       }
 
 //       // save the designer data
-//       const updatedJob = await existingJob.save()
+//       const updatedJob = await existingQuote.save()
 
 //       // return with response
 //       res.status(200).json({
@@ -433,45 +451,45 @@ const getIndividualDetails = async (req, res) => {
 //       } = req.body
 
 //       // check if order exist by uuid
-//       const existingJob = await Job.findOne({ uuid })
+//       const existingJob = await Quote.findOne({ uuid })
 //       // if job is not exists
 //       if (!existingJob) {
 //          return res.status(404).json({ message: "Order not found!" })
 //       }
 
 //       if (recievedDate) {
-//          existingJob.recievedDate = recievedDate
+//          existingQuote.recievedDate = recievedDate
 //       }
 //       if (size) {
-//          existingJob.size = size
+//          existingQuote.size = size
 //       }
 //       if (quantity) {
-//          existingJob.quantity = quantity
+//          existingQuote.quantity = quantity
 //       }
 //       if (media) {
-//          existingJob.media = media
+//          existingQuote.media = media
 //       }
 //       if (printer) {
-//          existingJob.printer = printer
+//          existingQuote.printer = printer
 //       }
 //       if (completionDate) {
-//          existingJob.completionDate = completionDate
+//          existingQuote.completionDate = completionDate
 //       }
 //       if (materialDetails) {
-//          existingJob.materialDetails = materialDetails
+//          existingQuote.materialDetails = materialDetails
 //       }
 //       if (finishingDetails) {
-//          existingJob.finishingDetails = finishingDetails
+//          existingQuote.finishingDetails = finishingDetails
 //       }
 //       if (machine) {
-//          existingJob.machine = machine
+//          existingQuote.machine = machine
 //       }
 
-//       existingJob.assignToDepartment = "Finishing"
-//       existingJob.finishing = finishing
+//       existingQuote.assignToDepartment = "Finishing"
+//       existingQuote.finishing = finishing
 
 //       // save the updated data
-//       const updatedJob = await existingJob.save()
+//       const updatedJob = await existingQuote.save()
 
 //       // return the response
 //       res.status(200).json({
@@ -496,7 +514,7 @@ const getIndividualDetails = async (req, res) => {
 //       const { finishing, operation } = req.body
 
 //       // check if order exist by uuid
-//       const existingJob = await Job.findOne({ uuid })
+//       const existingJob = await Quote.findOne({ uuid })
 
 //       // if job is not exists
 //       if (!existingJob) {
@@ -504,14 +522,14 @@ const getIndividualDetails = async (req, res) => {
 //       }
 
 //       if (finishing) {
-//          existingJob.finishing = finishing
+//          existingQuote.finishing = finishing
 //       }
 
-//       existingJob.assignToDepartment = "Operation"
-//       existingJob.operation = operation
+//       existingQuote.assignToDepartment = "Operation"
+//       existingQuote.operation = operation
 
 //       // save the updated data
-//       const updatedJob = await existingJob.save()
+//       const updatedJob = await existingQuote.save()
 
 //       // return the response
 //       res.status(200).json({
@@ -539,7 +557,7 @@ const getIndividualDetails = async (req, res) => {
 //       } = req.body
 
 //       // check order is found by id or not
-//       const existingJob = await Job.findOne({ uuid })
+//       const existingJob = await Quote.findOne({ uuid })
 
 //       // if order is not present
 //       if (!existingJob) {
@@ -549,35 +567,35 @@ const getIndividualDetails = async (req, res) => {
 //       }
 
 //       if (operationDate) {
-//          existingJob.operationDate = operationDate
+//          existingQuote.operationDate = operationDate
 //       }
 //       if (operationTime) {
-//          existingJob.operationTime = operationTime
+//          existingQuote.operationTime = operationTime
 //       }
 //       if (operationArea) {
-//          existingJob.operationArea = operationArea
+//          existingQuote.operationArea = operationArea
 //       }
 //       if (team) {
-//          existingJob.team = team
+//          existingQuote.team = team
 //       }
 //       if (productionDetails) {
-//          existingJob.productionDetails = productionDetails
+//          existingQuote.productionDetails = productionDetails
 //       }
 //       if (remarks) {
-//          existingJob.remarks = remarks
+//          existingQuote.remarks = remarks
 //       }
 //       if (packagingInstruction) {
-//          existingJob.packagingInstruction = packagingInstruction
+//          existingQuote.packagingInstruction = packagingInstruction
 //       }
 //       if (payment_status) {
-//          existingJob.payment_status = payment_status
+//          existingQuote.payment_status = payment_status
 //       }
 //       if (typeof isOperationCompleted === "boolean") {
-//          existingJob.isOperationCompleted = isOperationCompleted
+//          existingQuote.isOperationCompleted = isOperationCompleted
 //       }
 
 //       // save the updated data
-//       const updatedJob = await existingJob.save()
+//       const updatedJob = await existingQuote.save()
 
 //       // return the response
 //       res.status(200).json({
@@ -599,7 +617,7 @@ const getIndividualDetails = async (req, res) => {
 //    try {
 //       const { uuid } = req.params
 
-//       const order = await Job.findOneAndDelete({ uuid })
+//       const order = await Quote.findOneAndDelete({ uuid })
 
 //       if (!order) {
 //          return res.status(404).json({ message: "Order Not Found!" })
@@ -837,7 +855,7 @@ const updateSalesQuoteData = async (req, res) => {
    try {
       const { quote_uuid } = req.params
 
-      const { quoteNumber, deliveryAddress, billingAddress, moveToInvoice, invoiceNumber, invoiceDate } = req.body
+      const { quoteNumber, deliveryAddress, billingAddress, paymentStatus, moveToInvoice, invoiceNumber, invoiceDate } = req.body
 
       if (!quote_uuid || !quoteNumber) {
          return res.status(400).json({ message: "All requires fields must be filled!" })
@@ -853,7 +871,8 @@ const updateSalesQuoteData = async (req, res) => {
       existingQuote.deliveryAddress = deliveryAddress || existingQuote.deliveryAddress
       existingQuote.moveToInvoice = moveToInvoice ?? existingQuote.moveToInvoice
       existingQuote.invoiceNumber = invoiceNumber ?? existingQuote.invoiceNumber
-      existingQuote.invoiceDate = invoiceDate ?? existingQuote.invalidate
+      existingQuote.invoiceDate = invoiceDate ?? existingQuote.invalidate,
+         existingQuote.paymentStatus = paymentStatus ?? existingQuote.paymentStatus
 
       const updateQuote = await existingQuote.save()
 
@@ -878,13 +897,26 @@ const getAllOrders = async (req, res) => {
          if (!isNaN(search)) {
             pipeline.push({
                $match: {
-                  $expr: {
-                     $regexMatch: {
-                        input: { $toString: "$quoteNumber" },
-                        regex: search,
-                        options: "i"
+                  $or: [
+                     {
+                        $expr: {
+                           $regexMatch: {
+                              input: { $toString: "$quoteNumber" },
+                              regex: search,
+                              options: "i"
+                           }
+                        }
+                     },
+                     {
+                        $expr: {
+                           $regexMatch: {
+                              input: { $toString: "$invoiceNumber" },
+                              regex: search,
+                              options: "i"
+                           }
+                        }
                      }
-                  }
+                  ]
                }
             })
          }
@@ -1219,7 +1251,7 @@ const addOrUpdateDesignerDetails = async (req, res) => {
       }
 
       existingOrder.assignToDepartment = "Production"
-      // existingJob.production = production
+      // existingQuote.production = production
 
       if (req.files && req.files.length > 0) {
          const uploadedPaths = req.files.map(

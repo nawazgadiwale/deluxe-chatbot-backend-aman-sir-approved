@@ -1,10 +1,31 @@
+const Counter = require('../models/Counter')
 const Data = require('../models/Data')
 
+// next invoice number
+const getNextInvoiceNumber = async () => {
+
+    const counter = await Counter.findOneAndUpdate(
+        { key: 'invoice' },
+        { $inc: { value: 1 } },
+        {
+            new: true,
+            upsert: true
+        }
+    )
+
+    // Format number with leading zeros
+    const formattedNumber = String(counter.value).padStart(10, '0')
+
+    return `INV-${formattedNumber}`
+}
+
+// Add new lead data
 const addNewLeadData = async (req, res) => {
     try {
+        const uid = await getNextInvoiceNumber()
+
         const {
             createdBy,
-            uid,
             name,
             companyName,
             phoneNumber,
@@ -13,6 +34,7 @@ const addNewLeadData = async (req, res) => {
             division,
             assignToSalesPerson,
             dealStatus,
+            dealAmount,
             quoteNumber,
             initialRemartks,
             leadAddedDate,
@@ -39,20 +61,15 @@ const addNewLeadData = async (req, res) => {
 
         if (existingUid) {
             return res.status(400).json({
-                message: "The Invoice is Already Created!"
+                message: "The Lead is Already Created!"
             })
         }
 
         const leadDate = new Date(leadAddedDate)
 
-        let finalFollowUpDate
-
-        if (followUpDate) {
-            finalFollowUpDate = new Date(followUpDate)
-        } else {
-            finalFollowUpDate = new Date(leadDate)
-            finalFollowUpDate.setDate(finalFollowUpDate.getDate() + 3)
-        }
+        const finalFollowUpDate = followUpDate
+            ? new Date(followUpDate)
+            : new Date(leadDate.getTime() + 3 * 24 * 60 * 60 * 1000)
 
         const newLead = new Data({
             createdBy,
@@ -63,6 +80,7 @@ const addNewLeadData = async (req, res) => {
             emailId,
             source,
             division,
+            dealAmount,
             assignToSalesPerson,
             dealStatus,
             quoteNumber,
@@ -93,11 +111,12 @@ const addNewLeadData = async (req, res) => {
     }
 }
 
+// Update new lead data
 const updateLeadData = async (req, res) => {
     try {
         const { uid } = req.params
 
-        const { name, companyName, phoneNumber, emailid, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, followUpDate, followUpTakenVia, adminName, followUpNotes } = req.body
+        const { name, companyName, phoneNumber, emailid, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, followUpDate, followUpTakenVia, adminName, followUpNotes } = req.body
 
         const lead = await Data.findOne({ uid })
 
@@ -121,6 +140,10 @@ const updateLeadData = async (req, res) => {
 
         if (emailid !== undefined) {
             lead.emailId = emailid
+        }
+
+        if (dealAmount !== undefined) {
+            lead.dealAmount = dealAmount
         }
 
         if (source !== undefined) {
@@ -210,9 +233,20 @@ const updateLeadData = async (req, res) => {
     }
 }
 
+// Get all lead data with filters
 const getAllLeadsData = async (req, res) => {
     try {
-        const { page = 1, limit = 10, search = "", source, dealStatus, assignToSalesPerson, division, userRole, userName, year, month } = req.query
+        const {
+            page = 1,
+            limit = 10,
+            search = "",
+            source,
+            dealStatus,
+            assignToSalesPerson,
+            division,
+            year,
+            month
+        } = req.query
 
         const now = new Date()
 
@@ -222,70 +256,85 @@ const getAllLeadsData = async (req, res) => {
         const startDate = new Date(filterYear, filterMonth - 1, 1)
         const endDate = new Date(filterYear, filterMonth, 1)
 
-        const pipeline = []
-
-        pipeline.push({
-            $match: {
-                leadAddedDate: {
-                    $gte: startDate,
-                    $lt: endDate
-                }
-            }
-        })
-
-        if (search) {
-            if (!isNaN(search)) {
-                pipeline.push({
-                    $match: {
-                        $or: [
-                            {
-                                $expr: {
-                                    $regexMatch: {
-                                        input: { $toString: "$invoiceNumber" },
-                                        regex: search,
-                                        options: "i"
-                                    }
-                                }
-                            },
-                            {
-                                $expr: {
-                                    $regexMatch: {
-                                        input: { $toString: "$quoteNumber" },
-                                        regex: search,
-                                        options: "i"
-                                    }
-                                }
-                            },
-                        ]
-                    }
-                })
-            }
-            else {
-                pipeline.push({
-                    $match: {
-                        $or: [
-                            { name: { $regex: search, $options: "i" } },
-                            { companyName: { $regex: search, $options: "i" } },
-                            { emailId: { $regex: search, $options: "i" } },
-                            { phoneNumber: { $regex: search, $options: "i" } },
-                        ]
-                    }
-                })
+        const baseMatch = {
+            leadAddedDate: {
+                $gte: startDate,
+                $lt: endDate
             }
         }
 
-        if (source) pipeline.push({ $match: { source } })
-        if (dealStatus) pipeline.push({ $match: { dealStatus } })
-        if (assignToSalesPerson) pipeline.push({ $match: { assignToSalesPerson } })
-        if (division) pipeline.push({ $match: { division } })
+        if (search) {
+            if (!isNaN(search)) {
+                baseMatch.$or = [
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$invoiceNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$quoteNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    }
+                ]
+            } else {
+                baseMatch.$or = [
+                    { name: { $regex: search, $options: "i" } },
+                    { companyName: { $regex: search, $options: "i" } },
+                    { emailId: { $regex: search, $options: "i" } },
+                    { phoneNumber: { $regex: search, $options: "i" } }
+                ]
+            }
+        }
 
-        pipeline.push({ $sort: { createdAt: -1 } })
-        pipeline.push({ $skip: (page - 1) * parseInt(limit) })
-        pipeline.push({ $limit: parseInt(limit) })
+        if (source) baseMatch.source = source
+        if (dealStatus) baseMatch.dealStatus = dealStatus
+        if (assignToSalesPerson) baseMatch.assignToSalesPerson = assignToSalesPerson
+        if (division) baseMatch.division = division
+
+        const pipeline = [
+            { $match: baseMatch },
+
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$createdBy',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            {
+                $addFields: {
+                    createdBy: "$createdBy.name"
+                }
+            },
+
+            { $sort: { createdAt: -1 } },
+            { $skip: (page - 1) * parseInt(limit) },
+            { $limit: parseInt(limit) }
+        ]
 
         const leads = await Data.aggregate(pipeline)
-        const countPipeline = pipeline.filter(stage => !("$skip" in stage) && !("$limit" in stage) && !("$sort" in stage))
-        countPipeline.push({ $count: "total" })
+
+        const countPipeline = [
+            { $match: baseMatch },
+            { $count: "total" }
+        ]
 
         const countResult = await Data.aggregate(countPipeline)
         const total = countResult.length > 0 ? countResult[0].total : 0
@@ -307,6 +356,7 @@ const getAllLeadsData = async (req, res) => {
     }
 }
 
+// Get individual lead data
 const getIndividualLeadData = async (req, res) => {
     try {
         const { uid } = req.params
@@ -328,6 +378,7 @@ const getIndividualLeadData = async (req, res) => {
     }
 }
 
+// Add followup data
 const addFollowUp = async (req, res) => {
     try {
         const { uid } = req.params
@@ -406,6 +457,7 @@ const addFollowUp = async (req, res) => {
     }
 }
 
+// Get all lead dashboard data
 const getLeadDashboardData = async (req, res) => {
     try {
         const { year, month } = req.query
@@ -626,4 +678,117 @@ const getLeadDashboardData = async (req, res) => {
     }
 }
 
-module.exports = { addNewLeadData, updateLeadData, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData }
+// Get followup priority list
+const getFollowUpPriorityList = async (req, res) => {
+    try {
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+
+        const endOfToday = new Date()
+        endOfToday.setHours(23, 59, 59, 999)
+
+        const leads = await Data.find({
+            dealStatus: {
+                $nin: ["Won", "Lost"]
+            }
+        }).sort({ createdAt: -1 }).lean()
+
+        const overDue = []
+        const today = []
+        const upComing = []
+
+        leads.forEach((lead) => {
+            if (!lead.followUps || lead.followUps.length === 0) return
+
+            const followUps = lead.followUps || []
+
+            if (followUps.length === 0) return
+
+            // ✅ CURRENT (last completed follow-up)
+            const currentFollowUp = [...followUps]
+                .reverse()
+                .find(f =>
+                    f.followUpDate &&
+                    (f.followUpTakenVia || f.followUpNotes || f.adminName)
+                )
+
+            // ✅ NEXT (last pending follow-up - only date)
+            const nextFollowUp = [...followUps]
+                .reverse()
+                .find(f =>
+                    f.followUpDate &&
+                    !f.followUpTakenVia &&
+                    !f.followUpNotes &&
+                    !f.adminName
+                )
+
+            // If no next follow-up, skip
+            if (!nextFollowUp) return
+
+            const followUpDate = new Date(nextFollowUp.followUpDate)
+
+
+            const formattedLead = {
+                _id: lead._id,
+                uid: lead.uid,
+                name: lead.name,
+                companyName: lead.companyName,
+                phoneNumber: lead.phoneNumber,
+                emailId: lead.emailId,
+                source: lead.source,
+                division: lead.division,
+                assignToSalesPerson: lead.assignToSalesPerson,
+                dealStatus: lead.dealStatus,
+
+                // ✅ current (completed)
+                currentFollowUpDate: currentFollowUp?.followUpDate,
+                followUpTakenVia: currentFollowUp?.followUpTakenVia,
+                adminName: currentFollowUp?.adminName,
+                followUpNotes: currentFollowUp?.followUpNotes,
+
+                // ✅ next (pending)
+                nextFollowUpDate: nextFollowUp.followUpDate
+            }
+
+            // OVERDUE
+            if (followUpDate < startOfToday) {
+                overDue.push(formattedLead)
+            }
+
+            // TODAY
+            else if (followUpDate >= startOfToday && followUpDate <= endOfToday) {
+                today.push(formattedLead)
+            }
+
+            else {
+                upComing.push(formattedLead)
+            }
+        })
+
+        res.status(200).json({
+            success: true,
+            counts: {
+                overDue: overDue.length,
+                today: today.length,
+                upComing: upComing.length
+            },
+            data: {
+                overDue,
+                today,
+                upComing
+            }
+        })
+
+    } catch (error) {
+        console.error(
+            "Error getting follow-up priority list:",
+            error.message
+        )
+
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+}
+
+module.exports = { addNewLeadData, updateLeadData, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList }

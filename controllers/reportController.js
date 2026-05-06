@@ -14,7 +14,7 @@ const getReportsData = async (req, res) => {
         const orderOperation = await Quote.countDocuments({ moveToInvoice: true, isOperationCompleted: false, assignToDepartment: 'Operation' })
         const totalEmployees = await User.countDocuments()
         const admins = await User.countDocuments({ role: 'admin' })
-        const subAdmins = await User.countDocuments({ role: 'sub-admin' })
+        const subAdmins = await User.countDocuments({ role: 'customer-support' })
         const salesPeoples = await User.countDocuments({ role: 'sales' })
         const designPeoples = await User.countDocuments({ role: 'design' })
         const productionPeoples = await User.countDocuments({ role: 'production' })

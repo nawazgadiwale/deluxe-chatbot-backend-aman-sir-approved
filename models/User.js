@@ -33,7 +33,7 @@ const UserSchema = new mongoose.Schema({
     // role of employee
     role: {
         type: String,
-        enum: ['super-admin', 'admin', 'sub-admin', 'sales', 'design', 'production', 'finishing', 'operation'],
+        enum: ['super-admin', 'admin', 'customer-support', 'sales', 'design', 'production', 'finishing', 'operation'],
         default: 'sales'
     },
     // access of employee
@@ -46,7 +46,8 @@ const UserSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
-    }
+    },
+   
 },
     {
         // storing time stamps like created at and updated at 
@@ -60,7 +61,7 @@ UserSchema.pre('save', async function (next) {
         this.access = [this.name]
     }
 
-    if (!this.isModified('password')) return next
+    if (!this.isModified('password')) return next()
 
     try {
         // hash the password and store and move to next

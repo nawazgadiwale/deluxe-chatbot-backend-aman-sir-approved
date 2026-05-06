@@ -148,8 +148,16 @@ const quoteSchema = new mongoose.Schema({
     },
     modes: {
         type: String,
-        enum: ['Collection', 'Delivery', 'Installation', 'Courier-Porter', 'Courier-Jeebly', 'Courier-Runway'],
+        enum: ['Collection', 'Delivery', 'Installation', 'Courier-Porter', 'Courier-Jeebly', 'Courier-Runway', 'Courier-Outsource'],
         default: 'Collection'
+    },
+    outsourcePersonName: {
+        type: String,
+        default: null
+    },
+    outsourcePersonNumber: {
+        type: String,
+        default: null
     },
     designer: {
         type: String,

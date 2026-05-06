@@ -3,45 +3,45 @@ const User = require('../models/User')
 const bcrypt = require('bcrypt')
 
 // Registration Function
-// const register = async (req, res) => {
-//     try {
-//         // params { body }
-//         const { name, password, re_password, email, phone, role } = req.body
+const register = async (req, res) => {
+    try {
+        // params { body }
+        const { name, password, re_password, email, phone, role } = req.body
 
-//         // check that user is already exist or not
-//         const existingUser = await User.findOne({ email })
+        // check that user is already exist or not
+        const existingUser = await User.findOne({ email })
 
-//         // if user already exists
-//         if (existingUser) return res.status(409).json('User Already exist!')
+        // if user already exists
+        if (existingUser) return res.status(409).json('User Already exist!')
 
-//         // creating a new user
-//         const newUser = new User({ name, password, re_password, email, phone, role })
+        // creating a new user
+        const newUser = new User({ name, password, re_password, email, phone, role, access: [name] })
 
-//         // save new user data
-//         await newUser.save()
+        // save new user data
+        await newUser.save()
 
-//         // generating token
-//         const token = jwt.sign({ id: newUser._id, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '2h' })
+        // generating token
+        const token = jwt.sign({ id: newUser._id, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' })
 
-//         // returning response in json
-//         res.status(200).json({
-//             message: 'User Created Successfully!',
-//             token,
-//             user: {
-//                 id: newUser._id,
-//                 name: newUser.name,
-//                 email: newUser.email,
-//                 phone: newUser.phone,
-//                 role: newUser.role
-//             }
-//         })
-//     }
-//     // if something goes wrong
-//     catch (error) {
-//         console.log("error", error)
-//         res.status(500).json('Internal Server Error!')
-//     }
-// }
+        // returning response in json
+        res.status(200).json({
+            message: 'User Created Successfully!',
+            token,
+            user: {
+                id: newUser._id,
+                name: newUser.name,
+                email: newUser.email,
+                phone: newUser.phone,
+                role: newUser.role
+            }
+        })
+    }
+    // if something goes wrong
+    catch (error) {
+        console.log("error", error)
+        res.status(500).json('Internal Server Error!')
+    }
+}
 
 
 // function to create new user
@@ -108,7 +108,7 @@ const login = async (req, res) => {
         if (!isMatch) return res.status(404).json('Incorrect Password')
 
         // generating token 
-        const token = jwt.sign({ id: user._id, email: user.email, role: user.role, access: user.access }, process.env.JWT_SECRET, { expiresIn: '2h' })
+        const token = jwt.sign({ id: user._id, email: user.email, role: user.role, access: user.access }, process.env.JWT_SECRET, { expiresIn: '30d' })
 
         // return the success response
         res.status(200).json({
@@ -318,4 +318,4 @@ const fetchAllEmployees = async (req, res) => {
     }
 }
 
-module.exports = { createUser, login, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees }
+module.exports = { register, createUser, login, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees }

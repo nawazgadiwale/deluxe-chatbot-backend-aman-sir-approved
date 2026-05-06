@@ -1,10 +1,10 @@
 const express = require('express')
-const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, } = require('../controllers/authController')
+const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, register, } = require('../controllers/authController')
 const router = express.Router()
 
 // authRoutes
 // register route - POST
-// router.post("/register", register)
+router.post("/register", register)
 
 // create a new user api
 // POST

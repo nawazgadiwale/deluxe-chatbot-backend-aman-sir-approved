@@ -96,7 +96,7 @@ const jobSchema = new mongoose.Schema({
     // modes set by sales person
     modes: {
         type: String,
-        enum: ['Collection', 'Delivery', 'Installation', 'Courier-Porter', 'Courier-Jeebly', 'Courier-Runway'],
+        enum: ['Collection', 'Delivery', 'Installation', 'Courier-Porter', 'Courier-Jeebly', 'Courier-Runway', 'Courier-Outsource'],
         required: true,
     },
     // mobile number from manager.io
