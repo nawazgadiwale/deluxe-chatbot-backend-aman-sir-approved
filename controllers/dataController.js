@@ -244,6 +244,7 @@ const getAllLeadsData = async (req, res) => {
             dealStatus,
             assignToSalesPerson,
             division,
+            adminName,
             year,
             month
         } = req.query
@@ -324,10 +325,20 @@ const getAllLeadsData = async (req, res) => {
                 }
             },
 
+        ]
+        if (adminName) {
+            pipeline.push({
+                $match: {
+                    createdBy: adminName
+                }
+            })
+        }
+
+        pipeline.push(
             { $sort: { createdAt: -1 } },
             { $skip: (page - 1) * parseInt(limit) },
             { $limit: parseInt(limit) }
-        ]
+        )
 
         const leads = await Data.aggregate(pipeline)
 
@@ -581,51 +592,14 @@ const getLeadDashboardData = async (req, res) => {
                                             0
                                         ]
                                     }
-                                }
-                            }
-                        }
-                    ],
-
-                    previousMonth: [
-                        {
-                            $match: {
-                                leadAddedDate: {
-                                    $gte: prevStartDate,
-                                    $lt: prevEndDate
-                                }
-                            }
-                        },
-
-                        {
-                            $group: {
-                                _id: null,
-
-                                totalLeads: {
-                                    $sum: 1
                                 },
-
-                                wonCount: {
+                                quotedDealValue: {
                                     $sum: {
                                         $cond: [
                                             {
-                                                $eq: [
+                                                $in: [
                                                     "$dealStatus",
-                                                    "Won"
-                                                ]
-                                            },
-                                            1,
-                                            0
-                                        ]
-                                    }
-                                },
-
-                                wonDealValue: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    "$dealStatus",
-                                                    "Won"
+                                                    ["Won", "Quoted", "Lost"]
                                                 ]
                                             },
                                             "$dealAmount",
@@ -635,7 +609,7 @@ const getLeadDashboardData = async (req, res) => {
                                 }
                             }
                         }
-                    ]
+                    ],
                 }
             }
         ])
@@ -648,23 +622,15 @@ const getLeadDashboardData = async (req, res) => {
                 quotedCount: 0,
                 wonCount: 0,
                 lostCount: 0,
-                wonDealValue: 0
+                wonDealValue: 0,
+                quotedDealValue: 0
             };
-
-        const previous =
-            result[0].previousMonth[0] || {
-                totalLeads: 0,
-                wonCount: 0,
-                wonDealValue: 0
-            };
-
 
         res.status(200).json({
             success: true,
             month: filterMonth,
             year: filterYear,
             currentMonth: current,
-            previousMonth: previous
         })
     } catch (error) {
         console.error(
@@ -689,13 +655,14 @@ const getFollowUpPriorityList = async (req, res) => {
 
         const leads = await Data.find({
             dealStatus: {
-                $nin: ["Won", "Lost"]
+                $nin: ["Won"]
             }
         }).sort({ createdAt: -1 }).lean()
 
         const overDue = []
         const today = []
         const upComing = []
+
 
         leads.forEach((lead) => {
             if (!lead.followUps || lead.followUps.length === 0) return
@@ -704,7 +671,6 @@ const getFollowUpPriorityList = async (req, res) => {
 
             if (followUps.length === 0) return
 
-            // ✅ CURRENT (last completed follow-up)
             const currentFollowUp = [...followUps]
                 .reverse()
                 .find(f =>
@@ -712,7 +678,6 @@ const getFollowUpPriorityList = async (req, res) => {
                     (f.followUpTakenVia || f.followUpNotes || f.adminName)
                 )
 
-            // ✅ NEXT (last pending follow-up - only date)
             const nextFollowUp = [...followUps]
                 .reverse()
                 .find(f =>
@@ -721,6 +686,12 @@ const getFollowUpPriorityList = async (req, res) => {
                     !f.followUpNotes &&
                     !f.adminName
                 )
+
+            const completedFollowUps = followUps.filter(f =>
+                f.followUpDate && (f.followUpTakenVia || f.followUpNotes || f.adminName)
+            )
+
+           const followUpstakenCount = completedFollowUps.length
 
             // If no next follow-up, skip
             if (!nextFollowUp) return
@@ -739,7 +710,7 @@ const getFollowUpPriorityList = async (req, res) => {
                 division: lead.division,
                 assignToSalesPerson: lead.assignToSalesPerson,
                 dealStatus: lead.dealStatus,
-
+                followUpstakenCount,
                 // ✅ current (completed)
                 currentFollowUpDate: currentFollowUp?.followUpDate,
                 followUpTakenVia: currentFollowUp?.followUpTakenVia,
@@ -770,7 +741,7 @@ const getFollowUpPriorityList = async (req, res) => {
             counts: {
                 overDue: overDue.length,
                 today: today.length,
-                upComing: upComing.length
+                upComing: upComing.length,
             },
             data: {
                 overDue,

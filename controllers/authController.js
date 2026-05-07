@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken')
 const User = require('../models/User')
 const bcrypt = require('bcrypt')
+const speakeasy = require('speakeasy')
 
 // Registration Function
 const register = async (req, res) => {
@@ -86,6 +87,8 @@ const createUser = async (req, res) => {
         })
     } catch (error) {
         // if error console the response and return the internal server error
+        console.log("error", error);
+        
         res.status(500).json('Internal Server Error')
     }
 }
@@ -126,6 +129,81 @@ const login = async (req, res) => {
         // if error console the response and return the internal server error
         console.error("error", error)
         res.status(500).json('Internal Server Error!')
+    }
+}
+// const login = async (req, res) => {
+//     const { email, password } = req.body
+
+//     try {
+//         const user = await User.findOne({ email })
+
+//         if (!user) {
+//             return res.status(404).json({ message: "User Not Found!" })
+//         }
+
+//         const isMatch = await user.comparePassword(password)
+
+//         if (!isMatch) {
+//             return res.status(401).json({ message: "Incorrect Password" })
+//         }
+
+//         return res.status(200).json({
+//             message: `OTP required for ${user.name}`,
+//             requiresOTP: true,
+//             userId: user._id
+//         })
+//     } catch (error) {
+//         console.error("error", error)
+//         res.status(500).json({ message: "Internal Server Error!" })
+//     }
+// }
+
+const verifyOTP = async (req, res) => {
+    const { userId, otp } = req.body
+
+    try {
+        const user = await User.findById(userId)
+
+        if (!user) {
+            return res.status(404).json({ message: "User Not Found!" })
+        }
+
+        const varified = speakeasy.totp({
+            secret: process.env.ADMIN_2FA_SECRET,
+            encoding: 'base32',
+            token: otp,
+            window: 1
+        })
+
+        if (!varified) {
+            return res.status(400).json({ message: "Invalid OTP" })
+        }
+
+        const token = jwt.sign(
+            {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                access: user.access
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        )
+
+        return res.status(200).json({
+            message: `Welcome ${user.name}`,
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                access: user.access
+            }
+        })
+
+    } catch (error) {
+
     }
 }
 
@@ -318,4 +396,4 @@ const fetchAllEmployees = async (req, res) => {
     }
 }
 
-module.exports = { register, createUser, login, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees }
+module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees }

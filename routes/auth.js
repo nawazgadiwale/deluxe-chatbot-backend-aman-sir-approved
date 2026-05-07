@@ -1,5 +1,6 @@
 const express = require('express')
-const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, register, } = require('../controllers/authController')
+const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, register, verifyOTP, } = require('../controllers/authController')
+const { setupAdmin2FA } = require('../controllers/twoFactorController')
 const router = express.Router()
 
 // authRoutes
@@ -13,6 +14,14 @@ router.post("/create", createUser)
 // login api
 // POST
 router.post("/login", login)
+
+// verify otp
+// POST
+router.post('/verify-otp', verifyOTP)
+
+// setupadmin 2FA
+// GET
+router.get('/setup-2fa', setupAdmin2FA)
 
 // get all users 
 // GET

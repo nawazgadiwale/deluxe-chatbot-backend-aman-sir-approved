@@ -76,15 +76,32 @@ const jobSchema = new mongoose.Schema({
         type: String,
         enum: ['Huzaifa', 'Aliasgar', 'Nishan', 'Rizwan', 'Arif', 'Nayeem', 'Azmat', 'Ziyad',
             'Umair', 'Wajid', 'Junaid', 'Zohaib', 'Saniya', 'Mohsin', 'Aaliya', 'Zeedan', 'Misba',
-            'Muazzam', 'Hafsa', 'Sharifa', 'Salman','Atif'
+            'Muazzam', 'Hafsa', 'Sharifa', 'Salman', 'Atif'
         ],
         required: true
     },
     // source from manager.io
     source: {
         type: String,
-        enum: ['Whatsapp', 'Whatsapp(Old)', 'Email', 'Google Ads (Email)', 'Google Ads (WhatsApp)', 'Social Media', 'Walk-In', 'Whatsapp - Re',
-            'Email - Re', 'Google Ads Signage (WA)', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (WhatsApp)', 'Repeat', 'Events (Google Ads)'],
+        enum: [
+            'Oncall',
+            'Walk-In',
+            'Whatsapp',
+            'Whatsapp-(Old)',
+            'Whatsapp-(Re)',
+            'Email',
+            'Email-(Re)',
+            'Google Ads-(Email)',
+            'Google Ads-(Whatsapp)',
+            'Google Ads Signage-(WA)',
+            'Google Ads Events-(WA)',
+            'Google Ads Events-(Email)',
+            'Google Ads Sta-(WA)',
+            'Google Ads Sta-(Email)',
+            'Social Media',
+            'Exprintmart-(Whatsapp)',
+            'Exprintmart-(Email)'
+        ],
         required: true
     },
     // type from manager.io
@@ -140,7 +157,7 @@ const jobSchema = new mongoose.Schema({
     // assign to department is assign by sales person
     assignToDepartment: {
         type: String,
-        enum: ['Sales','Designer', 'Production', 'Finishing', 'Operation', 'Completed'],
+        enum: ['Sales', 'Designer', 'Production', 'Finishing', 'Operation', 'Completed'],
         default: 'Sales',
         required: true
     },

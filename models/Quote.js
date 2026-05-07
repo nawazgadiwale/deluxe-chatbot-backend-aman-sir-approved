@@ -34,8 +34,25 @@ const quoteSchema = new mongoose.Schema({
     },
     source: {
         type: String,
-        enum: ['Whatsapp', 'Whatsapp(Old)', 'Email', 'Google Ads (Email)', 'Google Ads (Whatsapp)', 'Social Media', 'Walk-In', 'Whatsapp - Re',
-            'Email - Re', 'Google Ads Signage (WA)', 'Exprintmart -Whatsapp', 'Exprintmart- Email', 'Event Ad (Email)', 'Event Ad (Whatsapp)', 'Repeat', 'Events (Google Ads)'],
+        enum: [
+            'Oncall',
+            'Walk-In',
+            'Whatsapp',
+            'Whatsapp-(Old)',
+            'Whatsapp-(Re)',
+            'Email',
+            'Email-(Re)',
+            'Google Ads-(Email)',
+            'Google Ads-(Whatsapp)',
+            'Google Ads Signage-(WA)',
+            'Google Ads Events-(WA)',
+            'Google Ads Events-(Email)',
+            'Google Ads Sta-(WA)',
+            'Google Ads Sta-(Email)',
+            'Social Media',
+            'Exprintmart-(Whatsapp)',
+            'Exprintmart-(Email)'
+        ],
         required: true
     },
     companyName: {
