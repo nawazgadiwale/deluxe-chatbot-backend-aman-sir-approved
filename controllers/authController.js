@@ -88,75 +88,75 @@ const createUser = async (req, res) => {
     } catch (error) {
         // if error console the response and return the internal server error
         console.log("error", error);
-        
+
         res.status(500).json('Internal Server Error')
     }
 }
 
 // Login Function
-const login = async (req, res) => {
-    // expect email and password from body
-    const { email, password } = req.body
-
-    try {
-        // find the user upon emailid        
-        const user = await User.findOne({ email })
-        // if not user found return 
-        if (!user) return res.status(404).json('User Not Found!')
-
-        // check password match or not
-        const isMatch = await user.comparePassword(password)
-
-        // if password is not matched
-        if (!isMatch) return res.status(404).json('Incorrect Password')
-
-        // generating token 
-        const token = jwt.sign({ id: user._id, email: user.email, role: user.role, access: user.access }, process.env.JWT_SECRET, { expiresIn: '30d' })
-
-        // return the success response
-        res.status(200).json({
-            message: `Welcome ${user.name}`,
-            token,
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                access: user.access
-            }
-        })
-    } catch (error) {
-        // if error console the response and return the internal server error
-        console.error("error", error)
-        res.status(500).json('Internal Server Error!')
-    }
-}
 // const login = async (req, res) => {
+//     // expect email and password from body
 //     const { email, password } = req.body
 
 //     try {
+//         // find the user upon emailid        
 //         const user = await User.findOne({ email })
+//         // if not user found return 
+//         if (!user) return res.status(404).json('User Not Found!')
 
-//         if (!user) {
-//             return res.status(404).json({ message: "User Not Found!" })
-//         }
-
+//         // check password match or not
 //         const isMatch = await user.comparePassword(password)
 
-//         if (!isMatch) {
-//             return res.status(401).json({ message: "Incorrect Password" })
-//         }
+//         // if password is not matched
+//         if (!isMatch) return res.status(404).json('Incorrect Password')
 
-//         return res.status(200).json({
-//             message: `OTP required for ${user.name}`,
-//             requiresOTP: true,
-//             userId: user._id
+//         // generating token 
+//         const token = jwt.sign({ id: user._id, email: user.email, role: user.role, access: user.access }, process.env.JWT_SECRET, { expiresIn: '30d' })
+
+//         // return the success response
+//         res.status(200).json({
+//             message: `Welcome ${user.name}`,
+//             token,
+//             user: {
+//                 id: user._id,
+//                 name: user.name,
+//                 email: user.email,
+//                 role: user.role,
+//                 access: user.access
+//             }
 //         })
 //     } catch (error) {
+//         // if error console the response and return the internal server error
 //         console.error("error", error)
-//         res.status(500).json({ message: "Internal Server Error!" })
+//         res.status(500).json('Internal Server Error!')
 //     }
 // }
+const login = async (req, res) => {
+    const { email, password } = req.body
+
+    try {
+        const user = await User.findOne({ email })
+
+        if (!user) {
+            return res.status(404).json({ message: "User Not Found!" })
+        }
+
+        const isMatch = await user.comparePassword(password)
+
+        if (!isMatch) {
+            return res.status(401).json({ message: "Incorrect Password" })
+        }
+
+        return res.status(200).json({
+            message: `OTP required for ${user.name}`,
+            requiresOTP: true,
+            userId: user._id
+        })
+    } catch (error) {
+        console.error("error", error)
+        res.status(500).json({ message: "Internal Server Error!" })
+    }
+}
 
 const verifyOTP = async (req, res) => {
     const { userId, otp } = req.body
@@ -168,15 +168,17 @@ const verifyOTP = async (req, res) => {
             return res.status(404).json({ message: "User Not Found!" })
         }
 
-        const varified = speakeasy.totp({
+        const verified = speakeasy.totp.verify({
             secret: process.env.ADMIN_2FA_SECRET,
             encoding: 'base32',
             token: otp,
             window: 1
         })
 
-        if (!varified) {
-            return res.status(400).json({ message: "Invalid OTP" })
+        if (!verified) {
+            return res.status(400).json({
+                message: "Invalid OTP"
+            })
         }
 
         const token = jwt.sign(

@@ -284,14 +284,22 @@ const getAllLeadsData = async (req, res) => {
                                 options: "i"
                             }
                         }
-                    }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$phoneNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
                 ]
             } else {
                 baseMatch.$or = [
                     { name: { $regex: search, $options: "i" } },
                     { companyName: { $regex: search, $options: "i" } },
                     { emailId: { $regex: search, $options: "i" } },
-                    { phoneNumber: { $regex: search, $options: "i" } }
                 ]
             }
         }

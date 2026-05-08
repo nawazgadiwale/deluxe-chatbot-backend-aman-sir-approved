@@ -6,7 +6,7 @@ const path = require('path')
 const setupAdmin2FA = async (req, res) => {
     const secret = speakeasy.generateSecret({
         length: 20,
-        name: "CRM Admin Access"
+        name: "Fusion-Deluxe"
     })
 
     global.ADMIN_2FA_SECRET = secret.base32
