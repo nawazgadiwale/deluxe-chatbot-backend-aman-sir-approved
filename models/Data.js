@@ -65,7 +65,7 @@ const dataSchema = new mongoose.Schema({
     },
     dealStatus: {
         type: String,
-        enum: ['Open', 'Contacted', 'Quoted', 'Won', 'Lost'],
+        enum: ['Open', 'Contacted', 'Quoted', 'No-reply', 'Won', 'Lost'],
         default: 'Open',
         required: true
     },
