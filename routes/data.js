@@ -1,5 +1,5 @@
 const express = require('express')
-const { addNewLeadData,getAllLeadsData, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList } = require('../controllers/dataController')
+const { addNewLeadData,getAllLeadsData, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate } = require('../controllers/dataController')
 const router = express.Router()
 
 // create new lead
@@ -9,6 +9,10 @@ router.post('/lead', addNewLeadData)
 // update lead data
 // PUT
 router.put('/lead/:uid', updateLeadData)
+
+// update first followup date
+// POST
+router.post('/lead-first/:uid', updateFirstFollowupdate)
 
 // get all leads
 // GET

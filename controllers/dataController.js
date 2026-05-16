@@ -39,7 +39,7 @@ const addNewLeadData = async (req, res) => {
             initialRemartks,
             leadAddedDate,
             invoiceNumber,
-            followUpDate
+            // followUpDate
         } = req.body
 
         if (
@@ -67,9 +67,9 @@ const addNewLeadData = async (req, res) => {
 
         const leadDate = new Date(leadAddedDate)
 
-        const finalFollowUpDate = followUpDate
-            ? new Date(followUpDate)
-            : new Date(leadDate.getTime() + 3 * 24 * 60 * 60 * 1000)
+        // const finalFollowUpDate = followUpDate
+        //     ? new Date(followUpDate)
+        //     : new Date(leadDate.getTime() + 3 * 24 * 60 * 60 * 1000)
 
         const newLead = new Data({
             createdBy,
@@ -88,11 +88,11 @@ const addNewLeadData = async (req, res) => {
             leadAddedDate,
             invoiceNumber,
 
-            followUps: [
-                {
-                    followUpDate: finalFollowUpDate
-                }
-            ]
+            // followUps: [
+            //     {
+            //         followUpDate: finalFollowUpDate
+            //     }
+            // ]
         })
 
         const saveLead = await newLead.save()
@@ -116,7 +116,7 @@ const updateLeadData = async (req, res) => {
     try {
         const { uid } = req.params
 
-        const { name, companyName, phoneNumber, emailid, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, followUpDate, followUpTakenVia, adminName, followUpNotes } = req.body
+        const { name, companyName, phoneNumber, emailId, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, adminName } = req.body
 
         const lead = await Data.findOne({ uid })
 
@@ -138,8 +138,8 @@ const updateLeadData = async (req, res) => {
             lead.phoneNumber = phoneNumber
         }
 
-        if (emailid !== undefined) {
-            lead.emailId = emailid
+        if (emailId !== undefined) {
+            lead.emailId = emailId
         }
 
         if (dealAmount !== undefined) {
@@ -178,46 +178,6 @@ const updateLeadData = async (req, res) => {
             lead.invoiceNumber = invoiceNumber
         }
 
-        if (followUpTakenVia || adminName || followUpNotes) {
-            if (!lead.followUps.length) {
-                return res.status(400).json({
-                    message: "No follow-up exists"
-                })
-            }
-
-            const lastIndex = lead.followUps.length - 1
-
-            if (followUpTakenVia) {
-                lead.followUps[lastIndex].followUpTakenVia = followUpTakenVia
-            }
-
-            if (adminName) {
-                lead.followUps[lastIndex].adminName = adminName
-            }
-
-            if (followUpNotes) {
-                lead.followUps[lastIndex].followUpNotes = followUpNotes
-            }
-
-            let nextFollowUpDate
-
-            if (followUpDate) {
-                nextFollowUpDate = new Date(followUpDate)
-            } else {
-                nextFollowUpDate = new Date(
-                    lead.followUps[lastIndex].followUpDate
-                )
-
-                nextFollowUpDate.setDate(
-                    nextFollowUpDate.getDate() + 3
-                )
-            }
-
-            lead.followUps.push({
-                followUpDate: nextFollowUpDate
-            })
-        }
-
         await lead.save()
 
         res.status(200).json({
@@ -227,6 +187,56 @@ const updateLeadData = async (req, res) => {
         })
     } catch (error) {
         console.error("Error updating lead:", error.message)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+}
+
+// Update first followup date
+const updateFirstFollowupdate = async (req, res) => {
+    try {
+        const { uid } = req.params
+        const { followUpDate } = req.body
+        console.log(req.body)
+        console.log(typeof req.body)
+        if (!followUpDate) {
+            return res.status(400).json({
+                message: "Follow-up date is required"
+            })
+        }
+
+        const lead = await Data.findOne({ uid })
+
+        if (!lead) {
+            return res.status(404).json({
+                message: "Lead not found"
+            })
+        }
+
+
+
+        // if first followup already exists -> update it
+        if (lead.followUps.length > 0) {
+            lead.followUps[0].followUpDate = new Date(followUpDate)
+        } else {
+            // create first followup object
+            lead.followUps.push({
+                followUpDate: new Date(followUpDate)
+            })
+        }
+
+        await lead.save()
+
+        res.status(200).json({
+            success: true,
+            message: "First follow-up updated successfully",
+            lead
+        })
+
+    } catch (error) {
+        console.error("Error updating first followup date:", error.message)
+
         res.status(500).json({
             message: "Internal Server Error"
         })
@@ -304,10 +314,42 @@ const getAllLeadsData = async (req, res) => {
             }
         }
 
-        if (source) baseMatch.source = source
-        if (dealStatus) baseMatch.dealStatus = dealStatus
-        if (assignToSalesPerson) baseMatch.assignToSalesPerson = assignToSalesPerson
-        if (division) baseMatch.division = division
+        // if (source) baseMatch.source = source
+        // if (dealStatus) baseMatch.dealStatus = dealStatus
+        // if (assignToSalesPerson) baseMatch.assignToSalesPerson = assignToSalesPerson
+        // if (division) baseMatch.division = division
+
+        const sourceArray = source ? source.split(",") : []
+        const dealStatusArray = dealStatus ? dealStatus.split(",") : []
+        const salesPersonArray = assignToSalesPerson ? assignToSalesPerson.split(",") : []
+        const divisionArray = division ? division.split(",") : []
+        const adminArray = adminName ? adminName.split(",") : []
+
+        if (sourceArray.length > 0) {
+            baseMatch.source = {
+                $in: sourceArray
+            }
+        }
+
+        if (dealStatusArray.length > 0) {
+            baseMatch.dealStatus = {
+                $in: dealStatusArray
+            }
+        }
+
+        if (salesPersonArray.length > 0) {
+            baseMatch.assignToSalesPerson = {
+                $in: salesPersonArray
+            }
+        }
+
+        if (divisionArray.length > 0) {
+            baseMatch.division = {
+                $in: divisionArray
+            }
+        }
+
+
 
         const pipeline = [
             { $match: baseMatch },
@@ -334,13 +376,55 @@ const getAllLeadsData = async (req, res) => {
             },
 
         ]
-        if (adminName) {
+        if (adminArray.length > 0) {
             pipeline.push({
                 $match: {
-                    createdBy: adminName
+                    createdBy: {
+                        $in: adminArray
+                    }
                 }
             })
         }
+
+        const countPipeline = [
+            { $match: baseMatch },
+
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+
+            {
+                $unwind: {
+                    path: '$createdBy',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            {
+                $addFields: {
+                    createdBy: "$createdBy.name"
+                }
+            }
+        ]
+
+        if (adminArray.length > 0) {
+            countPipeline.push({
+                $match: {
+                    createdBy: {
+                        $in: adminArray
+                    }
+                }
+            })
+        }
+
+        countPipeline.push({
+            $count: "total"
+        })
 
         pipeline.push(
             { $sort: { createdAt: -1 } },
@@ -350,10 +434,10 @@ const getAllLeadsData = async (req, res) => {
 
         const leads = await Data.aggregate(pipeline)
 
-        const countPipeline = [
-            { $match: baseMatch },
-            { $count: "total" }
-        ]
+        // const countPipeline = [
+        //     { $match: baseMatch },
+        //     { $count: "total" }
+        // ]
 
         const countResult = await Data.aggregate(countPipeline)
         const total = countResult.length > 0 ? countResult[0].total : 0
@@ -402,7 +486,12 @@ const addFollowUp = async (req, res) => {
     try {
         const { uid } = req.params
 
-        const { followUpDate, followUpTakenVia, adminName, followUpNotes } = req.body
+        const {
+            followUpDate,
+            followUpTakenVia,
+            adminName,
+            followUpNotes
+        } = req.body
 
         if (!uid) {
             return res.status(400).json({
@@ -417,45 +506,52 @@ const addFollowUp = async (req, res) => {
                 message: "Lead not found"
             })
         }
+
         const lastIndex = lead.followUps.length - 1
 
-        // Update current follow-up with activity details
-        lead.followUps[lastIndex].followUpTakenVia = followUpTakenVia
-        lead.followUps[lastIndex].adminName = adminName
-        lead.followUps[lastIndex].followUpNotes = followUpNotes
+        // CURRENT FOLLOWUP -> TODAY
+        const today = new Date()
 
-        let nextFollowUpDate
+        // scheduled followup date
+        const scheduledDate = new Date(
+            lead.followUps[lastIndex].followUpDate
+        )
 
+        // remove time part
+        today.setHours(0, 0, 0, 0)
+        scheduledDate.setHours(0, 0, 0, 0)
+
+        // difference in days
+        const diffTime = today - scheduledDate
+
+        const gap = Math.floor(
+            diffTime / (1000 * 60 * 60 * 24)
+        )
+
+        // if overdue store gap else 0
+        lead.followUps[lastIndex].followUpGap =
+            gap > 0 ? gap : 0
+
+        // current followup activity
+        lead.followUps[lastIndex].followUpTakenVia =
+            followUpTakenVia
+
+        lead.followUps[lastIndex].adminName =
+            adminName
+
+        lead.followUps[lastIndex].followUpNotes =
+            followUpNotes
+
+        // actual completed date
+        lead.followUps[lastIndex].followUpDate =
+            today
+
+        // NEXT FOLLOWUP DATE
         if (followUpDate) {
-            nextFollowUpDate = new Date(followUpDate)
-        } else {
-            if (lead.followUps.length > 0) {
-                const lastFollowUp =
-                    lead.followUps[lead.followUps.length - 1].followUpDate
-
-                nextFollowUpDate = new Date(lastFollowUp)
-            } else {
-                nextFollowUpDate = new Date()
-            }
-
-            nextFollowUpDate.setDate(
-                nextFollowUpDate.getDate() + 3
-            )
+            lead.followUps.push({
+                followUpDate: new Date(followUpDate)
+            })
         }
-
-        lead.followUps.push({
-            followUpDate: nextFollowUpDate
-        })
-
-        await lead.save()
-
-        res.status(200).json({
-            success: true,
-            message: "Follow-up updated and next follow-up created",
-            followUps: lead.followUps
-        })
-
-        lead.followUps.push(newFollowUp)
 
         await lead.save()
 
@@ -466,7 +562,8 @@ const addFollowUp = async (req, res) => {
         })
 
     } catch (error) {
-        console.error("Error adding follow-up:",
+        console.error(
+            "Error adding follow-up:",
             error.message
         )
 
@@ -699,7 +796,7 @@ const getFollowUpPriorityList = async (req, res) => {
                 f.followUpDate && (f.followUpTakenVia || f.followUpNotes || f.adminName)
             )
 
-           const followUpstakenCount = completedFollowUps.length
+            const followUpstakenCount = completedFollowUps.length
 
             // If no next follow-up, skip
             if (!nextFollowUp) return
@@ -770,4 +867,4 @@ const getFollowUpPriorityList = async (req, res) => {
     }
 }
 
-module.exports = { addNewLeadData, updateLeadData, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList }
+module.exports = { addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList }

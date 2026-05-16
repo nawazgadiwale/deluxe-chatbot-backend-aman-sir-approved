@@ -11,6 +11,7 @@ const reportRoutes = require("./routes/report")
 const curstomerRoutes = require("./routes/customer")
 const managerioRoutes = require("./routes/manager")
 const dataRoutes = require("./routes/data")
+const reminderRoutes = require("./routes/reminder")
 
 const app = express()
 app.use(express.json())
@@ -34,8 +35,15 @@ app.use("/v1/api/managerio", managerioRoutes)
 // data management routes
 app.use("/v1/api/data", dataRoutes)
 
+// reminder module routes
+app.use("/v1/api/reminder", reminderRoutes)
+
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))
+
+// Load CRON
+require('./cron/expiredReminderCron')
+require('./cron/emailSendReminderCron')
 
 // connect to our database
 mongoose.connect(process.env.MONGO_URL)

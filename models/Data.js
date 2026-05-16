@@ -49,7 +49,8 @@ const dataSchema = new mongoose.Schema({
     },
     division: {
         type: String,
-        enum: ['Signage', 'Stationery', 'Event (Digital)', 'Event (Fashion & Fabric)', 'Store Branding', 'Gifts', 'Gift & Stationery'],
+        enum: ['Signage', 'Stationery', 'Event (Digital)', 'Event (Fashion & Fabric)', 'Store Branding', 'Gifts', 'Gift & Stationery', 'N/A'],
+        default: "N/A"
     },
     assignToSalesPerson: {
         type: String,
@@ -64,8 +65,8 @@ const dataSchema = new mongoose.Schema({
     },
     dealStatus: {
         type: String,
-        enum: ['New', 'Contacted', 'Quoted', 'Won', 'Lost'],
-        default: 'New',
+        enum: ['Open', 'Contacted', 'Quoted', 'Won', 'Lost'],
+        default: 'Open',
         required: true
     },
     dealAmount: {
@@ -104,7 +105,11 @@ const dataSchema = new mongoose.Schema({
             },
             followUpNotes: {
                 type: String
-            }
+            },
+            followUpGap: {
+                type: Number,
+                default: 0
+            },
         }
     ]
 },
