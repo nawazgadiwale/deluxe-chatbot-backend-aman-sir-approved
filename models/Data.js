@@ -63,9 +63,20 @@ const dataSchema = new mongoose.Schema({
         default: 'Admin',
         required: true,
     },
+
+    products: [
+        {
+            productName: {
+                type: String,
+            },
+            productId: {
+                type: Number,
+            }
+        }
+    ],
     dealStatus: {
         type: String,
-        enum: ['Open', 'Contacted', 'Quoted', 'No-reply', 'Won', 'Lost'],
+        enum: ['Open', 'Contacted', 'Quoted', 'On-Going', 'No-reply', 'Won', 'Lost'],
         default: 'Open',
         required: true
     },

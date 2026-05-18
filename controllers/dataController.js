@@ -39,6 +39,7 @@ const addNewLeadData = async (req, res) => {
             initialRemartks,
             leadAddedDate,
             invoiceNumber,
+            products
             // followUpDate
         } = req.body
 
@@ -87,6 +88,7 @@ const addNewLeadData = async (req, res) => {
             initialRemartks,
             leadAddedDate,
             invoiceNumber,
+            products
 
             // followUps: [
             //     {
@@ -116,7 +118,7 @@ const updateLeadData = async (req, res) => {
     try {
         const { uid } = req.params
 
-        const { name, companyName, phoneNumber, emailId, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, adminName } = req.body
+        const { name, companyName, phoneNumber, emailId, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, products, adminName } = req.body
 
         const lead = await Data.findOne({ uid })
 
@@ -176,6 +178,10 @@ const updateLeadData = async (req, res) => {
 
         if (invoiceNumber !== undefined) {
             lead.invoiceNumber = invoiceNumber
+        }
+
+        if (products !== undefined) {
+            lead.products = products
         }
 
         await lead.save()
@@ -304,12 +310,26 @@ const getAllLeadsData = async (req, res) => {
                             }
                         }
                     },
+                    {
+                        products: {
+                            $elemMatch: {
+                                productId: Number(search)
+                            }
+                        }
+                    }
                 ]
             } else {
                 baseMatch.$or = [
                     { name: { $regex: search, $options: "i" } },
                     { companyName: { $regex: search, $options: "i" } },
                     { emailId: { $regex: search, $options: "i" } },
+                    {
+                        "products.productName": {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+
                 ]
             }
         }
