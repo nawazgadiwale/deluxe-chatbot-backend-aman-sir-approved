@@ -262,7 +262,9 @@ const getAllLeadsData = async (req, res) => {
             division,
             adminName,
             year,
-            month
+            month,
+            startDate,
+            endDate
         } = req.query
 
         const now = new Date()
@@ -270,13 +272,32 @@ const getAllLeadsData = async (req, res) => {
         const filterYear = parseInt(year) || now.getFullYear()
         const filterMonth = parseInt(month) || (now.getMonth() + 1)
 
-        const startDate = new Date(filterYear, filterMonth - 1, 1)
-        const endDate = new Date(filterYear, filterMonth, 1)
+        // const startDate = new Date(filterYear, filterMonth - 1, 1)
+        // const endDate = new Date(filterYear, filterMonth, 1)
 
-        const baseMatch = {
-            leadAddedDate: {
-                $gte: startDate,
-                $lt: endDate
+        // const baseMatch = {
+        //     leadAddedDate: {
+        //         $gte: startDate,
+        //         $lt: endDate
+        //     }
+        // }
+
+        let baseMatch = {}
+
+        if (startDate && endDate) {
+            baseMatch.leadAddedDate = {
+                $gte: new Date(startDate),
+                $lte: new Date(
+                    new Date(endDate).setHours(23, 59, 59, 999)
+                )
+            }
+        } else {
+            const monthStartDate = new Date(filterYear, filterMonth - 1, 1)
+            const monthEndDate = new Date(filterYear, filterMonth, 1)
+
+            baseMatch.leadAddedDate = {
+                $gte: monthStartDate,
+                $lt: monthEndDate
             }
         }
 
@@ -772,17 +793,111 @@ const getLeadDashboardData = async (req, res) => {
 // Get followup priority list
 const getFollowUpPriorityList = async (req, res) => {
     try {
+        const { search = "" } = req.query
         const startOfToday = new Date()
         startOfToday.setHours(0, 0, 0, 0)
 
         const endOfToday = new Date()
         endOfToday.setHours(23, 59, 59, 999)
 
-        const leads = await Data.find({
+        const baseMatch = {
             dealStatus: {
-                $nin: ["Won"]
+                $nin: ["Won", "Lost"]
             }
-        }).sort({ createdAt: -1 }).lean()
+        }
+
+        if (search) {
+            if (!isNaN(search)) {
+                baseMatch.$or = [
+                    {
+                        phoneNumber: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$invoiceNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$quoteNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        products: {
+                            $elemMatch: {
+                                productId: Number(search)
+                            }
+                        }
+                    }
+                ]
+            } else {
+                baseMatch.$or = [
+                    {
+                        name: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        companyName: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        emailId: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        source: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        assignToSalesPerson: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        division: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        dealStatus: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        "products.productName": {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    }
+                ]
+            }
+        }
+
+        const leads = await Data.find(baseMatch)
+            .sort({ createdAt: -1 })
+            .lean()
 
         const overDue = []
         const today = []

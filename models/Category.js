@@ -1,6 +1,11 @@
 const mongoose = require('mongoose')
 
 const categorySchema = new mongoose.Schema({
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
     catId: {
         type: Number,
         unique: true,

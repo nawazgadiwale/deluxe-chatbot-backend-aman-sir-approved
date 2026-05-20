@@ -7,7 +7,7 @@ const { Parser } = require('json2csv')
 // Create Category
 const createCategory = async (req, res) => {
     try {
-        const { categoryName, reminders, alertEnabled } = req.body
+        const { createdBy, categoryName, reminders, alertEnabled } = req.body
 
         if (!categoryName) {
             return res.status(400).json({
@@ -70,6 +70,7 @@ const createCategory = async (req, res) => {
         }
 
         const category = await Category.create({
+            createdBy,
             catId: newCatId,
             categoryName,
             reminders,
@@ -215,6 +216,22 @@ const getAllCategoryList = async (req, res) => {
 
         const pipeline = []
 
+        pipeline.push({
+            $lookup: {
+                from: 'users',
+                localField: 'createdBy',
+                foreignField: '_id',
+                as: 'createdBy'
+            }
+        })
+
+        pipeline.push({
+            $unwind: {
+                path: '$createdBy',
+                preserveNullAndEmptyArrays: true
+            }
+        })
+
         if (search) {
             if (!isNaN(search)) {
                 pipeline.push({
@@ -239,7 +256,10 @@ const getAllCategoryList = async (req, res) => {
             }
         }
 
-        if (alertEnabled !== undefined) {
+        if (
+            alertEnabled === "true" ||
+            alertEnabled === "false"
+        ) {
             pipeline.push({
                 $match: {
                     alertEnabled: alertEnabled === "true"
@@ -786,25 +806,43 @@ const getAllReminderList = async (req, res) => {
 // Delete Reminder
 const deleteReminder = async (req, res) => {
     try {
-        const { refNumber } = Number(req.params.refNumber)
+
+        const refNumber = Number(req.params.refNumber)
 
         if (!refNumber) {
-            return res.status(400).json({ message: "Reminder Reference ID is required" })
+            return res.status(400).json({
+                message: "Reminder Reference ID is required"
+            })
         }
 
-        const reminder = await Reminder.findOneAndDelete({ refNumber })
+        const reminder = await Reminder.findOneAndDelete({
+            refNumber
+        })
+
+        if (!reminder) {
+            return res.status(404).json({
+                message: "Reminder not found"
+            })
+        }
 
         res.status(200).json({
+            success: true,
             message: "Reminder deleted successfully!",
             deletedId: refNumber
         })
 
     } catch (error) {
-        console.error("Error Deleting the reminders!", error)
-        res.status(500).json({ message: "Internal Server Error" })
+
+        console.error(
+            "Error Deleting the reminders!",
+            error
+        )
+
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
     }
 }
-
 // Update Reminder Status
 const updateReminderStatus = async (req, res) => {
     try {
