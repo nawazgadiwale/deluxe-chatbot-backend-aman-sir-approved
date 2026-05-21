@@ -3,102 +3,190 @@ const Reminder = require('../models/Reminder')
 const sendEmail = require('../services/mailService')
 // const sendWhatsAppMessage = require('../services/whatsappService')
 
-cron.schedule('0 9 * * *', async () => {
-    try {
-        console.log('Reminder CRON Started')
+cron.schedule(
+    '0 9 * * *',
+    async () => {
+        try {
 
-        const reminders = await Reminder.find({
-            reminderStatus: {
-                $nin: ['completed', 'canceled']
-            }
-        })
-            .populate('category')
-            .populate('employee')
-            .populate('notifyusers')
+            console.log('Reminder CRON Started')
 
-        const today = new Date()
+            const reminders = await Reminder.find({
+                reminderStatus: {
+                    $nin: ['completed', 'canceled']
+                }
+            })
+                .populate('category')
+                .populate('employee')
+                .populate('notifyUsers')
 
-        for (const reminder of reminders) {
-            if (new Date(reminder.expiryDate) < today) {
-                reminder.reminderStatus = 'overdue'
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
 
-                await reminder.save()
+            let overdueCount = 0
 
-                continue
-            }
+            for (const reminder of reminders) {
 
-            const expiryDate = new Date(reminder.expiryDate)
+                const expiryDate = new Date(reminder.expiryDate)
+                expiryDate.setHours(0, 0, 0, 0)
 
-            const diffTime =
-                expiryDate.getTime() - today.getTime()
+                // MARK OVERDUE
+                if (expiryDate < today) {
 
-            const daysLeft = Math.ceil(
-                diffTime / (1000 * 60 * 60 * 24)
-            )
+                    if (reminder.reminderStatus !== 'overdue') {
 
-            const categoryReminders = reminder.category.reminders
+                        reminder.reminderStatus = 'overdue'
 
-            for (const reminderRule of categoryReminders) {
-                const { type, daysBefore } = reminderRule
-            }
+                        await reminder.save()
 
-            if (daysLeft === daysBefore) {
-                const alreadySent = reminder.sentReminders.some(
-                    sent =>
-                        sent.reminderType === type &&
-                        sent.daysBefore === daysBefore
-                )
+                        overdueCount++
+                    }
 
-                if (alreadySent) {
                     continue
                 }
 
-                for (const user of reminder.notifyUsers) {
-                    await sendEmail({
-                        to: user.email,
-                        subject: `${type.toUpperCase()} Reminder - Ref ${reminder.refNumber}`,
-                        html:
-                            `<h2>Reminder Alert</h2>
-                            <p></b>Ref Number:</b> ${reminder.refNumber}</p>
-                            <p><b>Employee:</b> ${reminder.employee.name}</p>
-                            <p><b>Category:</b> ${reminder.category.categoryName}</p>
-                            <p><b>Expiry Date:</b> ${reminder.expiryDate}</p>
-                            <p><b>Days Left:</b> ${daysLeft}</p>
-                            <p><b>Description:</b> ${reminder.description || ''}</p>
-                            <p><b>Notes:</b> ${reminder.notes || ''}</p>
-                        `
-                    })
+                // DAYS LEFT
+                const diffTime =
+                    expiryDate.getTime() - today.getTime()
+
+                const daysLeft = Math.ceil(
+                    diffTime / (1000 * 60 * 60 * 24)
+                )
+
+                // CATEGORY REMINDER RULES
+                const categoryReminders =
+                    reminder.category?.reminders || []
+
+                for (const reminderRule of categoryReminders) {
+
+                    const { type, daysBefore } = reminderRule
+
+                    // SEND REMINDER ONLY WHEN MATCHED
+                    if (daysLeft === daysBefore) {
+
+                        // CHECK ALREADY SENT
+                        const alreadySent =
+                            reminder.sentReminders.some(
+                                sent =>
+                                    sent.reminderType === type &&
+                                    sent.daysBefore === daysBefore
+                            )
+
+                        if (alreadySent) {
+                            continue
+                        }
+
+                        // SEND EMAILS
+                        for (const user of reminder.notifyUsers) {
+
+                            if (!user?.email) {
+                                continue
+                            }
+
+                            await sendEmail({
+                                to: user.email,
+
+                                subject:
+                                    `${type.toUpperCase()} Reminder - Ref ${reminder.refNumber}`,
+
+                                html: `
+                                    <h2>Reminder Alert</h2>
+
+                                    <p>
+                                        <b>Ref Number:</b>
+                                        ${reminder.refNumber}
+                                    </p>
+
+                                    <p>
+                                        <b>Employee:</b>
+                                        ${reminder.employee?.name || 'N/A'}
+                                    </p>
+
+                                    <p>
+                                        <b>Category:</b>
+                                        ${reminder.category?.categoryName || 'N/A'}
+                                    </p>
+
+                                    <p>
+                                        <b>Expiry Date:</b>
+                                        ${expiryDate.toDateString()}
+                                    </p>
+
+                                    <p>
+                                        <b>Days Left:</b>
+                                        ${daysLeft}
+                                    </p>
+
+                                    <p>
+                                        <b>Description:</b>
+                                        ${reminder.description || ''}
+                                    </p>
+
+                                    <p>
+                                        <b>Notes:</b>
+                                        ${reminder.notes || ''}
+                                    </p>
+                                `
+                            })
+
+                            console.log(
+                                `Reminder mail sent to ${user.email}`
+                            )
+                        }
+
+                        // OPTIONAL WHATSAPP
+                        /*
+                        const whatsappNumbers = [
+                            process.env.WHATSAPP_ADMIN_1,
+                            process.env.WHATSAPP_ADMIN_2
+                        ]
+
+                        for (const phone of whatsappNumbers) {
+
+                            await sendWhatsAppMessage({
+
+                                phone,
+
+                                message:
+                                    `${type.toUpperCase()} ALERT\n\n` +
+                                    `Ref No: ${reminder.refNumber}\n` +
+                                    `Employee: ${reminder.employee?.name}\n` +
+                                    `Category: ${reminder.category?.categoryName}\n` +
+                                    `Expiry In: ${daysLeft} day(s)`
+                            })
+                        }
+                        */
+
+                        // SAVE SENT REMINDER HISTORY
+                        reminder.sentReminders.push({
+                            reminderType: type,
+                            daysBefore,
+                            sentAt: new Date()
+                        })
+
+                        await reminder.save()
+
+                        console.log(
+                            `${type} reminder sent for Ref ${reminder.refNumber}`
+                        )
+                    }
                 }
-
-                // const whatsappNumbers = [
-                //         process.env.WHATSAPP_ADMIN_1,
-                //         process.env.WHATSAPP_ADMIN_2
-                //     ]
-
-                //     for (const phone of whatsappNumbers) {
-
-                //         await sendWhatsAppMessage({
-
-                //             phone,
-
-                //             message:
-                //                 `${type.toUpperCase()} ALERT\n\nRef No: ${reminder.refNumber}\nEmployee: ${reminder.employee.name}\nCategory: ${reminder.category.categoryName}\nExpiry In: ${daysLeft} day(s)`
-                //         })
-                //     }
-
-                reminder.sentReminders.push({
-                    reminderType: type,
-                    daysBefore,
-                    sentAt: new Date()
-                })
-
-                await reminder.save()
             }
+
+            console.log(
+                `${overdueCount} reminders marked as overdue`
+            )
+
+            console.log('Reminder CRON Completed')
+
+        } catch (error) {
+
+            console.error(
+                'Reminder CRON Error:',
+                error
+            )
         }
-
-        console.log('Reminder cron completed')
-
-    } catch (error) {
-        console.error('Reminder Cron Error', error)
+    },
+    {
+        timezone: 'Asia/Kolkata'
     }
-})
+)
