@@ -12,13 +12,11 @@ const UserSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true,
-        select: false
     },
     // re_password
     re_password: {
         type: String,
         required: true,
-        select: false
     },
     // employee email
     email: {
