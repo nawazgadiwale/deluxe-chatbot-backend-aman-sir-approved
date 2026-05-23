@@ -25,7 +25,7 @@ const categorySchema = new mongoose.Schema({
                 enum: [
                     'due',
                     'critical',
-                    'overcritical',
+                    'urgent',
                     'custom'
                 ],
                 required: true
@@ -51,7 +51,7 @@ categorySchema.pre('save', function (next) {
     const requiredTypes = [
         'due',
         'critical',
-        'overcritical'
+        'urgent'
     ]
 
     const hasrequiredTypes = requiredTypes.every(type =>
@@ -61,7 +61,7 @@ categorySchema.pre('save', function (next) {
     if (!hasrequiredTypes) {
         return next(
             new Error(
-                'Due, Critical and Overcritical reminders are mandatory'
+                'Due, Critical and Urgent reminders are mandatory'
             )
         )
     }

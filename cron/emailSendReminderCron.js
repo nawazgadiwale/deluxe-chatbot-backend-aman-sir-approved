@@ -4,11 +4,11 @@ const sendEmail = require('../services/mailService')
 // const sendWhatsAppMessage = require('../services/whatsappService')
 
 cron.schedule(
-    '0 9 * * *',
+    '30 13 * * *',
     async () => {
         try {
 
-            console.log('Reminder CRON Started')
+            // console.log('Reminder CRON Started')
 
             const reminders = await Reminder.find({
                 reminderStatus: {
@@ -82,11 +82,11 @@ cron.schedule(
                                 continue
                             }
 
-                            await sendEmail({
+                            const mailSent = await sendEmail({
                                 to: user.email,
 
                                 subject:
-                                    `${type.toUpperCase()} Reminder - Ref ${reminder.refNumber}`,
+                                    `${reminder.category?.categoryName} - (${type.toUpperCase()})`,
 
                                 html: `
                                     <h2>Reminder Alert</h2>
@@ -128,9 +128,15 @@ cron.schedule(
                                 `
                             })
 
-                            console.log(
-                                `Reminder mail sent to ${user.email}`
-                            )
+                            // if (mailSent.success) {
+                            //     console.log(
+                            //         `Reminder mail sent to ${user.email}`
+                            //     )
+                            // } else {
+                            //     console.log(
+                            //         `Reminder mail failed for ${user.email}`
+                            //     )
+                            // }
                         }
 
                         // OPTIONAL WHATSAPP
@@ -165,18 +171,18 @@ cron.schedule(
 
                         await reminder.save()
 
-                        console.log(
-                            `${type} reminder sent for Ref ${reminder.refNumber}`
-                        )
+                        // console.log(
+                        //     `${type} reminder sent for Ref ${reminder.refNumber}`
+                        // )
                     }
                 }
             }
 
-            console.log(
-                `${overdueCount} reminders marked as overdue`
-            )
+            // console.log(
+            //     `${overdueCount} reminders marked as overdue`
+            // )
 
-            console.log('Reminder CRON Completed')
+            // console.log('Reminder CRON Completed')
 
         } catch (error) {
 

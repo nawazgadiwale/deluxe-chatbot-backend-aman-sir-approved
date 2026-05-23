@@ -24,7 +24,7 @@ const sendWhatsAppMessage = async ({
             }
         )
 
-        console.log(`WhatsApp sent to ${phone}`)
+        // console.log(`WhatsApp sent to ${phone}`)
     } catch (error) {
         console.error('Whatsapp sending error', error)
     }

@@ -70,4 +70,22 @@ router.get('/export', exportAllReminders)
 // GET
 router.get('/filter', getEmployeeAndCategory)
 
+router.get('/test-mail', async (req, res) => {
+
+    const sendEmail = require('../services/mailService')
+
+    const sent = await sendEmail({
+
+        to: 'amanullamulla394@gmail.com',
+
+        subject: 'Test Mail',
+
+        html: '<h1>SMTP Working</h1>'
+    })
+
+    res.json({
+        success: sent
+    })
+})
+
 module.exports = router

@@ -39,7 +39,7 @@ const createCategory = async (req, res) => {
         const requiredTypes = [
             'due',
             'critical',
-            'overcritical'
+            'urgent'
         ]
 
         if (reminders.length < 3) {
@@ -56,7 +56,7 @@ const createCategory = async (req, res) => {
         if (!hasRequiredTypes) {
             return res.status(400).json({
                 success: false,
-                message: 'Due, Critical and Overcritical reminders are mandatory'
+                message: 'Due, Critical and Urgent reminders are mandatory'
             })
         }
 
@@ -130,7 +130,7 @@ const updateCategory = async (req, res) => {
         const requiredTypes = [
             'due',
             'critical',
-            'overcritical'
+            'urgent'
         ]
 
         const hasRequiredTypes = requiredTypes.every(type =>
@@ -140,7 +140,7 @@ const updateCategory = async (req, res) => {
         if (!hasRequiredTypes) {
             return res.status(400).json({
                 success: false,
-                message: 'Due, Critical and Overcritical reminders are mandatory'
+                message: 'Due, Critical and Urgent reminders are mandatory'
             })
         }
 
@@ -212,7 +212,7 @@ const getAllCategoryList = async (req, res) => {
 
         const query = req.query || {}
 
-        const { page = 1, limit = 10, search = "", alertEnabled } = query
+        const { page = 1, limit = 25, search = "", alertEnabled } = query
 
         const pipeline = []
 
@@ -267,7 +267,7 @@ const getAllCategoryList = async (req, res) => {
             })
         }
 
-        pipeline.push({ $sort: { createdAt: -1 } })
+        pipeline.push({ $sort: { createdAt: 1 } })
 
         pipeline.push({
             $skip: (parseInt(page) - 1) * parseInt(limit)
@@ -309,7 +309,25 @@ const deleteCategory = async (req, res) => {
             return res.status(400).json({ message: "Category ID is required" })
         }
 
-        const category = await Category.findOneAndDelete({ catId })
+        const category = await Category.findOne({ catId })
+
+        if (!category) {
+            return res.status(404).json({
+                message: "Category not found"
+            })
+        }
+
+        const reminderExists = await Reminder.exists({
+            category: category._id
+        })
+
+        if (reminderExists) {
+            return res.status(400).json({
+                message: "Cannot delete category, Delete related reminders first."
+            })
+        }
+
+        await Category.findOneAndDelete({ catId })
 
         res.status(200).json({
             message: "Category deleted successfully!",
@@ -585,12 +603,13 @@ const getAllReminderList = async (req, res) => {
 
         const {
             page = 1,
-            limit = 10,
+            limit = 25,
             search = "",
             category = "",
             employee = "",
             reminderStatus = "",
-            expiryDate = ""
+            expiryDate = "",
+            reminderType = ""
         } = req.query
 
         const pipeline = []
@@ -743,10 +762,41 @@ const getAllReminderList = async (req, res) => {
             }
         }
 
+        if (reminderType) {
+            if (reminderType === "neutral") {
+                pipeline.push({
+                    $match: {
+                        $or: [
+                            {
+                                sentReminders: {
+                                    $exists: false
+                                }
+                            },
+                            {
+                                sentReminders: {
+                                    $size: 0
+                                }
+                            }
+                        ]
+                    }
+                })
+            } else {
+                pipeline.push({
+                    $match: {
+                        sentReminders: {
+                            $elemMatch: {
+                                reminderType: reminderType
+                            }
+                        }
+                    }
+                })
+            }
+        }
+
         // SORTING
         pipeline.push({
             $sort: {
-                createdAt: -1
+                createdAt: 1
             }
         })
 
@@ -998,8 +1048,15 @@ const upcomingExpiryReminder = async (req, res) => {
             }
         })
             .populate('category')
-            .populate('employee')
-            .populate('notifyUsers')
+            .populate({
+                path: 'employee',
+                select: '-password -re_password'
+            })
+
+            .populate({
+                path: 'notifyUsers',
+                select: '-password -re_password'
+            })
             .sort({ expiryDate: 1 })
 
         return res.status(200).json({
@@ -1015,103 +1072,167 @@ const upcomingExpiryReminder = async (req, res) => {
 
 // Dashboard Stats
 const dashboardStats = async (req, res) => {
+
     try {
 
-        const totalReminders = await Reminder.countDocuments()
-
-        const activeReminders = await Reminder.countDocuments({
-            reminderStatus: 'active'
-        })
-
-        const completedReminders = await Reminder.countDocuments({
-            reminderStatus: 'completed'
-        })
-
-        const expiredReminders = await Reminder.countDocuments({
-            reminderStatus: 'overdue'
-        })
-
-        const inprogressReminders = await Reminder.countDocuments({
-            reminderStatus: 'inprogress'
-        })
-
-        const cancelReminders = await Reminder.countDocuments({
-            reminderStatus: 'canceled'
-        })
-
-        const totalCategories = await Category.countDocuments()
-
-        const alertEnabled = await Category.countDocuments({ alertEnabled: true })
-        const alertNotEnabled = await Category.countDocuments({ alertEnabled: false })
+        const today = new Date()
 
         const next7Days = new Date()
-        next7Days.setDate(next7Days.getDate() + 7)
-
-        const upcomingWeekExpiryCount = await Reminder.countDocuments({
-            expiryDate: {
-                $gte: new Date(),
-                $lte: next7Days
-            }
-        })
+        next7Days.setDate(today.getDate() + 7)
 
         const next30Days = new Date()
-        next30Days.setDate(next30Days.getDate() + 30)
-
-        const upcomingMonthExpiryCount = await Reminder.countDocuments({
-            expiryDate: {
-                $gte: new Date(),
-                $lte: next30Days
-            }
-        })
+        next30Days.setDate(today.getDate() + 30)
 
         const next90Days = new Date()
-        next90Days.setDate(next90Days.getDate() + 90)
-
-        const upcoming3MonthExpiryCount = await Reminder.countDocuments({
-            expiryDate: {
-                $gte: new Date(),
-                $lte: next90Days
-            }
-        })
+        next90Days.setDate(today.getDate() + 90)
 
         const next180Days = new Date()
-        next180Days.setDate(next180Days.getDate() + 180)
+        next180Days.setDate(today.getDate() + 180)
 
-        const upcoming6MonthExpiryCount = await Reminder.countDocuments({
-            expiryDate: {
-                $gte: new Date(),
-                $lte: next180Days
-            }
-        })
+        const [
+
+            totalReminders,
+
+            dueReminders,
+
+            criticalReminders,
+
+            urgentReminders,
+
+            totalCategories,
+
+            alertEnabled,
+
+            alertNotEnabled,
+
+            upcomingWeekExpiryCount,
+
+            upcomingMonthExpiryCount,
+
+            upcoming3MonthExpiryCount,
+
+            upcoming6MonthExpiryCount
+
+        ] = await Promise.all([
+
+            Reminder.countDocuments(),
+
+            Reminder.countDocuments({
+                sentReminders: {
+                    $elemMatch: {
+                        reminderType: 'due'
+                    }
+                }
+            }),
+
+            Reminder.countDocuments({
+                sentReminders: {
+                    $elemMatch: {
+                        reminderType: 'critical'
+                    }
+                }
+            }),
+
+            Reminder.countDocuments({
+                sentReminders: {
+                    $elemMatch: {
+                        reminderType: 'urgent'
+                    }
+                }
+            }),
+
+            Category.countDocuments(),
+
+            Category.countDocuments({
+                alertEnabled: true
+            }),
+
+            Category.countDocuments({
+                alertEnabled: false
+            }),
+
+            Reminder.countDocuments({
+                expiryDate: {
+                    $gte: today,
+                    $lte: next7Days
+                }
+            }),
+
+            Reminder.countDocuments({
+                expiryDate: {
+                    $gte: today,
+                    $lte: next30Days
+                }
+            }),
+
+            Reminder.countDocuments({
+                expiryDate: {
+                    $gte: today,
+                    $lte: next90Days
+                }
+            }),
+
+            Reminder.countDocuments({
+                expiryDate: {
+                    $gte: today,
+                    $lte: next180Days
+                }
+            })
+        ])
 
         return res.status(200).json({
-            message: 'Dashboard stats fetched successfully!',
+
+            success: true,
+
+            message:
+                'Dashboard stats fetched successfully!',
+
             data: {
+
                 totalReminders,
+
                 categories: {
+
                     totalCategories,
+
                     alertEnabled,
+
                     alertNotEnabled
                 },
-                reminderStatuses: {
-                    active: activeReminders,
-                    completed: completedReminders,
-                    overdue: expiredReminders,
-                    inprogress: inprogressReminders,
-                    canceled: cancelReminders
+
+                reminderTypes: {
+
+                    due: dueReminders,
+
+                    critical: criticalReminders,
+
+                    urgent: urgentReminders
                 },
+
                 expiryStats: {
+
                     upcomingWeekExpiryCount,
+
                     upcomingMonthExpiryCount,
+
                     upcoming3MonthExpiryCount,
+
                     upcoming6MonthExpiryCount
                 }
             }
         })
+
     } catch (error) {
-        console.error('Error fetching dashboard stats', error)
+
+        console.error(
+            'Error fetching dashboard stats',
+            error
+        )
+
         return res.status(500).json({
+
             success: false,
+
             message: 'Internal Server Error'
         })
     }
@@ -1122,24 +1243,77 @@ const exportAllReminders = async (req, res) => {
     try {
         const reminders = await Reminder.find()
             .populate('category')
-            .populate('employee')
-            .populate('notifyUsers')
+            .populate({
+                path: 'employee',
+                select: '-password -re_password'
+            })
+            .populate({
+                path: 'notifyUsers',
+                select: '-password -re_password'
+            })
             .sort({ createdAt: -1 })
 
-        const formattedData = reminders.map(item => ({
-            refNumber: item.refNumber,
-            category: item.category?.categoryName || '',
-            employee: item.employee?.name || '',
-            expiryDate: item.expiryDate,
-            reminderStatus: item.reminderStatus,
-            notifyUsers:
-                item.notifyUsers.map(user => user.name)
-                    .join(', '),
-            description: item.description,
-            notes: item.notes
+        const formatDate = (date) => {
+            if (!date) return ""
+
+            return new Date(date)
+                .toLocaleDateString('en-GB')
+        }
+
+        const formattedData = reminders.map((item) => ({
+
+            'Ref Number':
+                item.refNumber || '',
+
+            'Category':
+                item.category?.categoryName || '',
+
+            'Employee':
+                item.employee?.name || '',
+
+            'Expiry Date':
+                formatDate(item.expiryDate),
+
+            'Reminder Status':
+                item.reminderStatus || '',
+
+            'Notify Users':
+                item.notifyUsers
+                    ?.map((user) => user.name)
+                    .join(', ') || '',
+
+            'Description':
+                item.description || '',
+
+            'Notes':
+                item.notes || '',
+
+            'Created At':
+                formatDate(item.createdAt)
         }))
 
-        const json2csvParser = new Parser()
+        const fields = [
+
+            'Ref Number',
+
+            'Category',
+
+            'Employee',
+
+            'Expiry Date',
+
+            'Reminder Status',
+
+            'Notify Users',
+
+            'Description',
+
+            'Notes',
+
+            'Created At'
+        ]
+
+        const json2csvParser = new Parser({ fields })
 
         const csv = json2csvParser.parse(formattedData)
 
@@ -1148,9 +1322,11 @@ const exportAllReminders = async (req, res) => {
             'text/csv'
         )
 
-        res.attachment('reminders.csv')
+        res.attachment(
+            `reminders-${Date.now()}.csv`
+        )
 
-        return res.send(csv)
+        return res.status(200).send(csv)
     } catch (error) {
         console.error('Error exporting all reminders', error)
         return res.status(500).json({ message: 'Internal Server Error' })
