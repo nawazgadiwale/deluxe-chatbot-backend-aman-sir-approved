@@ -22,7 +22,6 @@ const UserSchema = new mongoose.Schema({
     email: {
         type: String,
         required: true,
-        unique: true
     },
     // employee phone
     phone: {
@@ -33,7 +32,7 @@ const UserSchema = new mongoose.Schema({
     // role of employee
     role: {
         type: String,
-        enum: ['super-admin', 'admin', 'customer-support', 'sales', 'design', 'production', 'finishing', 'operation'],
+        enum: ['super-admin', 'admin', 'customer-support', 'sales', 'design', 'production', 'finishing', 'operation', 'family'],
         default: 'sales'
     },
     // access of employee
