@@ -1,5 +1,5 @@
 const express = require('express')
-const { addNewLeadData,getAllLeadsData, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate } = require('../controllers/dataController')
+const { addNewLeadData,getAllLeadsData, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate, getGlobalSearchAllLeadsData } = require('../controllers/dataController')
 const router = express.Router()
 
 // create new lead
@@ -17,6 +17,10 @@ router.post('/lead-first/:uid', updateFirstFollowupdate)
 // get all leads
 // GET
 router.get('/leads', getAllLeadsData)
+
+// get global search all leads data
+// GET
+router.get('/leads/global-search', getGlobalSearchAllLeadsData)
 
 // get lead data
 // GET

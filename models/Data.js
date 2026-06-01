@@ -112,7 +112,10 @@ const dataSchema = new mongoose.Schema({
             },
             adminName: {
                 type: String,
-                enum: ['Hafsa', 'Fariha', 'Mizba']
+                enum: ['Hafsa', 'Fariha', 'Mizba', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+            'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
+            'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
+            'Umair', 'Wajid', 'Ziyad', 'Zohaib']
             },
             followUpNotes: {
                 type: String

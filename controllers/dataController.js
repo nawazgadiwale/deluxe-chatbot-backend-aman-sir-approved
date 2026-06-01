@@ -500,6 +500,142 @@ const getAllLeadsData = async (req, res) => {
     }
 }
 
+// Global search with filters for all leads data
+const getGlobalSearchAllLeadsData = async (req, res) => {
+    try {
+        const {
+            search = "",
+            limit = 10
+        } = req.query
+
+        const limitNumber = parseInt(limit) || 10
+
+        let baseMatch = {}
+
+        // Search Filter
+        if (search) {
+            if (!isNaN(Number(search))) {
+                baseMatch.$or = [
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$invoiceNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$quoteNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$phoneNumber" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
+                    {
+                        products: {
+                            $elemMatch: {
+                                productId: Number(search)
+                            }
+                        }
+                    }
+                ]
+            } else {
+                baseMatch.$or = [
+                    {
+                        name: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        companyName: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        emailId: {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    },
+                    {
+                        "products.productName": {
+                            $regex: search,
+                            $options: "i"
+                        }
+                    }
+                ]
+            }
+        }
+
+        const pipeline = [
+            {
+                $match: baseMatch
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "createdBy",
+                    foreignField: "_id",
+                    as: "createdBy"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$createdBy",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $addFields: {
+                    createdBy: "$createdBy.name"
+                }
+            }
+        ]
+
+        pipeline.push(
+            {
+                $sort: {
+                    createdAt: -1
+                }
+            },
+            {
+                $limit: limitNumber
+            }
+        )
+
+        const leads = await Data.aggregate(pipeline)
+
+        return res.status(200).json({
+            success: true,
+            message: "Leads Data!",
+            total: leads.length,
+            limit: limitNumber,
+            data: leads
+        })
+
+    } catch (error) {
+        console.error("Error getting leads:", error)
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
 // Get individual lead data
 const getIndividualLeadData = async (req, res) => {
     try {
@@ -794,11 +930,9 @@ const getLeadDashboardData = async (req, res) => {
 const getFollowUpPriorityList = async (req, res) => {
     try {
         const { search = "" } = req.query
+
         const startOfToday = new Date()
         startOfToday.setHours(0, 0, 0, 0)
-
-        const endOfToday = new Date()
-        endOfToday.setHours(23, 59, 59, 999)
 
         const baseMatch = {
             dealStatus: {
@@ -807,7 +941,7 @@ const getFollowUpPriorityList = async (req, res) => {
         }
 
         if (search) {
-            if (!isNaN(search)) {
+            if (!isNaN(Number(search))) {
                 baseMatch.$or = [
                     {
                         phoneNumber: {
@@ -903,41 +1037,43 @@ const getFollowUpPriorityList = async (req, res) => {
         const today = []
         const upComing = []
 
-
         leads.forEach((lead) => {
-            if (!lead.followUps || lead.followUps.length === 0) return
+            if (!lead.followUps?.length) return
 
-            const followUps = lead.followUps || []
-
-            if (followUps.length === 0) return
+            const followUps = lead.followUps
 
             const currentFollowUp = [...followUps]
                 .reverse()
-                .find(f =>
-                    f.followUpDate &&
-                    (f.followUpTakenVia || f.followUpNotes || f.adminName)
+                .find(
+                    (f) =>
+                        f.followUpDate &&
+                        (f.followUpTakenVia ||
+                            f.followUpNotes ||
+                            f.adminName)
                 )
 
             const nextFollowUp = [...followUps]
                 .reverse()
-                .find(f =>
-                    f.followUpDate &&
-                    !f.followUpTakenVia &&
-                    !f.followUpNotes &&
-                    !f.adminName
+                .find(
+                    (f) =>
+                        f.followUpDate &&
+                        !f.followUpTakenVia &&
+                        !f.followUpNotes &&
+                        !f.adminName
                 )
 
-            const completedFollowUps = followUps.filter(f =>
-                f.followUpDate && (f.followUpTakenVia || f.followUpNotes || f.adminName)
-            )
-
-            const followUpstakenCount = completedFollowUps.length
-
-            // If no next follow-up, skip
             if (!nextFollowUp) return
 
-            const followUpDate = new Date(nextFollowUp.followUpDate)
+            const completedFollowUps = followUps.filter(
+                (f) =>
+                    f.followUpDate &&
+                    (f.followUpTakenVia ||
+                        f.followUpNotes ||
+                        f.adminName)
+            )
 
+            const followUpstakenCount =
+                completedFollowUps.length
 
             const formattedLead = {
                 _id: lead._id,
@@ -948,30 +1084,36 @@ const getFollowUpPriorityList = async (req, res) => {
                 emailId: lead.emailId,
                 source: lead.source,
                 division: lead.division,
-                assignToSalesPerson: lead.assignToSalesPerson,
+                assignToSalesPerson:
+                    lead.assignToSalesPerson,
                 dealStatus: lead.dealStatus,
                 followUpstakenCount,
-                // ✅ current (completed)
-                currentFollowUpDate: currentFollowUp?.followUpDate,
-                followUpTakenVia: currentFollowUp?.followUpTakenVia,
-                adminName: currentFollowUp?.adminName,
-                followUpNotes: currentFollowUp?.followUpNotes,
 
-                // ✅ next (pending)
-                nextFollowUpDate: nextFollowUp.followUpDate
+                // Current Follow-up
+                currentFollowUpDate:
+                    currentFollowUp?.followUpDate,
+                followUpTakenVia:
+                    currentFollowUp?.followUpTakenVia,
+                adminName: currentFollowUp?.adminName,
+                followUpNotes:
+                    currentFollowUp?.followUpNotes,
+
+                // Next Follow-up
+                nextFollowUpDate:
+                    nextFollowUp.followUpDate
             }
 
-            // OVERDUE
+            const followUpDate = new Date(
+                nextFollowUp.followUpDate
+            )
+
+            followUpDate.setHours(0, 0, 0, 0)
+
             if (followUpDate < startOfToday) {
                 overDue.push(formattedLead)
-            }
-
-            // TODAY
-            else if (followUpDate >= startOfToday && followUpDate <= endOfToday) {
+            } else if (followUpDate.getTime() === startOfToday.getTime()) {
                 today.push(formattedLead)
-            }
-
-            else {
+            } else {
                 upComing.push(formattedLead)
             }
         })
@@ -981,7 +1123,7 @@ const getFollowUpPriorityList = async (req, res) => {
             counts: {
                 overDue: overDue.length,
                 today: today.length,
-                upComing: upComing.length,
+                upComing: upComing.length
             },
             data: {
                 overDue,
@@ -989,7 +1131,6 @@ const getFollowUpPriorityList = async (req, res) => {
                 upComing
             }
         })
-
     } catch (error) {
         console.error(
             "Error getting follow-up priority list:",
@@ -1002,4 +1143,4 @@ const getFollowUpPriorityList = async (req, res) => {
     }
 }
 
-module.exports = { addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList }
+module.exports = { addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData }
