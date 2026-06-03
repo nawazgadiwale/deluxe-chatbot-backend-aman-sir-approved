@@ -57,7 +57,7 @@ const sendEmail = async ({
 
         const info = await transporter.sendMail({
 
-            from: `DLX Fusion <${process.env.BREVO_EMAIL}>`,
+            from: `Alert <${process.env.BREVO_EMAIL}>`,
 
             to,
 

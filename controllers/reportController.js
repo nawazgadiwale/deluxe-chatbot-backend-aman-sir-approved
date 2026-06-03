@@ -27,7 +27,7 @@ const getReportsDashboardData = async (req, res) => {
             Contacted: 0,
             Quoted: 0,
             "On-Going": 0,
-            "No-Reply": 0,
+            "No-reply": 0,
             Won: 0,
             Lost: 0
         }
@@ -38,7 +38,7 @@ const getReportsDashboardData = async (req, res) => {
             Contacted: 0,
             Quoted: 0,
             "On-Going": 0,
-            "No-Reply": 0,
+            "No-reply": 0,
             Won: 0,
             Lost: 0
         }
@@ -64,7 +64,7 @@ const getReportsDashboardData = async (req, res) => {
             }
         ])
 
-        // Total amount for "Quoted", "Won", "Lost", "On-Going", and "No-Reply" deals
+        // Total amount for "Quoted", "Won", "Lost", "On-Going", and "No-reply" deals
         const totalQuotedAmount = await Data.aggregate([
             {
                 $match: {
@@ -74,7 +74,7 @@ const getReportsDashboardData = async (req, res) => {
                             "Quoted",
                             "Lost",
                             "On-Going",
-                            "No-Reply"
+                            "No-reply"
                         ]
                     }
                 }
@@ -135,13 +135,36 @@ const getReportsDashboardData = async (req, res) => {
                             ],
                             default: "$source"
                         }
-                    }
+                    },
+                    dealAmount: {
+                        $ifNull: ["$dealAmount", 0]
+                    },
+                    dealStatus: 1
                 }
             },
             {
                 $group: {
                     _id: "$sourceGroup",
-                    count: { $sum: 1 }
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: "$dealAmount" },
+                    wonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                "$dealAmount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    source: "$_id",
+                    count: 1,
+                    totalAmount: { $round: ["$totalAmount", 2] },
+                    wonAmount: { $round: ["$wonAmount", 2] }
                 }
             },
             {
@@ -154,26 +177,76 @@ const getReportsDashboardData = async (req, res) => {
         // Division performance data
         const divisionPerformance = await Data.aggregate([
             {
+
+                $match: {
+                    leadAddedDate: {
+                        $gte: new Date(Number(year), Number(month) - 1, 1),
+                        $lt: new Date(Number(year), Number(month), 1)
+                    },
+                    division: {
+                        $nin: [null, "", "N/A"]
+                    }
+                },
+
+
+
+            },
+            {
                 $group: {
                     _id: "$division",
-                    revenue: { $sum: "$dealAmount" },
-                    leads: { $sum: 1 }
+                    leads: { $sum: 1 },
+
+                    totalAmount: {
+                        $sum: {
+                            $ifNull: ["$dealAmount", 0]
+                        }
+                    },
+
+                    wonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                { $ifNull: ["$dealAmount", 0] },
+                                0
+                            ]
+                        }
+                    }
                 }
             },
             {
                 $sort: {
-                    revenue: -1
+                    wonAmount: -1
                 }
             }
         ])
 
+        const totalWonRevenue = divisionPerformance.reduce(
+            (sum, item) => sum + item.wonAmount,
+            0
+        )
+
+        const divisionData = divisionPerformance.map(item => ({
+            division: item._id,
+            leads: item.leads,
+            wonAmount: item.wonAmount,
+            amount: item.totalAmount,
+            percentage:
+                totalWonRevenue > 0
+                    ? Number(((item.wonAmount / totalWonRevenue) * 100).toFixed(2)) : 0
+        }))
+
         // Top products by revenue
         const topProducts = await Data.aggregate([
+
             {
                 $unwind: "$products"
             },
             {
                 $match: {
+                    leadAddedDate: {
+                        $gte: new Date(Number(year), Number(month) - 1, 1),
+                        $lt: new Date(Number(year), Number(month), 1)
+                    },
                     "products.productName": {
                         $ne: "N/A"
                     }
@@ -182,13 +255,31 @@ const getReportsDashboardData = async (req, res) => {
             {
                 $group: {
                     _id: "$products.productName",
-                    revenue: { $sum: "$dealAmount" },
-                    totalDeals: { $sum: 1 }
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: "$dealAmount" },
+                    wonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                "$dealAmount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    productName: "$_id",
+                    count: 1,
+                    totalAmount: { $round: ["$totalAmount", 2] },
+                    wonAmount: { $round: ["$wonAmount", 2] }
                 }
             },
             {
                 $sort: {
-                    revenue: -1
+                    wonAmount: -1
                 }
             },
             {
@@ -213,7 +304,20 @@ const getReportsDashboardData = async (req, res) => {
                         month: { $month: "$leadAddedDate" }
                     },
                     totalDeals: { $sum: 1 },
-                    totalAmount: { $sum: "$dealAmount" }
+                    totalAmount: {
+                        $sum: {
+                            $ifNull: ["$dealAmount", 0]
+                        }
+                    },
+                    totalWonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                { $ifNull: ["$dealAmount", 0] },
+                                0
+                            ]
+                        }
+                    }
                 }
             }
         ])
@@ -243,7 +347,8 @@ const getReportsDashboardData = async (req, res) => {
             return {
                 month: monthName,
                 totalDeals: found?.totalDeals || 0,
-                totalAmount: found?.totalAmount || 0
+                totalAmount: found?.totalAmount || 0,
+                totalWonAmount: found?.totalWonAmount || 0
             }
         })
 
@@ -277,12 +382,40 @@ const getReportsDashboardData = async (req, res) => {
                 $group: {
                     _id: "$assignToSalesPerson",
                     totalLeads: { $sum: 1 },
-                    revenue: { $sum: "$dealAmount" },
+                    totalAmount: { $sum: "$dealAmount" },
+                    wonDeals: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    wonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                "$dealAmount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    salesPerson: "$_id",
+                    totalLeads: 1,
+                    wonDeals: 1,
+                    totalAmount: { $round: ["$totalAmount", 2] },
+                    wonAmount: { $round: ["$wonAmount", 2] }
                 }
             },
             {
                 $sort: {
-                    totalLeads: -1
+                    wonDeals: -1
                 }
             }
         ])
@@ -300,10 +433,18 @@ const getReportsDashboardData = async (req, res) => {
         // Top 5 Sales persons
         const topSalesPersons = await Data.aggregate([
             {
+                $match: {
+                    leadAddedDate: {
+                        $gte: new Date(Number(year), Number(month) - 1, 1),
+                        $lt: new Date(Number(year), Number(month), 1)
+                    }
+                }
+            },
+            {
                 $group: {
                     _id: "$assignToSalesPerson",
                     totalLeads: { $sum: 1 },
-                    revenue: { $sum: "$dealAmount" },
+                    totalAmount: { $sum: "$dealAmount" },
                     wonDeals: {
                         $sum: {
                             $cond: [
@@ -312,16 +453,25 @@ const getReportsDashboardData = async (req, res) => {
                                 0
                             ]
                         }
+                    },
+                    wonAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                "$dealAmount",
+                                0
+                            ]
+                        }
                     }
                 }
             },
             {
                 $sort: {
-                    revenue: -1,
+                    wonDeals: -1,
                 }
             },
             {
-                $limit: 5
+                $limit: 10
             }
         ])
 
@@ -339,7 +489,7 @@ const getReportsDashboardData = async (req, res) => {
             },
             charts: {
                 leadSourceData,
-                divisionPerformance,
+                divisionPerformance: divisionData,
                 topProducts,
                 monthlyLeads,
                 monthlyWiseDealStatus,
