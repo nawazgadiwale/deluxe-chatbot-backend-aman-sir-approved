@@ -670,12 +670,6 @@ const addFollowUp = async (req, res) => {
             followUpNotes
         } = req.body
 
-        if (!uid) {
-            return res.status(400).json({
-                message: "UID is required!"
-            })
-        }
-
         const lead = await Data.findOne({ uid })
 
         if (!lead) {
@@ -684,67 +678,98 @@ const addFollowUp = async (req, res) => {
             })
         }
 
-        const lastIndex = lead.followUps.length - 1
-
-        // CURRENT FOLLOWUP -> TODAY
-        const today = new Date()
-
-        // scheduled followup date
-        const scheduledDate = new Date(
-            lead.followUps[lastIndex].followUpDate
+        const pendingIndex = lead.followUps.findLastIndex(
+            (f) =>
+                f.followUpDate &&
+                !f.followUpTakenVia &&
+                !f.followUpNotes &&
+                !f.adminName
         )
 
-        // remove time part
-        today.setHours(0, 0, 0, 0)
-        scheduledDate.setHours(0, 0, 0, 0)
+        if (pendingIndex !== -1) {
 
-        // difference in days
-        const diffTime = today - scheduledDate
+            const todayStr = new Date().toLocaleDateString(
+                "en-CA",
+                {
+                    timeZone: "Asia/Dubai"
+                }
+            )
 
-        const gap = Math.floor(
-            diffTime / (1000 * 60 * 60 * 24)
-        )
+            const scheduledStr = new Date(
+                lead.followUps[pendingIndex].followUpDate
+            ).toLocaleDateString(
+                "en-CA",
+                {
+                    timeZone: "Asia/Dubai"
+                }
+            )
 
-        // if overdue store gap else 0
-        lead.followUps[lastIndex].followUpGap =
-            gap > 0 ? gap : 0
+            const todayDate = new Date(todayStr)
+            const scheduledDate = new Date(scheduledStr)
 
-        // current followup activity
-        lead.followUps[lastIndex].followUpTakenVia =
-            followUpTakenVia
+            const diffTime =
+                todayDate.getTime() -
+                scheduledDate.getTime()
 
-        lead.followUps[lastIndex].adminName =
-            adminName
+            const gap = Math.floor(
+                diffTime /
+                (1000 * 60 * 60 * 24)
+            )
 
-        lead.followUps[lastIndex].followUpNotes =
-            followUpNotes
+            lead.followUps[pendingIndex].followUpGap =
+                gap > 0 ? gap : 0
 
-        // actual completed date
-        lead.followUps[lastIndex].followUpDate =
-            today
+            lead.followUps[pendingIndex].followUpTakenVia =
+                followUpTakenVia
 
-        // NEXT FOLLOWUP DATE
-        if (followUpDate) {
+            lead.followUps[pendingIndex].adminName =
+                adminName
+
+            lead.followUps[pendingIndex].followUpNotes =
+                followUpNotes
+
+            // lead.followUps[pendingIndex].completedDate =
+            //     new Date()
+
+            // Create next followup only if date selected
+            if (followUpDate) {
+                lead.followUps.push({
+                    followUpDate: new Date(followUpDate)
+                })
+            }
+        } else {
+
+            // No pending followup exists
+            // Create a completely new followup record
+
             lead.followUps.push({
-                followUpDate: new Date(followUpDate)
+                followUpDate: followUpDate
+                    ? new Date(followUpDate)
+                    : new Date(),
+                followUpTakenVia,
+                adminName,
+                followUpNotes,
+                // completedDate: new Date(),
+                followUpGap: 0
             })
         }
 
         await lead.save()
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Follow-up added successfully",
             followUps: lead.followUps
         })
 
     } catch (error) {
+
         console.error(
             "Error adding follow-up:",
-            error.message
+            error
         )
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Internal Server Error"
         })
     }
@@ -1103,15 +1128,22 @@ const getFollowUpPriorityList = async (req, res) => {
                     nextFollowUp.followUpDate
             }
 
-            const followUpDate = new Date(
-                nextFollowUp.followUpDate
+            const todayStr = new Date().toLocaleDateString(
+                "en-CA",
+                {
+                    timeZone: "Asia/Dubai"
+                }
             )
 
-            followUpDate.setHours(0, 0, 0, 0)
+            const followUpStr = new Date(
+                nextFollowUp.followUpDate
+            ).toLocaleDateString("en-CA", {
+                timeZone: "Asia/Dubai"
+            })
 
-            if (followUpDate < startOfToday) {
+            if (followUpStr < todayStr) {
                 overDue.push(formattedLead)
-            } else if (followUpDate.getTime() === startOfToday.getTime()) {
+            } else if (followUpStr === todayStr) {
                 today.push(formattedLead)
             } else {
                 upComing.push(formattedLead)
