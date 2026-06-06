@@ -1,6 +1,8 @@
 const express = require('express')
-const { salesInvoices, stationerySalesInvoices, salesIndividualDetails, stationerySalesIndividualDetails, getCustomerDetails, stationeryGetCustomerDetails, getAllQuotes, salesIndividualQuoteDetails, getAllStationeryQuotes, ddaIndividualInvoiceInQuote, stationeryIndividualInvoiceInQuote, salesStationeryIndividualDetails } = require('../controllers/managerController')
+const { salesInvoices, stationerySalesInvoices, salesIndividualDetails, stationerySalesIndividualDetails, getCustomerDetails, stationeryGetCustomerDetails, getAllQuotes, salesIndividualQuoteDetails, getAllStationeryQuotes, ddaIndividualInvoiceInQuote, stationeryIndividualInvoiceInQuote, salesStationeryIndividualDetails, getCustomersData, getIndividualCustomerData } = require('../controllers/managerController')
 const router = express.Router()
+
+router.get('/customers', getCustomersData)
 
 router.get('/sales-invoices', salesInvoices)
 
@@ -20,7 +22,7 @@ router.get('/sales-quote/:id', salesIndividualQuoteDetails)
 
 router.get('/stationery-sales-quotes', getAllStationeryQuotes)
 
-router.get('/stationery-sales-quote/:id', salesStationeryIndividualDetails )
+router.get('/stationery-sales-quote/:id', salesStationeryIndividualDetails)
 
 router.get('/dda-invoices', ddaIndividualInvoiceInQuote)
 

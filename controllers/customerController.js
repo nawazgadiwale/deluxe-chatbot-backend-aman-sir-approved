@@ -1,6 +1,7 @@
 const Customer = require("../models/Customer")
 
 const mongoose = require('mongoose')
+const Data = require("../models/Data")
 
 const addNewCustomerData = async (req, res) => {
     try {
@@ -67,15 +68,6 @@ const addNewCustomerData = async (req, res) => {
     }
 }
 
-const getAllCustomerIds = async (req, res) => {
-    try {
-        const customerIds = await Customer.distinct("customer_uuid")
-        return res.status(200).json({ success: true, customerIds })
-    } catch (error) {
-        console.error('Error in getAllCustomerIds:', error)
-        return res.status(500).json({ success: false, message: 'Internal Server Error' })
-    }
-}
 
 const getAllCustomersListData = async (req, res) => {
     try {
@@ -134,4 +126,4 @@ const getAllCustomersListData = async (req, res) => {
     }
 }
 
-module.exports = { addNewCustomerData, getAllCustomerIds, getAllCustomersListData }
+module.exports = { addNewCustomerData, getAllCustomersListData }

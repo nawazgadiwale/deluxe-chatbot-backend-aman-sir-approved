@@ -421,8 +421,18 @@ const getReportsDashboardData = async (req, res) => {
         ])
 
         // Top 10 deals list
-        const topDeals = await Data.find()
-            .sort({ dealAmount: -1 })
+        const topDeals = await Data.find({
+            dealStatus: "Won",
+            dealAmount: { $gt: 0 },
+            leadAddedDate: {
+                $gte: new Date(Number(year), Number(month) - 1, 1),
+                $lt: new Date(Number(year), Number(month), 1)
+            }
+        })
+            .populate("createdBy", "name")
+            .sort({
+                dealAmount: -1
+            })
             .limit(10)
 
         // Recent 10 deals list

@@ -34,6 +34,85 @@ const commonFields = [
     "Status"
 ]
 
+const customerFields = [
+    "Name",
+    "EmailAddress",
+]
+
+const getCustomersData = async (req, res) => {
+    try {
+        const { skip = 0, pageSize = 20, term = "" } = req.query
+        const params = new URLSearchParams({
+            skip,
+            pageSize,
+            sortBy: "Timestamp",
+            sortByDesc: "true"
+        })
+
+        customerFields.forEach(field => {
+            params.append("fields", field)
+        })
+
+        if (term) {
+            params.append("term", term)
+        }
+
+        const url = `${MANAGER_BASE_URL}/customers?${params.toString()}`
+
+        const response = await axios.get(url, {
+            headers: {
+                Accept: 'application/json',
+                "X-API-KEY": API_KEY
+            }
+        })
+
+        const response_stationery = await axios.get(url, {
+            headers: {
+                Accept: "application/json",
+                "X-API-KEY": API_KEY_2
+            }
+        })
+
+        return res.json({
+            digital_customers: response.data.customers,
+            digital_totalRecords: response.data.totalRecords,
+            stationery_customers: response_stationery.data.customers,
+            stationery_totalRecords: response_stationery.data.totalRecords,
+        })
+    } catch (error) {
+        console.error("Manager API Error:", error?.response?.data || error.message);
+        return { digital_customers: [], digital_totalRecords: 0, stationery_customers: [], stationery_totalRecords: 0 };
+    }
+}
+
+// const getIndividualCustomerData = async (req, res) => {
+//     try {
+//         const { id } = req.params
+//         const url = `${MANAGER_BASE_URL}/customer-form/${id}`
+//         const response = await axios.get(url, {
+//             headers: {
+//                 Accept: "application/json",
+//                 "X-API-KEY": API_KEY
+//             }
+//         })
+
+//         const response2 = await axios.get(url, {
+//             headers: {
+//                 Accept: "application/json",
+//                 "X-API-KEY": API_KEY_2
+//             }
+//         })
+
+//         return res.json({
+//            digital: response.data,
+//            stationery: response2.data
+//         })
+//     } catch (error) {
+//         console.error("Manager API Error:", error?.response?.data || error.message);
+//         return { digital_customers: [], digital_totalRecords: 0, stationery_customers: [], stationery_totalRecords: 0 };
+//     }
+// }
+
 const salesInvoices = async (req, res) => {
     try {
         const { skip = 0, pageSize = 20, term = "" } = req.query
@@ -276,7 +355,7 @@ const salesStationeryIndividualDetails = async (req, res) => {
 
 const ddaIndividualInvoiceInQuote = async (req, res) => {
     try {
-        const { term = "" } = req.query;
+        const { skip = 0, pageSize = 20, term = "" } = req.query;
         const queryString = commonFields.map((f) => `fields=${encodeURIComponent(f)}`).join('&')
         const termParam = term ? `&term=${encodeURIComponent(term)}` : "";
         const url = `${MANAGER_BASE_URL}/sales-invoices?${termParam}&${queryString}`
@@ -301,7 +380,7 @@ const ddaIndividualInvoiceInQuote = async (req, res) => {
 
 const stationeryIndividualInvoiceInQuote = async (req, res) => {
     try {
-        const { term = "" } = req.query;
+        const { skip = 0, pageSize = 20, term = "" } = req.query;
         const queryString = commonFields.map((f) => `fields=${encodeURIComponent(f)}`).join('&')
         const termParam = term ? `term=${encodeURIComponent(term)}` : ""
         const url = `${MANAGER_BASE_URL}/sales-invoices?${termParam}&${queryString}`
@@ -324,4 +403,4 @@ const stationeryIndividualInvoiceInQuote = async (req, res) => {
     }
 }
 
-module.exports = { salesInvoices, stationerySalesInvoices, salesIndividualDetails, stationerySalesIndividualDetails, getCustomerDetails, stationeryGetCustomerDetails, getAllQuotes, salesIndividualQuoteDetails, getAllStationeryQuotes, salesStationeryIndividualDetails, ddaIndividualInvoiceInQuote, stationeryIndividualInvoiceInQuote };
+module.exports = { getCustomersData, salesInvoices, stationerySalesInvoices, salesIndividualDetails, stationerySalesIndividualDetails, getCustomerDetails, stationeryGetCustomerDetails, getAllQuotes, salesIndividualQuoteDetails, getAllStationeryQuotes, salesStationeryIndividualDetails, ddaIndividualInvoiceInQuote, stationeryIndividualInvoiceInQuote };

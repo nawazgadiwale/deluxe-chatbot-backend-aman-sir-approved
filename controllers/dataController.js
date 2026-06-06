@@ -22,7 +22,7 @@ const getNextInvoiceNumber = async () => {
 // Add new lead data
 const addNewLeadData = async (req, res) => {
     try {
-        const uid = await getNextInvoiceNumber()
+        const uid = req.body.uid || await getNextInvoiceNumber()
 
         const {
             createdBy,
@@ -39,13 +39,18 @@ const addNewLeadData = async (req, res) => {
             initialRemartks,
             leadAddedDate,
             invoiceNumber,
-            products
+            products,
+            // amountStatus,
+            // salesQuotes,
+            quoteDate,
+            invoiceDate,
+            // salesInvoices,
+            billingAddress
             // followUpDate
         } = req.body
 
         if (
             !createdBy ||
-            !uid ||
             !name ||
             !phoneNumber ||
             !source ||
@@ -88,8 +93,13 @@ const addNewLeadData = async (req, res) => {
             initialRemartks,
             leadAddedDate,
             invoiceNumber,
-            products
-
+            products,
+            // amountStatus,
+            // salesQuotes,
+            quoteDate,
+            invoiceDate,
+            // salesInvoices,
+            billingAddress
             // followUps: [
             //     {
             //         followUpDate: finalFollowUpDate
@@ -113,12 +123,55 @@ const addNewLeadData = async (req, res) => {
     }
 }
 
+const getAllCustomerIds = async (req, res) => {
+    try {
+        const { customerIds } = req.body
+
+        const existingCustomers = await Data.find(
+            {
+                uid: { $in: customerIds },
+            },
+            { uid: 1 }
+        )
+        return res.status(200).json({
+            success: true,
+            customerIds: existingCustomers.map(item => item.uid)
+        })
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
+
 // Update new lead data
 const updateLeadData = async (req, res) => {
     try {
         const { uid } = req.params
 
-        const { name, companyName, phoneNumber, emailId, dealAmount, source, division, assignToSalesPerson, dealStatus, quoteNumber, initialRemartks, leadAddedDate, invoiceNumber, products, adminName } = req.body
+        const {
+            name,
+            companyName,
+            phoneNumber,
+            emailId,
+            dealAmount,
+            source,
+            division,
+            assignToSalesPerson,
+            dealStatus,
+            quoteNumber,
+            initialRemartks,
+            leadAddedDate,
+            invoiceNumber,
+            products,
+            adminName,
+            quoteDate,
+            invoiceDate,
+            billingAddress
+        } = req.body
 
         const lead = await Data.findOne({ uid })
 
@@ -182,6 +235,14 @@ const updateLeadData = async (req, res) => {
 
         if (products !== undefined) {
             lead.products = products
+        }
+
+        if (quoteDate !== undefined) {
+            lead.quoteDate = quoteDate
+        }
+
+        if (invoiceDate !== undefined) {
+            lead.invoiceDate = invoiceDate
         }
 
         await lead.save()
@@ -1175,4 +1236,4 @@ const getFollowUpPriorityList = async (req, res) => {
     }
 }
 
-module.exports = { addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData }
+module.exports = { getAllCustomerIds, addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData }

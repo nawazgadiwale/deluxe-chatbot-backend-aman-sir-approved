@@ -24,26 +24,30 @@ const dataSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    billingAddress: {
+        type: String,
+        required: true
+    },
     source: {
         type: String,
         enum: [
             'Oncall',
             'Walk-In',
-            'Whatsapp',
-            'Whatsapp-(Old)',
-            'Whatsapp-(Re)',
+            'WhatsApp',
+            'WhatsApp-(Re)',
             'Email',
             'Email-(Re)',
-            'Google Ads-(Email)',
-            'Google Ads-(Whatsapp)',
             'Google Ads Signage-(WA)',
+            'Google Ads Signage-(Email)',
             'Google Ads Events-(WA)',
             'Google Ads Events-(Email)',
             'Google Ads Sta-(WA)',
             'Google Ads Sta-(Email)',
-            'Social Media',
-            'Exprintmart-(Whatsapp)',
-            'Exprintmart-(Email)'
+            'Google Ads-(Re)',
+            'Social Media-(DLX)',
+            'Exprintmart-(WA)',
+            'Exprintmart-(Email)',
+            'Social Media-(Exprint)'
         ],
         required: true,
     },
@@ -63,7 +67,6 @@ const dataSchema = new mongoose.Schema({
         default: 'Admin',
         required: true,
     },
-
     products: [
         {
             productName: {
@@ -84,10 +87,22 @@ const dataSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
+    // amountStatus: {
+    //     type: String,
+    //     enum: ['Paid', 'Unpaid'],
+    //     default: 'Pending'
+    // },
     quoteNumber: {
         type: Number,
         default: 0,
     },
+    quoteDate: {
+        type: Date,
+    },
+    // salesQuotes: {
+    //     type: Number,
+    //     default: 0
+    // },
     initialRemartks: {
         type: String,
     },
@@ -100,6 +115,13 @@ const dataSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
+    invoiceDate: {
+        type: Date,
+    },
+    // salesInvoices: {
+    //     type: Number,
+    //     default: 0
+    // },
     followUps: [
         {
             // follow up date are auto like if today is 22 then follow up date will be 25 (and next follow up date will be editable but default 25)
@@ -113,9 +135,9 @@ const dataSchema = new mongoose.Schema({
             adminName: {
                 type: String,
                 enum: ['Hafsa', 'Fariha', 'Mizba', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
-            'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
-            'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
-            'Umair', 'Wajid', 'Ziyad', 'Zohaib']
+                    'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
+                    'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
+                    'Umair', 'Wajid', 'Ziyad', 'Zohaib']
             },
             followUpNotes: {
                 type: String

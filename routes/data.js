@@ -1,10 +1,14 @@
 const express = require('express')
-const { addNewLeadData,getAllLeadsData, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate, getGlobalSearchAllLeadsData } = require('../controllers/dataController')
+const { addNewLeadData, getAllLeadsData, getAllCustomerIds, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate, getGlobalSearchAllLeadsData } = require('../controllers/dataController')
 const router = express.Router()
 
 // create new lead
 // POST
 router.post('/lead', addNewLeadData)
+
+// getAdded Ids
+// POST
+router.post('/customer/ids', getAllCustomerIds)
 
 // update lead data
 // PUT
