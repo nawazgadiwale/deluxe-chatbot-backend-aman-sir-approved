@@ -245,6 +245,10 @@ const updateLeadData = async (req, res) => {
             lead.invoiceDate = invoiceDate
         }
 
+        if (billingAddress !== undefined) {
+            lead.billingAddress = billingAddress
+        }
+
         await lead.save()
 
         res.status(200).json({
