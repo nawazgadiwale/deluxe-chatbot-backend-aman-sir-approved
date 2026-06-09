@@ -289,7 +289,7 @@ const getReportsDashboardData = async (req, res) => {
 
         // Monthly leads graph data
         // Monthly leads graph data (all 12 months)
-        const monthlyLeadsData = await Data.aggregate([
+        const monthlyLeadCounts = await Data.aggregate([
             {
                 $match: {
                     leadAddedDate: {
@@ -300,27 +300,57 @@ const getReportsDashboardData = async (req, res) => {
             },
             {
                 $group: {
-                    _id: {
-                        month: { $month: "$leadAddedDate" }
-                    },
-                    totalDeals: { $sum: 1 },
+                    _id: { month: { $month: "$leadAddedDate" } },
+                    totalDeals: { $sum: 1 }
+                }
+            }
+        ]);
+
+        const monthlyQuoteAmounts = await Data.aggregate([
+            {
+                $match: {
+                    leadAddedDate: {
+                        $gte: new Date(Number(year), 0, 1),
+                        $lt: new Date(Number(year) + 1, 0, 1)
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: { month: { $month: "$leadAddedDate" } },
                     totalAmount: {
                         $sum: {
                             $ifNull: ["$dealAmount", 0]
                         }
-                    },
-                    totalWonAmount: {
-                        $sum: {
-                            $cond: [
-                                { $eq: ["$dealStatus", "Won"] },
-                                { $ifNull: ["$dealAmount", 0] },
-                                0
-                            ]
-                        }
                     }
                 }
             }
-        ])
+        ]);
+
+        const monthlyRevenue = await Data.aggregate([
+            {
+
+                $match: {
+                    invoiceDate: {
+                        $gte: new Date(Number(year), 0, 1),
+                        $lt: new Date(Number(year) + 1, 0, 1)
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        month: { $month: "$invoiceDate" }
+                    },
+                    totalWonAmount: {
+                        $sum: {
+                            $ifNull: ["$dealAmount", 0]
+                        }
+                    },
+                    totalInvoices: { $sum: 1 }
+                }
+            }
+        ]);
 
         const monthNames = [
             "Jan",
@@ -338,19 +368,27 @@ const getReportsDashboardData = async (req, res) => {
         ]
 
         const monthlyLeads = monthNames.map((monthName, index) => {
-            const monthNumber = index + 1
+            const month = index + 1;
 
-            const found = monthlyLeadsData.find(
-                item => item._id.month === monthNumber
-            )
+            const leads = monthlyLeadCounts.find(
+                item => item._id.month === month
+            );
+
+            const quotes = monthlyQuoteAmounts.find(
+                item => item._id.month === month
+            );
+
+            const revenue = monthlyRevenue.find(
+                item => item._id.month === month
+            );
 
             return {
                 month: monthName,
-                totalDeals: found?.totalDeals || 0,
-                totalAmount: found?.totalAmount || 0,
-                totalWonAmount: found?.totalWonAmount || 0
-            }
-        })
+                totalDeals: leads?.totalDeals || 0,
+                totalAmount: quotes?.totalAmount || 0,
+                totalWonAmount: revenue?.totalWonAmount || 0
+            };
+        });
 
         // Monthly deal status distribution graph data
         const monthlyWiseDealStatus = await Data.aggregate([

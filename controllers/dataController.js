@@ -986,6 +986,60 @@ const getLeadDashboardData = async (req, res) => {
             }
         ])
 
+        const salesPersonPerformance = await Data.aggregate([
+            {
+                $match: {
+                    leadAddedDate: {
+                        $gte: startDate,
+                        $lt: endDate
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: "$assignToSalesPerson",
+
+                    totalLeads: {
+                        $sum: 1
+                    },
+
+                    wonDeals: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+
+                    wonDealValue: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ["$dealStatus", "Won"] },
+                                "$dealAmount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    salesPerson: "$_id",
+                    totalLeads: 1,
+                    wonDeals: 1,
+                    wonDealValue: 1
+                }
+            },
+            {
+                $sort: {
+                    wonDeals: -1
+                }
+            }
+        ]);
+
         const current =
             result[0].currentMonth[0] || {
                 totalLeads: 0,
@@ -1003,6 +1057,7 @@ const getLeadDashboardData = async (req, res) => {
             month: filterMonth,
             year: filterYear,
             currentMonth: current,
+            salesPersonPerformance
         })
     } catch (error) {
         console.error(
