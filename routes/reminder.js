@@ -1,74 +1,75 @@
 const express = require('express')
 const { createCategory, updateCategory, getindividualCategoryData, getAllCategoryList, deleteCategory, createReminder, updateReminder, getIndividualReminder, getAllReminderList, dashboardStats, updateReminderStatus, upcomingExpiryReminder, deleteReminder, exportAllReminders, bulkupdateReminderStatus, getReminderHistory, getEmployeeAndCategory } = require('../controllers/reminderController')
+const authenticateToken = require('../middlewares/authMiddleware')
 const router = express.Router()
 
 // create category
 // POST
-router.post('/category', createCategory)
+router.post('/category',authenticateToken, createCategory)
 
 // update category
 // PUT
-router.put('/category/:catId', updateCategory)
+router.put('/category/:catId',authenticateToken, updateCategory)
 
 // get individual category
 // GET
-router.get('/category/:catId', getindividualCategoryData)
+router.get('/category/:catId',authenticateToken, getindividualCategoryData)
 
 // get all category 
 // GET
-router.get('/categories', getAllCategoryList)
+router.get('/categories',authenticateToken, getAllCategoryList)
 
 // delete individual category
 // DELETE
-router.delete('/category/:catId', deleteCategory)
+router.delete('/category/:catId',authenticateToken, deleteCategory)
 
 // create reminder
 // POST
-router.post('/reminder', createReminder)
+router.post('/reminder',authenticateToken, createReminder)
 
 // update reminder
 // PUT
-router.put('/reminder/:refNumber', updateReminder)
+router.put('/reminder/:refNumber',authenticateToken, updateReminder)
 
 // get individual reminder
 // GET
-router.get('/reminder/:refNumber', getIndividualReminder)
+router.get('/reminder/:refNumber',authenticateToken, getIndividualReminder)
 
 // get all reminder list
 // GET
-router.get('/reminders', getAllReminderList)
+router.get('/reminders',authenticateToken, getAllReminderList)
 
 // delete reminder
 // DELETE
-router.delete('/reminder/:refNumber', deleteReminder)
+router.delete('/reminder/:refNumber',authenticateToken, deleteReminder)
 
 // Update reminder status
 // PUT
-router.put('/update-reminder-status/:refNumber', updateReminderStatus)
+router.put('/update-reminder-status/:refNumber',authenticateToken, updateReminderStatus)
 
 // Bulk update reminders
 // POST
-router.post('/bulk-update-status', bulkupdateReminderStatus)
+router.post('/bulk-update-status',authenticateToken, bulkupdateReminderStatus)
 
 // Get upcoming expiry reminder
 // GET
-router.get('/upcoming-expiry', upcomingExpiryReminder)
+router.get('/upcoming-expiry',authenticateToken, upcomingExpiryReminder)
 
 // get individual reminder history
 // GET
-router.get('/sent-reminders/:refNumber', getReminderHistory)
+router.get('/sent-reminders/:refNumber',authenticateToken, getReminderHistory)
 
 // get all dashboard stats
 // GET
-router.get('/dashboard', dashboardStats)
+router.get('/dashboard',authenticateToken, dashboardStats)
 
 // export all reminders
 // GET
-router.get('/export', exportAllReminders)
+router.get('/export',authenticateToken, exportAllReminders)
 
 // category, employee list
 // GET
-router.get('/filter', getEmployeeAndCategory)
+router.get('/filter',authenticateToken, getEmployeeAndCategory)
 
 router.get('/test-mail', async (req, res) => {
 

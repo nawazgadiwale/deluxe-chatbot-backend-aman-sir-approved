@@ -8,10 +8,24 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // lastname
+    lastName: {
+        type: String
+    },
     // password
     password: {
         type: String,
         required: true,
+    },
+    // employee Id
+    employeeId: {
+        type: Number
+    },
+    // gender
+    gender: {
+        type: String,
+        enum: ['Male', 'Female'],
+        default: "Male"
     },
     // re_password
     re_password: {
@@ -28,6 +42,18 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    // joining Date
+    joiningDate: {
+        type: Date
+    },
+    // address
+    address: {
+        type: String
+    },
+    // department
+    departMent: {
+        type: String
+    },
     // role of employee
     role: {
         type: String,
@@ -39,13 +65,18 @@ const UserSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    // disabled
+    disabled: {
+        type: Boolean,
+        default: false
+    },
     // created by ref to User Id of Admin (who created this user)
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
     },
-   
+
 },
     {
         // storing time stamps like created at and updated at 

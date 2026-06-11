@@ -1,30 +1,31 @@
 const express = require('express')
 const { salesInvoices, stationerySalesInvoices, salesIndividualDetails, stationerySalesIndividualDetails, getCustomerDetails, stationeryGetCustomerDetails, getAllQuotes, salesIndividualQuoteDetails, getAllStationeryQuotes, ddaIndividualInvoiceInQuote, stationeryIndividualInvoiceInQuote, salesStationeryIndividualDetails, getCustomersData, getIndividualCustomerData } = require('../controllers/managerController')
+const authenticateToken = require('../middlewares/authMiddleware')
 const router = express.Router()
 
-router.get('/customers', getCustomersData)
+router.get('/customers', authenticateToken, getCustomersData)
 
-router.get('/sales-invoices', salesInvoices)
+router.get('/sales-invoices', authenticateToken, salesInvoices)
 
-router.get('/stationery-sales-invoices', stationerySalesInvoices)
+router.get('/stationery-sales-invoices', authenticateToken, stationerySalesInvoices)
 
-router.get('/sales-invoice/:id', salesIndividualDetails)
+router.get('/sales-invoice/:id', authenticateToken, salesIndividualDetails)
 
-router.get('/stationery-sales-invoices/:id', stationerySalesIndividualDetails)
+router.get('/stationery-sales-invoices/:id', authenticateToken, stationerySalesIndividualDetails)
 
-router.get('/customer/:id', getCustomerDetails)
+router.get('/customer/:id', authenticateToken, getCustomerDetails)
 
-router.get('/stationery-customer/:id', stationeryGetCustomerDetails)
+router.get('/stationery-customer/:id', authenticateToken, stationeryGetCustomerDetails)
 
-router.get('/sales-quotes', getAllQuotes)
+router.get('/sales-quotes', authenticateToken, getAllQuotes)
 
-router.get('/sales-quote/:id', salesIndividualQuoteDetails)
+router.get('/sales-quote/:id', authenticateToken, salesIndividualQuoteDetails)
 
-router.get('/stationery-sales-quotes', getAllStationeryQuotes)
+router.get('/stationery-sales-quotes', authenticateToken, getAllStationeryQuotes)
 
-router.get('/stationery-sales-quote/:id', salesStationeryIndividualDetails)
+router.get('/stationery-sales-quote/:id', authenticateToken, salesStationeryIndividualDetails)
 
-router.get('/dda-invoices', ddaIndividualInvoiceInQuote)
+router.get('/dda-invoices', authenticateToken, ddaIndividualInvoiceInQuote)
 
-router.get('/stationery-invoices', stationeryIndividualInvoiceInQuote)
+router.get('/stationery-invoices', authenticateToken, stationeryIndividualInvoiceInQuote)
 module.exports = router

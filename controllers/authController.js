@@ -141,6 +141,13 @@ const login = async (req, res) => {
             return res.status(404).json({ message: "User Not Found!" })
         }
 
+        if (user.disabled) {
+            return res.status(403).json({
+                success: false,
+                message: "Your account has been disabled. Please contact the administrator."
+            });
+        }
+
         const isMatch = await user.comparePassword(password)
 
         if (!isMatch) {
@@ -265,7 +272,7 @@ const individualUserDetails = async (req, res) => {
 
         // if user not found by id
         if (!user) {
-            return res.res(404).json('User not found!')
+            return res.status(404).json('User not found!')
         }
 
         // return the success response
@@ -286,7 +293,7 @@ const editEmployeeDetails = async (req, res) => {
         // id params 
         const { id } = req.params
         // body parameters
-        const { name, email, phone, role, password, re_password, access } = req.body
+        const { name, lastName, employeeId, gender, joiningDate, address, departMent, email, phone, role, password, re_password, access } = req.body
 
         // find user by id
         const user = await User.findById(id)
@@ -310,6 +317,18 @@ const editEmployeeDetails = async (req, res) => {
         if (email) user.email = email
         // update phone
         if (phone) user.phone = phone
+        // update lastname
+        if (lastName) user.lastName = lastName
+        // employee id
+        if (employeeId) user.employeeId = employeeId
+        // gender
+        if (gender) user.gender = gender
+        // joiningDate
+        if (joiningDate) user.joiningDate = joiningDate
+        // adsress
+        if (address) user.address = address
+        // departMent
+        if (departMent) user.departMent = departMent
 
         // password
         if (password) {
@@ -338,6 +357,12 @@ const editEmployeeDetails = async (req, res) => {
             message: "Employee details updated successfully!",
             id: user._id,
             name: user.name,
+            lastName: user.lastName,
+            employeeId: user.employeeId,
+            gender: user.gender,
+            joiningDate: user.joiningDate,
+            address: user.address,
+            departMent: user.departMent,
             email: user.email,
             phone: user.phone,
             role: user.role,
@@ -398,4 +423,46 @@ const fetchAllEmployees = async (req, res) => {
     }
 }
 
-module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees }
+const toggleUserDisableStatus = async (req, res) => {
+    try {
+        const { id } = req.params
+        const { disabled } = req.body
+
+        const user = await User.findById(id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            })
+        }
+
+        if (user.role === "super-admin") {
+            return res.status(400).json({
+                success: false,
+                message: "Super Admin cannot be disabled"
+            })
+        }
+
+        if (user.role === "admin") {
+            return res.status(400).json({
+                success: false,
+                message: "Admin cannot be disabled"
+            })
+        }
+
+        user.disabled = disabled
+        await user.save()
+
+        return res.status(200).json({
+            success: true,
+            message: `User ${disabled ? "disabled" : "enabled"} successfully.`,
+            user
+        })
+    } catch (error) {
+        console.error('Error fetching employees details!', error)
+        res.status(500).json({ message: "Internal Server Error!" })
+    }
+}
+
+module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees, toggleUserDisableStatus }

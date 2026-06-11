@@ -1,18 +1,45 @@
-const jwt = require('jsonwebtoken')
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-// Authenticate token
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization']
-    const token = authHeader && authHeader.split(' ')[1]
+const authenticateToken = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader && authHeader.split(" ")[1];
 
-    if (!token) return res.status(401)
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                message: "Access token required.",
+            });
+        }
 
-    // verify token
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.status(403)
-        req.user = user
-        next()
-    })
-}
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-module.exports = authenticateToken
+        const user = await User.findById(decoded.id);
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "User not found.",
+            });
+        }
+
+        if (user.disabled) {
+            return res.status(403).json({
+                success: false,
+                message: "Your account has been disabled. Please contact the administrator.",
+            });
+        }
+
+        req.user = user;
+
+        next();
+    } catch (error) {
+        return res.status(403).json({
+            success: false,
+            message: "Invalid or expired token.",
+        });
+    }
+};
+
+module.exports = authenticateToken;
