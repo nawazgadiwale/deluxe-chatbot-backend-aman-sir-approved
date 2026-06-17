@@ -876,51 +876,6 @@ const getLeadDashboardData = async (req, res) => {
                                     $sum: 1
                                 },
 
-                                newCount: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    "$dealStatus",
-                                                    "New"
-                                                ]
-                                            },
-                                            1,
-                                            0
-                                        ]
-                                    }
-                                },
-
-                                contactedCount: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    "$dealStatus",
-                                                    "Contacted"
-                                                ]
-                                            },
-                                            1,
-                                            0
-                                        ]
-                                    }
-                                },
-
-                                quotedCount: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    "$dealStatus",
-                                                    "Quoted"
-                                                ]
-                                            },
-                                            1,
-                                            0
-                                        ]
-                                    }
-                                },
-
                                 wonCount: {
                                     $sum: {
                                         $cond: [
@@ -951,34 +906,7 @@ const getLeadDashboardData = async (req, res) => {
                                     }
                                 },
 
-                                wonDealValue: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    "$dealStatus",
-                                                    "Won"
-                                                ]
-                                            },
-                                            "$dealAmount",
-                                            0
-                                        ]
-                                    }
-                                },
-                                quotedDealValue: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $in: [
-                                                    "$dealStatus",
-                                                    ["Won", "Quoted", "Lost"]
-                                                ]
-                                            },
-                                            "$dealAmount",
-                                            0
-                                        ]
-                                    }
-                                }
+
                             }
                         }
                     ],
@@ -1043,13 +971,9 @@ const getLeadDashboardData = async (req, res) => {
         const current =
             result[0].currentMonth[0] || {
                 totalLeads: 0,
-                newCount: 0,
-                contactedCount: 0,
-                quotedCount: 0,
                 wonCount: 0,
                 lostCount: 0,
-                wonDealValue: 0,
-                quotedDealValue: 0
+                
             };
 
         res.status(200).json({

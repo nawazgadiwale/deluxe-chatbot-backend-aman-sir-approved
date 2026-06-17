@@ -49,7 +49,7 @@ const register = async (req, res) => {
 const createUser = async (req, res) => {
     try {
         // expect params like name, role, password, re_password, email and phone from body
-        const { name, role, password, re_password, email, phone } = req.body
+        const { name, lastName, gender, role, password, re_password, email, phone } = req.body
 
         // check if user exists are not
         const existingUser = await User.findOne({ name })
@@ -60,13 +60,19 @@ const createUser = async (req, res) => {
         // if all good create a new user
         const newUser = new User({
             name,
+            lastName,
+            gender,
+            employeeId,
+            joiningDate,
             password,
+            address,
+            departMent,
             re_password,
             email,
             phone,
             role,
             access: [name],
-            createdBy: req.user ? req.user.id : null
+            createdBy: req.user?._id || null
         })
 
         // save new user data
@@ -78,6 +84,12 @@ const createUser = async (req, res) => {
             user: {
                 id: newUser._id,
                 name: newUser.name,
+                lastName: newUser.lastName,
+                employeeId: newUser.employeeId,
+                gender: newUser.gender,
+                joiningDate: newUser.joiningDate,
+                address: newUser.address,
+                departMent: newUser.departMent,
                 email: newUser.email,
                 phone: newUser.phone,
                 role: newUser.role,
