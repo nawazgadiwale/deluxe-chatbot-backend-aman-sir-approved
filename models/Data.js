@@ -6,6 +6,11 @@ const dataSchema = new mongoose.Schema({
         ref: 'User',
         default: null
     },
+    refNo: {
+        type: Number,
+        unique: true,
+        // required: true
+    },
     uid: {
         type: String,
         required: true

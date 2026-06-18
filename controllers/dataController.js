@@ -19,10 +19,25 @@ const getNextInvoiceNumber = async () => {
     return `INV-${formattedNumber}`
 }
 
+// next reference number
+const getNextRefNumber = async () => {
+    const counter = await Counter.findOneAndUpdate(
+        { key: 'refNo' },
+        { $inc: { value: 1 } },
+        {
+            new: true,
+            upsert: true
+        }
+    )
+
+    return counter.value
+}
+
 // Add new lead data
 const addNewLeadData = async (req, res) => {
     try {
         const uid = req.body.uid || await getNextInvoiceNumber()
+        const refNo = await getNextRefNumber()
 
         const {
             createdBy,
@@ -50,6 +65,7 @@ const addNewLeadData = async (req, res) => {
         } = req.body
 
         if (
+            !refNo,
             !createdBy ||
             !name ||
             !phoneNumber ||
@@ -78,6 +94,7 @@ const addNewLeadData = async (req, res) => {
         //     : new Date(leadDate.getTime() + 3 * 24 * 60 * 60 * 1000)
 
         const newLead = new Data({
+            refNo,
             createdBy,
             uid,
             name,
@@ -350,12 +367,13 @@ const getAllLeadsData = async (req, res) => {
         let baseMatch = {}
 
         if (startDate && endDate) {
+            const start = new Date(`${startDate}T00:00:00.000Z`);
+            const end = new Date(`${endDate}T23:59:59.999Z`);
+
             baseMatch.leadAddedDate = {
-                $gte: new Date(startDate),
-                $lte: new Date(
-                    new Date(endDate).setHours(23, 59, 59, 999)
-                )
-            }
+                $gte: start,
+                $lte: end,
+            };
         } else {
             const monthStartDate = new Date(filterYear, filterMonth - 1, 1)
             const monthEndDate = new Date(filterYear, filterMonth, 1)
@@ -369,6 +387,15 @@ const getAllLeadsData = async (req, res) => {
         if (search) {
             if (!isNaN(search)) {
                 baseMatch.$or = [
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$refNo" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
                     {
                         $expr: {
                             $regexMatch: {
@@ -581,6 +608,15 @@ const getGlobalSearchAllLeadsData = async (req, res) => {
         if (search) {
             if (!isNaN(Number(search))) {
                 baseMatch.$or = [
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: "$refNo" },
+                                regex: search,
+                                options: "i"
+                            }
+                        }
+                    },
                     {
                         $expr: {
                             $regexMatch: {
@@ -973,7 +1009,7 @@ const getLeadDashboardData = async (req, res) => {
                 totalLeads: 0,
                 wonCount: 0,
                 lostCount: 0,
-                
+
             };
 
         res.status(200).json({
@@ -1146,6 +1182,7 @@ const getFollowUpPriorityList = async (req, res) => {
 
             const formattedLead = {
                 _id: lead._id,
+                refNo: lead.refNo,
                 uid: lead.uid,
                 name: lead.name,
                 companyName: lead.companyName,
