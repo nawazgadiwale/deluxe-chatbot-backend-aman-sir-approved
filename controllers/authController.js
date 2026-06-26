@@ -44,12 +44,10 @@ const register = async (req, res) => {
     }
 }
 
-
 // function to create new user
 const createUser = async (req, res) => {
     try {
-        // expect params like name, role, password, re_password, email and phone from body
-        const { name, lastName, gender, role, password, re_password, email, phone } = req.body
+        const { name, lastName, gender, employeeId, joiningDate, address, departMent, designation, password, re_password, email, phone, role, reportingTo, workingCountry } = req.body
 
         // check if user exists are not
         const existingUser = await User.findOne({ name })
@@ -64,6 +62,7 @@ const createUser = async (req, res) => {
             gender,
             employeeId,
             joiningDate,
+            designation,
             password,
             address,
             departMent,
@@ -71,6 +70,8 @@ const createUser = async (req, res) => {
             email,
             phone,
             role,
+            reportingTo,
+            workingCountry,
             access: [name],
             createdBy: req.user?._id || null
         })
@@ -88,12 +89,15 @@ const createUser = async (req, res) => {
                 employeeId: newUser.employeeId,
                 gender: newUser.gender,
                 joiningDate: newUser.joiningDate,
+                designation: newUser.designation,
                 address: newUser.address,
                 departMent: newUser.departMent,
                 email: newUser.email,
                 phone: newUser.phone,
                 role: newUser.role,
+                reportingTo: newUser.reportingTo,
                 access: newUser.access,
+                workingCountry: newUser.workingCountry,
                 createdBy: newUser.createdBy
             }
         })
@@ -305,7 +309,7 @@ const editEmployeeDetails = async (req, res) => {
         // id params 
         const { id } = req.params
         // body parameters
-        const { name, lastName, employeeId, gender, joiningDate, address, departMent, email, phone, role, password, re_password, access } = req.body
+        const { name, lastName, employeeId, gender, joiningDate, designation, address, departMent, email, phone, role, password, re_password, access, reportingTo, workingCountry } = req.body
 
         // find user by id
         const user = await User.findById(id)
@@ -335,12 +339,18 @@ const editEmployeeDetails = async (req, res) => {
         if (employeeId) user.employeeId = employeeId
         // gender
         if (gender) user.gender = gender
+        // designation
+        if (designation) user.designation = designation
         // joiningDate
         if (joiningDate) user.joiningDate = joiningDate
         // adsress
         if (address) user.address = address
         // departMent
         if (departMent) user.departMent = departMent
+        // reporting to
+        if (reportingTo) user.reportingTo = reportingTo
+        // working country
+        if (workingCountry) user.workingCountry = workingCountry
 
         // password
         if (password) {
@@ -373,11 +383,13 @@ const editEmployeeDetails = async (req, res) => {
             employeeId: user.employeeId,
             gender: user.gender,
             joiningDate: user.joiningDate,
+            designation: user.designation,
             address: user.address,
             departMent: user.departMent,
             email: user.email,
             phone: user.phone,
             role: user.role,
+            reportingTo: user.reportingTo,
             access: user.access
         })
 
@@ -477,4 +489,106 @@ const toggleUserDisableStatus = async (req, res) => {
     }
 }
 
-module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees, toggleUserDisableStatus }
+const getOrganizationChart = async (req, res) => {
+    try {
+        const users = await User.find({
+            disabled: false,
+            designation: { $ne: "N/A" }
+        }).select("name lastName designation role email phone workingCountry reportingTo");
+
+        // Company root node
+        const nodes = [
+            {
+                id: "company-root",
+                type: "employee",
+                data: {
+                    name: "Deluxe Digital Advertising",
+                    designation: "Organization",
+                    isRoot: true
+                },
+                position: { x: 0, y: 0 }
+            }
+        ];
+
+        // User lookup by name
+        const userMap = {};
+        users.forEach(user => {
+            userMap[user.name] = user;
+        });
+
+        // Employee nodes
+        users.forEach(user => {
+            nodes.push({
+                id: user._id.toString(),
+                type: "employee",
+                data: {
+                    name: `${user.name} ${user.lastName || ""}`.trim(),
+                    designation: user.designation,
+                    role: user.role,
+                    workingCountry: user.workingCountry
+                },
+                position: { x: 0, y: 0 }
+            });
+        });
+
+        const edges = [];
+        const edgeSet = new Set();
+
+        users.forEach(user => {
+            // No manager -> connect to company
+            if (!user.reportingTo || user.reportingTo.length === 0) {
+                const edgeId = `company-root-${user._id}`;
+
+                if (!edgeSet.has(edgeId)) {
+                    edgeSet.add(edgeId);
+
+                    edges.push({
+                        id: edgeId,
+                        source: "company-root",
+                        target: user._id.toString(),
+                        type: "smoothstep"
+                    });
+                }
+
+                return;
+            }
+
+            // Multiple reporting managers
+            user.reportingTo.forEach(managerName => {
+                const manager = userMap[managerName];
+
+                if (!manager) return;
+
+                const edgeId = `${manager._id}-${user._id}`;
+
+                if (!edgeSet.has(edgeId)) {
+                    edgeSet.add(edgeId);
+
+                    edges.push({
+                        id: edgeId,
+                        source: manager._id.toString(),
+                        target: user._id.toString(),
+                        type: "smoothstep"
+                    });
+                }
+            });
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                nodes,
+                edges
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching organization chart!", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error!"
+        });
+    }
+};
+
+module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees, toggleUserDisableStatus, getOrganizationChart }

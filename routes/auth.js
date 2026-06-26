@@ -1,5 +1,5 @@
 const express = require('express')
-const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, register, verifyOTP, toggleUserDisableStatus, } = require('../controllers/authController')
+const { login, createUser, allUsers, individualUserDetails, editEmployeeDetails, fetchAllEmployees, deleteEmployee, register, verifyOTP, toggleUserDisableStatus, getOrganizationChart, } = require('../controllers/authController')
 const { setupAdmin2FA } = require('../controllers/twoFactorController')
 const authenticateToken = require('../middlewares/authMiddleware')
 const router = express.Router()
@@ -47,5 +47,9 @@ router.delete("/user/:id", authenticateToken, deleteEmployee)
 // toggle disable of individual user
 // POST
 router.post("/user/disable/:id", authenticateToken, toggleUserDisableStatus)
+
+// get employee graph data
+// GET 
+router.get('/graph', getOrganizationChart)
 
 module.exports = router

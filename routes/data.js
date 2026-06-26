@@ -5,7 +5,7 @@ const router = express.Router()
 
 // create new lead
 // POST
-router.post('/lead', authenticateToken, addNewLeadData)
+router.post('/lead', addNewLeadData)
 
 // getAdded Ids
 // POST

@@ -37,6 +37,11 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    workingCountry: {
+        type: String,
+        enum: ['UAE', 'IND', 'PAK', 'UGA'],
+        default: 'UAE'
+    },
     // employee phone
     phone: {
         type: String,
@@ -54,6 +59,18 @@ const UserSchema = new mongoose.Schema({
     departMent: {
         type: String
     },
+    // designation
+    designation: {
+        type: String,
+        enum: [
+            'owner', 'management', 'accountant', 'jr-accountant', 'developer',
+            'seo-specialist', 'jr-seo-specialist', 'sr-graphic-designer', 'graphic-designer', 'creative-designer', 'digital-marketing',
+            'sales-head', 'sales', 'crm-manager', 'customer-support', 'production-head',
+            'printing', 'production', 'finishing/packing', 'applicator/carpenter', 'applicator',
+            'driver', 'N/A'
+        ],
+        default: 'N/A'
+    },
     // role of employee
     role: {
         type: String,
@@ -62,6 +79,11 @@ const UserSchema = new mongoose.Schema({
     },
     // access of employee
     access: {
+        type: [String],
+        default: []
+    },
+    // reporting to
+    reportingTo: {
         type: [String],
         default: []
     },
