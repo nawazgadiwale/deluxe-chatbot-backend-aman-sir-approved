@@ -49,7 +49,7 @@ const register = async (req, res) => {
 const createUser = async (req, res) => {
     try {
         // expect params like name, role, password, re_password, email and phone from body
-        const { name, lastName, gender, employeeId, role, joiningDate, password, address, departMent, re_password, email, phone } = req.body
+        const { name, lastName, gender, designation, employeeId, role, joiningDate, password, address, departMent, re_password, email, phone, reportingTo, workingCountry } = req.body
 
         // check if user exists are not
         const existingUser = await User.findOne({ name })
@@ -64,7 +64,7 @@ const createUser = async (req, res) => {
             gender,
             employeeId,
             joiningDate,
-                        designation,
+            designation,
             password,
             address,
             departMent,
@@ -93,10 +93,13 @@ const createUser = async (req, res) => {
                 joiningDate: newUser.joiningDate,
                 address: newUser.address,
                 departMent: newUser.departMent,
+                designation: newUser.designation,
                 email: newUser.email,
                 phone: newUser.phone,
                 role: newUser.role,
                 access: newUser.access,
+                reportingTo: newUser.reportingTo,
+                workingCountry: newUser.workingCountry,
                 createdBy: newUser.createdBy
             }
         })
