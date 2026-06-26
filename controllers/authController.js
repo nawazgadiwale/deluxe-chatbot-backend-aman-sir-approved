@@ -44,10 +44,12 @@ const register = async (req, res) => {
     }
 }
 
+
 // function to create new user
 const createUser = async (req, res) => {
     try {
-        const { name, lastName, gender, employeeId, joiningDate, address, departMent, designation, password, re_password, email, phone, role, reportingTo, workingCountry } = req.body
+        // expect params like name, role, password, re_password, email and phone from body
+        const { name, lastName, gender, employeeId, role, joiningDate, password, address, departMent, re_password, email, phone } = req.body
 
         // check if user exists are not
         const existingUser = await User.findOne({ name })
@@ -62,7 +64,7 @@ const createUser = async (req, res) => {
             gender,
             employeeId,
             joiningDate,
-            designation,
+                        designation,
             password,
             address,
             departMent,
@@ -89,15 +91,12 @@ const createUser = async (req, res) => {
                 employeeId: newUser.employeeId,
                 gender: newUser.gender,
                 joiningDate: newUser.joiningDate,
-                designation: newUser.designation,
                 address: newUser.address,
                 departMent: newUser.departMent,
                 email: newUser.email,
                 phone: newUser.phone,
                 role: newUser.role,
-                reportingTo: newUser.reportingTo,
                 access: newUser.access,
-                workingCountry: newUser.workingCountry,
                 createdBy: newUser.createdBy
             }
         })
@@ -390,6 +389,7 @@ const editEmployeeDetails = async (req, res) => {
             phone: user.phone,
             role: user.role,
             reportingTo: user.reportingTo,
+            workingCountry: user.workingCountry,
             access: user.access
         })
 

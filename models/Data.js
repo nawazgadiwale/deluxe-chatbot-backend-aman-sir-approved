@@ -9,7 +9,7 @@ const dataSchema = new mongoose.Schema({
     refNo: {
         type: Number,
         unique: true,
-        // required: true
+        required: true
     },
     uid: {
         type: String,
