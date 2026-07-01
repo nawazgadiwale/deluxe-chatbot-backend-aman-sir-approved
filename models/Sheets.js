@@ -4,7 +4,7 @@ const sheetSchema = new mongoose.Schema({
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: 'true'
+        required: true
     },
     sheetNo: {
         type: Number,
@@ -18,7 +18,8 @@ const sheetSchema = new mongoose.Schema({
     sheetCategory: {
         type: String,
         enum: ['SEO/Website', 'Digital Marketing', 'Sales', 'Design', 'Accounts', 'Managements', 'Customer Support'],
-        default: 'Sales'
+        default: 'Sales',
+        required: true
     },
     sheetLink: {
         type: String,

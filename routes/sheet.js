@@ -13,3 +13,5 @@ router.get('/all', getSheets)
 // Get Sheets Dashboard Data
 // GET
 router.get('/dashboard', getSheetsDashboard)
+
+module.exports = router;

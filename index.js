@@ -12,7 +12,7 @@ const curstomerRoutes = require("./routes/customer")
 const managerioRoutes = require("./routes/manager")
 const dataRoutes = require("./routes/data")
 const reminderRoutes = require("./routes/reminder")
-const sheetsRoutes = require('./routes/sheet')
+const sheetRoutes = require("./routes/sheet")
 
 const app = express()
 app.use(express.json())
@@ -40,7 +40,7 @@ app.use("/v1/api/data", dataRoutes)
 app.use("/v1/api/reminder", reminderRoutes)
 
 // sheets routs
-app.use('/v1/api/sheets', sheetsRoutes)
+app.use('/v1/api/sheets', sheetRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))

@@ -2,12 +2,19 @@ const Sheets = require("../models/Sheets")
 
 const createSheet = async (req, res) => {
     try {
-        const { sheetTitle, sheetCategory, sheetLink } = req.body
+        const { sheetTitle, sheetCategory, sheetLink, createdBy } = req.body
 
         if (!sheetTitle || !sheetCategory || !sheetLink) {
             return res.status(400).json({
                 success: false,
                 message: 'All fields are required.'
+            })
+        }
+
+        if (!createdBy) {
+            return res.status(400).json({
+                success: false,
+                message: 'Authentication error.'
             })
         }
 
@@ -26,7 +33,7 @@ const createSheet = async (req, res) => {
         const sheetNo = lastSheet ? lastSheet.sheetNo + 1 : 1
 
         const sheet = await Sheets.create({
-            createdBy: req.user._id,
+            createdBy,
             sheetNo,
             sheetTitle,
             sheetCategory,
@@ -34,7 +41,7 @@ const createSheet = async (req, res) => {
         })
 
         return res.status(200).json({
-            success: false,
+            success: true,
             message: 'Sheet created successfully.',
             data: sheet
         })
