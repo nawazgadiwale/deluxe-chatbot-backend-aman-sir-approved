@@ -86,7 +86,7 @@ cron.schedule(
                                 to: user.email,
 
                                 subject:
-                                    `${reminder.category?.categoryName} - (${type.toUpperCase()})`,
+                                    `(${reminder.employee?.name || 'N/A'}) ${reminder.category?.categoryName} - (${type.toUpperCase()})`,
 
                                 html: `
                                     <h2>Reminder Alert</h2>

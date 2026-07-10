@@ -38,8 +38,8 @@ const createCategory = async (req, res) => {
 
         const requiredTypes = [
             'due',
-            'critical',
-            'urgent'
+            'moderate',
+            'critical'
         ]
 
         if (reminders.length < 3) {
@@ -56,7 +56,7 @@ const createCategory = async (req, res) => {
         if (!hasRequiredTypes) {
             return res.status(400).json({
                 success: false,
-                message: 'Due, Critical and Urgent reminders are mandatory'
+                message: 'Due, moderate and critical reminders are mandatory'
             })
         }
 
@@ -129,8 +129,8 @@ const updateCategory = async (req, res) => {
 
         const requiredTypes = [
             'due',
-            'critical',
-            'urgent'
+            'moderate',
+            'critical'
         ]
 
         const hasRequiredTypes = requiredTypes.every(type =>
@@ -140,7 +140,7 @@ const updateCategory = async (req, res) => {
         if (!hasRequiredTypes) {
             return res.status(400).json({
                 success: false,
-                message: 'Due, Critical and Urgent reminders are mandatory'
+                message: 'Due, moderate and critical reminders are mandatory'
             })
         }
 
@@ -542,28 +542,67 @@ const updateReminder = async (req, res) => {
             })
         }
 
+        // check whether old expiry date changed or not
+        const oldExpiryDate = new Date(existingReminder.expiryDate)
+            .toLocaleDateString('en-CA', {
+                timeZone: 'Asia/Dubai'
+            })
+
+        const newExpiryDate = new Date(expiryDate)
+            .toLocaleDateString("en-CA", {
+                timeZone: "Asia/Dubai"
+            });
+
+        const expiryDateChanged = oldExpiryDate !== newExpiryDate
+
+        // const updatedReminder = await Reminder.findOneAndUpdate(
+        //     { refNumber },
+        //     {
+        //         category,
+        //         employee,
+        //         description,
+        //         expiryDate,
+        //         notifyUsers,
+        //         notes,
+        //         reminderStatus
+        //     },
+        //     {
+        //         new: true,
+        //         runValidators: true
+        //     }
+        // )
+
+        const updateData = {
+            category,
+            employee,
+            description,
+            expiryDate,
+            notifyUsers,
+            notes,
+            reminderStatus
+        }
+
+        // Reset sent reminders if expiry date changed
+        if (expiryDateChanged) {
+            updateData.sentReminders = [];
+        }
+
         const updatedReminder = await Reminder.findOneAndUpdate(
             { refNumber },
-            {
-                category,
-                employee,
-                description,
-                expiryDate,
-                notifyUsers,
-                notes,
-                reminderStatus
-            },
+            updateData,
             {
                 new: true,
                 runValidators: true
             }
-        )
+        );
 
         return res.status(200).json({
             success: true,
-            message: 'Reminder updated successfully',
+            message: expiryDateChanged
+                ? "Reminder updated successfully. Reminder history has been reset."
+                : "Reminder updated successfully.",
             reminder: updatedReminder
-        })
+        });
 
     } catch (error) {
         console.error('Error updating reminder', error)
@@ -1095,9 +1134,9 @@ const dashboardStats = async (req, res) => {
 
             dueReminders,
 
-            criticalReminders,
+            moderateReminders,
 
-            urgentReminders,
+            criticalReminders,
 
             totalCategories,
 
@@ -1128,7 +1167,7 @@ const dashboardStats = async (req, res) => {
             Reminder.countDocuments({
                 sentReminders: {
                     $elemMatch: {
-                        reminderType: 'critical'
+                        reminderType: 'moderate'
                     }
                 }
             }),
@@ -1136,7 +1175,7 @@ const dashboardStats = async (req, res) => {
             Reminder.countDocuments({
                 sentReminders: {
                     $elemMatch: {
-                        reminderType: 'urgent'
+                        reminderType: 'critical'
                     }
                 }
             }),
@@ -1204,9 +1243,9 @@ const dashboardStats = async (req, res) => {
 
                     due: dueReminders,
 
-                    critical: criticalReminders,
+                    moderate: moderateReminders,
 
-                    urgent: urgentReminders
+                    critical: criticalReminders
                 },
 
                 expiryStats: {

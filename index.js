@@ -12,7 +12,10 @@ const curstomerRoutes = require("./routes/customer")
 const managerioRoutes = require("./routes/manager")
 const dataRoutes = require("./routes/data")
 const reminderRoutes = require("./routes/reminder")
-const sheetRoutes = require("./routes/sheet")
+const sheetRoutes = require("./routes/sheet");
+const documentRoutes = require("./routes/document")
+const googleRoutes = require("./routes/google");
+// const { verifyGoogleAuth } = require("./config/google");
 
 const app = express()
 app.use(express.json())
@@ -39,8 +42,14 @@ app.use("/v1/api/data", dataRoutes)
 // reminder module routes
 app.use("/v1/api/reminder", reminderRoutes)
 
-// sheets routs
+// sheets routes
 app.use('/v1/api/sheets', sheetRoutes)
+
+// document routes
+app.use('/v1/api/documents', documentRoutes)
+
+// google auth
+app.use("/v1/api/google", googleRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))
@@ -53,6 +62,8 @@ require('./cron/emailSendReminderCron')
 mongoose.connect(process.env.MONGO_URL)
 .then(() => console.log('MongoDB Connected!'))
 .catch(() => console.log('Failed To Connect DB...'))
+
+// verifyGoogleAuth()
 
 const PORT = process.env.PORT
 

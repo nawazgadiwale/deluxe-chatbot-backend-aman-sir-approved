@@ -594,4 +594,31 @@ const getOrganizationChart = async (req, res) => {
     }
 };
 
-module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees, toggleUserDisableStatus, getOrganizationChart }
+const getEmployeeList = async (req, res) => {
+    try {
+        const employees = await User.find({
+            role: { $ne: "family" },
+            disabled: false
+        },
+            {
+                name: 1,
+                email: 1,
+                designation: 1,
+                departMent: 1
+            }).sort({ name: 1 })
+
+            return res.status(200).json({
+                success: false,
+                count: employees.length,
+                employees
+            })
+    } catch (error) {
+        console.error("Error while getting employees list", error)
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        })
+    }
+}
+
+module.exports = { register, createUser, login, verifyOTP, allUsers, individualUserDetails, editEmployeeDetails, deleteEmployee, fetchAllEmployees, toggleUserDisableStatus, getOrganizationChart, getEmployeeList }
