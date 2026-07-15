@@ -237,7 +237,7 @@ const verifyOTP = async (req, res) => {
 // function to fetch all users
 const allUsers = async (req, res) => {
     try {
-        let { search, role, page = 1, limit = 10, sort = "newest" } = req.query
+        let { search, role, page = 1, limit = 10, sort = "newest", workingCountry } = req.query
 
         page = Number(page)
         limit = Number(limit)
@@ -252,6 +252,10 @@ const allUsers = async (req, res) => {
 
         if (role && role !== "all") {
             filter.role = role
+        }
+
+        if (workingCountry && workingCountry !== "all") {
+            filter.workingCountry = workingCountry
         }
 
         const skip = (page - 1) * limit
@@ -607,11 +611,11 @@ const getEmployeeList = async (req, res) => {
                 departMent: 1
             }).sort({ name: 1 })
 
-            return res.status(200).json({
-                success: false,
-                count: employees.length,
-                employees
-            })
+        return res.status(200).json({
+            success: false,
+            count: employees.length,
+            employees
+        })
     } catch (error) {
         console.error("Error while getting employees list", error)
         return res.status(500).json({

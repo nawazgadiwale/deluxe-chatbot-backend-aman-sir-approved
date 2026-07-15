@@ -64,10 +64,10 @@ const dataSchema = new mongoose.Schema({
     assignToSalesPerson: {
         type: String,
         enum: [
-            'Admin', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+            'Admin', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa', 'Exprintmart',
             'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
             'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
-            'Umair', 'Wajid', 'Ziyad', 'Zohaib'
+            'Umair', 'Ziyad', 'Zohaib'
         ],
         default: 'Admin',
         required: true,
@@ -139,7 +139,7 @@ const dataSchema = new mongoose.Schema({
             },
             adminName: {
                 type: String,
-                enum: ['Hafsa', 'Fariha', 'Misba', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+                enum: ['Hafsa', 'Fariha', 'Misba', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa', 
                     'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
                     'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
                     'Umair', 'Wajid', 'Ziyad', 'Zohaib']

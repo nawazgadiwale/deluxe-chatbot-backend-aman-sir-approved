@@ -1034,7 +1034,7 @@ const getLeadDashboardData = async (req, res) => {
 // Get followup priority list
 const getFollowUpPriorityList = async (req, res) => {
     try {
-        const { search = "" } = req.query
+        const { search = "", assignToSalesPerson, dealStatus } = req.query
 
         const startOfToday = new Date()
         startOfToday.setHours(0, 0, 0, 0)
@@ -1042,6 +1042,26 @@ const getFollowUpPriorityList = async (req, res) => {
         const baseMatch = {
             dealStatus: {
                 $nin: ["Won", "Lost"]
+            }
+        }
+
+        const salesPersonArray = assignToSalesPerson
+            ? assignToSalesPerson.split(',')
+            : []
+
+        if (salesPersonArray.length > 0) {
+            baseMatch.assignToSalesPerson = {
+                $in: salesPersonArray
+            }
+        }
+
+        const dealStatusArray = dealStatus
+            ? dealStatus.split(',')
+            : []
+
+        if (dealStatus.length > 0) {
+            baseMatch.dealStatus = {
+                $in: dealStatusArray
             }
         }
 
@@ -1135,7 +1155,7 @@ const getFollowUpPriorityList = async (req, res) => {
         }
 
         const leads = await Data.find(baseMatch)
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: 1 })
             .lean()
 
         const overDue = []

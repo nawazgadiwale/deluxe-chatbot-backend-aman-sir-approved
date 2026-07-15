@@ -19,7 +19,11 @@ const documentSchema = new mongoose.Schema({
         type: String,
         enum: [
             "sheet",
-            "document"
+            "document",
+            "pdf",
+            "image",
+            "archive",
+            "file"
         ],
         required: true
     },

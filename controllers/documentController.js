@@ -1,8 +1,10 @@
 const Folder = require("../models/Folder")
 const Document = require("../models/Document")
-const { createGoogleDocument, createGoogleFolder, createGoogleSheet } = require("../services/googleService")
+const { createGoogleDocument, createGoogleFolder, createGoogleSheet, uploadFileToDrive } = require("../services/googleService")
 const User = require("../models/User")
 const { getDriveClient } = require("../config/google")
+const { getDocumentType } = require("../config/documentType")
+const axios = require('axios')
 
 // create a new folder in our shared drive folder
 const createFolder = async (req, res) => {
@@ -406,7 +408,7 @@ const getAllDocuments = async (req, res) => {
 
 const getDashboardData = async (req, res) => {
     try {
-        const [totalFolders, totalDocuments, totalSheets, totalDocs] = await Promise.all([
+        const [totalFolders, totalDocuments, totalSheets, totalDocs, totalPdfs, totalImages, totalArchives, otherFiles] = await Promise.all([
             Folder.countDocuments(),
             Document.countDocuments(),
             Document.countDocuments({
@@ -414,6 +416,18 @@ const getDashboardData = async (req, res) => {
             }),
             Document.countDocuments({
                 type: "document"
+            }),
+            Document.countDocuments({
+                type: "pdf"
+            }),
+            Document.countDocuments({
+                type: "image"
+            }),
+            Document.countDocuments({
+                type: "archive"
+            }),
+            Document.countDocuments({
+                type: "file"
             })
         ])
 
@@ -423,7 +437,11 @@ const getDashboardData = async (req, res) => {
                 totalFolders,
                 totalDocuments,
                 totalSheets,
-                totalDocs
+                totalDocs,
+                totalPdfs,
+                totalImages,
+                totalArchives,
+                otherFiles
             }
         })
     } catch (error) {
@@ -448,14 +466,18 @@ const openDocument = async (req, res) => {
             })
         }
 
-        const hasPermission = document.createdBy.toString() === req.user.id ||
-            document.permission.some((user) => user.toString() === req.user.id)
+        const hasPermission =
+            document.createdBy.equals(req.user.id) ||
+            document.permission.some((user) => {
+                const userId = user && user._id ? user._id : user;
+                return userId.equals(req.user.id);
+            });
 
         if (!hasPermission) {
             return res.status(403).json({
                 success: false,
                 message: "You don't have permission to open this document."
-            })
+            });
         }
 
         // Update audit information
@@ -465,11 +487,46 @@ const openDocument = async (req, res) => {
 
         await document.save()
 
-        return res.status(200).json({
-            success: true,
-            message: "Document updated successfully!",
-            url: document.googleUrl
-        })
+        const isGoogleDoc = document.type === "document" || document.type === "sheet"
+
+        if (isGoogleDoc) {
+            return res.status(200).json({
+                success: true,
+                isGoogleDoc: true,
+                message: "Document updated successfully!",
+                url: document.googleUrl
+            })
+        }
+
+        // FIX 1: Convert standard view links to direct download links for files
+        let downloadUrl = document.googleUrl;
+        if (downloadUrl.includes('drive.google.com')) {
+            const fileIdMatch = downloadUrl.match(/\/d\/([^\/]+)/) || downloadUrl.match(/id=([^&]+)/);
+            if (fileIdMatch && fileIdMatch[1]) {
+                downloadUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+            }
+        }
+
+        // FIX 2: Handle downstream stream errors safely so the backend doesn't crash
+        const googleDriveResponse = await axios({
+            method: 'get',
+            url: downloadUrl,
+            responseType: 'stream'
+        });
+
+        // FIX 3: Fixed missing closing double quote in Content-Disposition string
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.title)}"`);
+        res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
+
+        // FIX 4: Forward stream errors cleanly
+        googleDriveResponse.data.on('error', (err) => {
+            console.error("Stream pipe error:", err);
+            if (!res.headersSent) {
+                res.status(500).send("Error streaming the file target.");
+            }
+        });
+
+        googleDriveResponse.data.pipe(res);
     } catch (error) {
         console.error("Internal Server Server", error)
         return res.status(500).json({
@@ -647,4 +704,112 @@ const moveDocument = async (req, res) => {
     }
 }
 
-module.exports = { createFolder, createDocument, updateFolderPermissions, updateDocumentPermissions, getAllFolders, getFolderTree, getAllDocuments, getDashboardData, openDocument, moveFolder, moveDocument }
+const uploadDocument = async (req, res) => {
+    try {
+        const { createdBy, folder, permission } = req.body
+
+        if (!createdBy) {
+            return res.status(400).json({
+                success: false,
+                message: "CreatedBy is required!"
+            })
+        }
+
+        if (!folder) {
+            return res.status(400).json({
+                success: false,
+                message: "Folder is required!"
+            })
+        }
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Atleast one file os required!"
+            })
+        }
+
+        if (!permission || permission.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Permission people are required"
+            })
+        }
+
+        const selectedFolder = await Folder.findById(folder)
+
+        if (!selectedFolder) {
+            return res.status(400).json({
+                success: false,
+                message: "Selected folder does not exist!"
+            })
+        }
+
+        const users = await User.find({
+            _id: { $in: permission }
+        })
+
+        if (users.length !== permission.length) {
+            return res.status(400).json({
+                success: false,
+                message: "One or more users in the permision list do not exist!"
+            })
+        }
+
+        const lastDocument = await Document
+            .findOne()
+            .sort({ documentNo: -1 })
+
+
+        let nextDocumentNo = lastDocument ? lastDocument.documentNo + 1 : 1
+
+        // Upload every file to Drive in parallel
+        const uploadFiles = await Promise.all(
+            req.files.map((file) =>
+                uploadFileToDrive({
+                    fileBuffer: file.buffer,
+                    fileName: file.originalname,
+                    mimeType: file.mimetype,
+                    parentFolderId: selectedFolder.googleFolderId
+                }).then((googleFile) => ({ file, googleFile }))
+            )
+        )
+
+        // ...then create the Document records sequentially so each one gets
+        // a strictly increasing, unique documentNo
+
+        const documents = []
+
+        for (const { file, googleFile } of uploadFiles) {
+            const calculatedType = getDocumentType(file.mimetype)
+            const document = await Document.create({
+                createdBy,
+                documentNo: nextDocumentNo,
+                title: file.originalname,
+                type: calculatedType,
+                folder,
+                googleFileId: googleFile.googleFileId,
+                googleUrl: googleFile.googleUrl,
+                permission,
+            });
+
+            documents.push(document);
+            nextDocumentNo++;
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${documents.length} file${documents.length > 1 ? "s" : ""} uploaded successfully!`,
+            documents
+        })
+
+    } catch (error) {
+        console.error("Internal Server Server", error)
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        })
+    }
+}
+
+module.exports = { createFolder, createDocument, updateFolderPermissions, updateDocumentPermissions, getAllFolders, getFolderTree, getAllDocuments, getDashboardData, openDocument, moveFolder, moveDocument, uploadDocument }

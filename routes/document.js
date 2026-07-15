@@ -1,11 +1,12 @@
 const express = require("express")
 const authenticateToken = require("../middlewares/authMiddleware")
-const { createFolder, createDocument, updateFolderPermissions, updateDocumentPermissions, getAllFolders, getAllDocuments, getDashboardData, getFolderTree, openDocument, moveFolder, moveDocument } = require('../controllers/documentController')
+const { createFolder, createDocument, updateFolderPermissions, updateDocumentPermissions, getAllFolders, getAllDocuments, getDashboardData, getFolderTree, openDocument, moveFolder, moveDocument, uploadDocument } = require('../controllers/documentController')
+const uploadDocumentMiddleWare = require("../middlewares/uploadDocumentMiddleWare")
 const router = express.Router()
 
 // Create folder api
 // POST
-router.post('/folder', authenticateToken, createFolder )
+router.post('/folder', authenticateToken, createFolder)
 
 // Create document api
 //  POST
@@ -45,4 +46,6 @@ router.patch('/folders/:id/move', authenticateToken, moveFolder)
 // Move to document
 router.patch('/documents/:id/move', authenticateToken, moveDocument)
 
+// raw file upload endpoint (pdf, txt, image, docx, xlsx, pptx, etc)
+router.post("/upload", authenticateToken, uploadDocumentMiddleWare.array("files", 10), uploadDocument);
 module.exports = router

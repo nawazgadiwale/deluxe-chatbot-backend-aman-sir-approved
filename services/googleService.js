@@ -1,6 +1,6 @@
 
 // Shared Drive folder ID that the service account has access to
-
+const { Readable } = require("stream")
 const { getDriveClient } = require("../config/google")
 
 // So we can restrict to only folder
@@ -144,4 +144,36 @@ const createGoogleDocument = async (title, parentFolderId = PARENT_FOLDER_ID) =>
     }
 }
 
-module.exports = { createGoogleFolder, createGoogleSheet, createGoogleDocument }
+const uploadFileToDrive = async ({ fileBuffer, fileName, mimeType, parentFolderId }) => {
+    const drive = getDriveClient()
+
+    // Convert the buffer into a readable stream - the Drive API's
+    // media.body expects a stram, not a raw buffer
+    const bufferStream = Readable.from(fileBuffer)
+
+    const response = await drive.files.create({
+        requestBody: {
+            name: fileName,
+            parents: [parentFolderId]
+            // NOTE: we deliberately do NOT set a Google-native mimeType here,
+            // so Drive stores the file as-is (pdf stays pdf, docx stays docx, etc.)
+        },
+        media: {
+            mimeType,
+            body: bufferStream
+        },
+        supportsAllDrives: true,
+        fields: "id, webViewLink, webContentLink, iconLink, mimeType, size"
+    })
+
+    const googleFileId = response.data.id
+    const googleUrl = response.data.webViewLink
+
+    return {
+        googleFileId,
+        googleUrl,
+        iconLink: response.data.iconLink
+    }
+}
+
+module.exports = { createGoogleFolder, createGoogleSheet, createGoogleDocument, uploadFileToDrive }
