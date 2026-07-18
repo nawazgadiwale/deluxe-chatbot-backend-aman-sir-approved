@@ -1,12 +1,16 @@
 const mongoose = require('mongoose')
 
 const leaveSchema = new mongoose.Schema({
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     employee: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
     },
-
     fromDate: {
         type: Date,
         required: true
@@ -27,18 +31,10 @@ const leaveSchema = new mongoose.Schema({
         enum: ['Paid', 'UnPaid'],
         default: 'Paid'
     },
-    reason: {
+    type: {
         type: String,
-        required: true
-    },
-    status: {
-        type: String,
-        enum: ['Pending', 'Approved', 'Rejected', 'Cancelled'],
-        default: 'Pending'
-    },
-    approvedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        enum: ['Half', 'Full'],
+        default: 'Full'
     }
 }, {
     timestamps: true
