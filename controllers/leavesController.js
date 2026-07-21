@@ -259,7 +259,7 @@ const getLeavesByYear = async (req, res) => {
         const leaves = await Leaves.find({
             fromDate: { $lt: yearEnd },
             toDate: { $gte: yearStart }
-        }).populate('employee', 'name email designation')
+        }).populate('employee', 'name email designation workingCountry')
 
         const calendar = {}
 
@@ -268,14 +268,16 @@ const getLeavesByYear = async (req, res) => {
             const rangeEnd = new Date(Math.min(new Date(leave.toDate), yearEnd.getTime() - 1))
 
             const cursor = new Date(rangeStart)
-            while(cursor <= rangeEnd) {
+            while (cursor <= rangeEnd) {
                 const key = cursor.toISOString().split('T')[0]
 
                 if (!calendar[key]) calendar[key] = []
                 calendar[key].push({
                     employeeId: leave.employee?._id,
                     name: leave.employee?.name || 'Unknown',
-                    // Note: leaveDays is the total for who leave record (may span several days), not a per-day figure. Shown as-is for context.
+                    email: leave.employee?.email,
+                    designation: leave.employee?.designation,
+                    workingCountry: leave.employee?.workingCountry,
                     leaveDays: leave.leaveDays,
                     leaveCategory: leave.leaveCategory,
                     type: leave.type
@@ -299,4 +301,150 @@ const getLeavesByYear = async (req, res) => {
     }
 }
 
-module.exports = { addLeave, getLeavesByEmployee, getLeavesByYear }
+// Update leave api
+const updateLeave = async (req, res) => {
+    try {
+        const { leaveId } = req.params
+        const {
+            fromDate,
+            toDate,
+            type
+        } = req.body
+
+        const leave = await Leaves.findById(leaveId)
+
+        if (!leave) {
+            return res.status(404).json({
+                success: false,
+                message: "Leave not found"
+            })
+        }
+
+        // Prevent editing if this leave is part of a split request
+        const splitLeaves = await Leaves.find({
+            employee: leave.employee,
+            fromDate: leave.fromDate,
+            toDate: leave.toDate
+        })
+
+        if (splitLeaves.length > 1) {
+            return res.status(400).json({
+                success: false,
+                message: "This leave was split into Paid/Paid. Please delete and recreate."
+            })
+        }
+
+        if (!["Half", "Full"].includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid leave type"
+            })
+        }
+
+        if (type === "Half" && leaveDays !== 0.5) {
+            return res.status(400).json({
+                success: false,
+                message: "Half day must have leaveDays = 0.5"
+            })
+        }
+
+        const from = new Date(fromDate)
+        const to = new Date(type === "Half" ? fromDate : toDate)
+
+        if (isNaN(from) || isNaN(to)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date(s) supplied"
+            })
+        }
+
+        if (to < from) {
+            return res.status(400).json({
+                success: false,
+                message: "To date cannot be before from date"
+            })
+        }
+
+        // Recompute leaveDays server-side — never trust the client's number
+        const leaveDays = type === "Half"
+            ? 0.5
+            : Math.round((to - from) / (1000 * 60 * 60 * 24)) + 1
+
+
+        if (leaveDays <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid leave days"
+            })
+        }
+
+        // Block overlap with this employee's other leave records
+        const overlapping = await Leaves.findOne({
+            _id: { $ne: leave._id },
+            employee: leave.employee,
+            fromDate: { $lte: to },
+            toDate: { $gte: from }
+        })
+
+        if (overlapping) {
+            return res.status(400).json({
+                success: false,
+                message: "This date range overlaps with an existing leave record"
+            })
+        }
+
+        leave.fromDate = from
+        leave.toDate = to
+        leave.leaveDays = leaveDays
+        leave.type = type
+
+        await leave.save()
+
+        return res.status(200).json({
+            success: true,
+            message: "Leave updated successfully",
+            data: leave
+        })
+    } catch (error) {
+        console.error("Error while updating leave:", error)
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
+
+// Delete leave api
+const deleteLeave = async (req, res) => {
+    try {
+        const { leaveId } = req.params
+
+        const leave = await Leaves.findById(leaveId)
+
+        if (!leave) {
+            return res.status(404).json({
+                success: false,
+                message: "Leave not found"
+            })
+        }
+
+        await Leaves.deleteMany({
+            employee: leave.employee,
+            fromDate: leave.fromDate,
+            toDate: leave.toDate
+        })
+
+        return res.status(200).json({
+            success: false,
+            message: "Leave deleted successfully"
+        })
+    } catch (error) {
+        console.error("Error while deleting leave", error)
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
+
+module.exports = { addLeave, getLeavesByEmployee, getLeavesByYear, updateLeave, deleteLeave }

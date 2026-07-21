@@ -8,7 +8,6 @@ const digitalSchema = new mongoose.Schema({
     },
     refNo: {
         type: Number,
-        unique: true,
         required: true
     },
     date: {
@@ -18,12 +17,8 @@ const digitalSchema = new mongoose.Schema({
     },
     workDetails: {
         type: String,
-        workDetails: {
-            type: String,
-            required: function () {
-                return ["Working-Day", "WFH"].includes(this.dayType);
-            },
-            trim: true
+        required: function () {
+            return this.dayType === "Working-Day";
         },
         trim: true
     },
@@ -33,14 +28,13 @@ const digitalSchema = new mongoose.Schema({
             "Working-Day",
             "Leave",
             "Holiday",
-            "WFH",
         ],
         default: "Working-Day",
         required: true
     },
     team: {
         type: String,
-        enum: ['Developement', 'Designing', 'SEO', 'Marketing'],
+        enum: ['Development', 'Designing', 'SEO', 'Marketing'],
     },
     status: {
         type: String,
@@ -57,9 +51,16 @@ const digitalSchema = new mongoose.Schema({
     }
 )
 
+// Unique refNo per employee
 digitalSchema.index(
     { employee: 1, refNo: 1 },
     { unique: true }
-)
+);
+
+// Only one record per employee per day
+digitalSchema.index(
+    { employee: 1, date: 1 },
+    { unique: true }
+);
 
 module.exports = mongoose.model('Digital', digitalSchema)

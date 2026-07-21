@@ -608,7 +608,8 @@ const getEmployeeList = async (req, res) => {
                 name: 1,
                 email: 1,
                 designation: 1,
-                departMent: 1
+                departMent: 1,
+                workingCountry: 1
             }).sort({ name: 1 })
 
         return res.status(200).json({
