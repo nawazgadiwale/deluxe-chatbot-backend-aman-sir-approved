@@ -3,7 +3,7 @@ const { addLeave, getLeavesByEmployee, getLeavesByYear, updateLeave, deleteLeave
 const authenticateToken = require('../middlewares/authMiddleware')
 const router = express.Router()
 
-// create new leave entry6
+// create new leave entry
 // POST
 router.post('/add', authenticateToken, addLeave)
 

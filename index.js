@@ -16,6 +16,7 @@ const documentRoutes = require("./routes/document")
 const googleRoutes = require("./routes/google");
 // const { verifyGoogleAuth } = require("./config/google");
 const leavesRoutes = require("./routes/leave")
+const otRoutes = require('./routes/ot')
 
 const app = express()
 app.use(express.json())
@@ -50,6 +51,9 @@ app.use("/v1/api/google", googleRoutes)
 
 // leaves routes
 app.use("/v1/api/leaves", leavesRoutes)
+
+// ot routes
+app.use('/v1/api/ot', otRoutes)
 
 // static folder for uploads
 app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))

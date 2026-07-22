@@ -613,7 +613,7 @@ const getEmployeeList = async (req, res) => {
             }).sort({ name: 1 })
 
         return res.status(200).json({
-            success: false,
+            success: true,
             count: employees.length,
             employees
         })
