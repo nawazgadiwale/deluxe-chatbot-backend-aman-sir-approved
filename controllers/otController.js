@@ -1,9 +1,10 @@
 const Ot = require("../models/Ot")
 const User = require("../models/User")
+const { mongoose } = require('mongoose')
 
 const addOverTime = async (req, res) => {
     try {
-        const { createdBy, employeeId, otAddedDate, details, otTime, jobOwner } = req.body
+        const { createdBy, employeeId, otAddedDate, startTime, endTime, details, otTime, jobOwner } = req.body
 
         const employee = await User.findById(employeeId)
 
@@ -25,6 +26,13 @@ const addOverTime = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "OT Added Date is required"
+            })
+        }
+
+        if (!startTime || !endTime) {
+            return res.status(400).json({
+                success: false,
+                message: "Start time and end time are required"
             })
         }
 
@@ -53,6 +61,8 @@ const addOverTime = async (req, res) => {
             createdBy,
             employee,
             otAddedDate,
+            startTime,
+            endTime,
             details,
             otTime: Number(otTime),
             jobOwner
@@ -102,7 +112,14 @@ const getAllOT = async (req, res) => {
         }
 
         if (employee) {
-            filter.employee = employee
+            const employeeIds = employee
+                .split(',')
+                .filter(id => mongoose.Types.ObjectId.isValid(id))
+                .map(id => new mongoose.Types.ObjectId(id))
+
+            filter.employee = {
+                $in: employeeIds
+            }
         }
 
         const total = await Ot.countDocuments(filter)
@@ -123,7 +140,7 @@ const getAllOT = async (req, res) => {
                 $group: {
                     _id: null,
                     totalHours: {
-                        $sum: '$otTime'
+                        $sum: "$otTime"
                     }
                 }
             }
@@ -154,6 +171,8 @@ const updateOt = async (req, res) => {
         const {
             employee,
             otAddedDate,
+            startTime,
+            endTime,
             details,
             otTime,
             jobOwner
@@ -170,6 +189,8 @@ const updateOt = async (req, res) => {
 
         ot.employee = employee ?? ot.employee
         ot.otAddedDate = otAddedDate ?? ot.otAddedDate
+        ot.startTime = startTime ?? ot.startTime
+        ot.endTime = endTime ?? ot.endTime
         ot.details = details ?? ot.details
         ot.otTime = otTime ?? ot.otTime
         ot.jobOwner = jobOwner ?? ot.jobOwner
@@ -200,7 +221,7 @@ const deleteOt = async (req, res) => {
         if (!ot) {
             return res.status(404).json({
                 success: false,
-                message: "Overtimr not found."
+                message: "Overtime not found."
             })
         }
 
@@ -208,7 +229,7 @@ const deleteOt = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: 'Overtime delted successfully.'
+            message: 'Overtime deleted successfully.'
         })
     } catch (error) {
         console.error("Error while deleting overtime record", error)

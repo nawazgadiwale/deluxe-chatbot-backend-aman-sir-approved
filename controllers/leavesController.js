@@ -186,6 +186,7 @@ const getLeavesByEmployee = async (req, res) => {
         // Full leaves history for this employee newest first
         const allLeaves = await Leaves.find({ employee: employeeId })
             .populate('createdBy', 'name')
+            .populate('employee', 'name')
             .sort({ fromDate: -1 })
 
         // Only 'Paid' leaves inside the CURENT anniversary window count toward quate used
@@ -211,6 +212,7 @@ const getLeavesByEmployee = async (req, res) => {
         // Full history list (all leaves ever taken, all categories)
         const formattedHistory = allLeaves.map(leave => ({
             id: leave._id,
+            employeeName: leave.employee?.name || null,
             leaveCategory: leave.leaveCategory,
             leaveDays: leave.leaveDays,
             type: leave.type,
@@ -280,7 +282,9 @@ const getLeavesByYear = async (req, res) => {
                     workingCountry: leave.employee?.workingCountry,
                     leaveDays: leave.leaveDays,
                     leaveCategory: leave.leaveCategory,
-                    type: leave.type
+                    type: leave.type,
+                    fromDate: leave.fromDate,
+                    toDate: leave.toDate
                 })
 
                 cursor.setUTCDate(cursor.getUTCDate() + 1)

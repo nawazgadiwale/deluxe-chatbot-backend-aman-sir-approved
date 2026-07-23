@@ -1,9 +1,15 @@
 require("dotenv").config();
+
 const path = require('path')
 const express = require('express')
 const dotenv = require('dotenv')
 const mongoose = require('mongoose')
 const cors = require('cors')
+const dns = require("node:dns");
+
+if (process.env.FORCE_DNS === "true") {
+    dns.setServers(["1.1.1.1", "8.8.8.8"]);
+}
 
 const authRoutes = require("./routes/auth")
 const jobRoutes = require("./routes/job")
@@ -64,8 +70,11 @@ require('./cron/emailSendReminderCron')
 
 // connect to our database
 mongoose.connect(process.env.MONGO_URL)
-.then(() => console.log('MongoDB Connected!'))
-.catch(() => console.log('Failed To Connect DB...'))
+    .then(() => console.log('MongoDB Connected!'))
+    .catch((err) => {
+        console.log("Failed To Connect DB...");
+        console.error(err);
+    });
 
 // verifyGoogleAuth()
 

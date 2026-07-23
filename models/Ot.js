@@ -11,6 +11,14 @@ const OtSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    startTime: {
+        type: String,
+        required: true
+    },
+    endTime: {
+        type: String,
+        required: true
+    },
     otAddedDate: {
         type: Date,
         required: true
