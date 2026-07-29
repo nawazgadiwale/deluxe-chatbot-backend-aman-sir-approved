@@ -32,9 +32,11 @@ const createGoogleFolder = async ({ folderName, parentFolderId = PARENT_FOLDER_I
         await drive.permissions.create({
             fileId: data.id,
             requestBody: {
+                type: "user",
                 role: "writer",
-                type: "anyone"
-            }
+                emailAddress: "dlxprintdrive@gmail.com"
+            },
+            supportsAllDrives: true
         })
 
         if (!data.id) {
@@ -76,9 +78,11 @@ const createGoogleSheet = async (title, parentFolderID = PARENT_FOLDER_ID) => {
         await drive.permissions.create({
             fileId: data.id,
             requestBody: {
+                type: "user",
                 role: "writer",
-                type: "anyone"
-            }
+                emailAddress: "dlxprintdrive@gmail.com"
+            },
+            supportsAllDrives: true
         })
 
         if (!data.id) {
@@ -120,9 +124,11 @@ const createGoogleDocument = async (title, parentFolderId = PARENT_FOLDER_ID) =>
         await drive.permissions.create({
             fileId: data.id,
             requestBody: {
+                type: "user",
                 role: "writer",
-                type: "anyone"
-            }
+                emailAddress: "dlxprintdrive@gmail.com"
+            },
+            supportsAllDrives: true
         })
 
         if (!data.id) {

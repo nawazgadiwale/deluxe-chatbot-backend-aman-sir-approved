@@ -159,8 +159,17 @@ const getLeavesByEmployee = async (req, res) => {
     try {
         const { employeeId } = req.params
 
-        // Fetch employee details to read country & joining date
+        let { page = 1, limit = 10 } = req.query
+
+        page = parseInt(page)
+        limit = parseInt(limit)
+
+        if (isNaN(page) || page < 1) page = 1
+        if (isNaN(limit) || limit < 1) limit = 10
+
+        // Employee
         const employee = await User.findById(employeeId)
+
         if (!employee) {
             return res.status(404).json({
                 success: false,
@@ -175,68 +184,134 @@ const getLeavesByEmployee = async (req, res) => {
             })
         }
 
-        // Paid quota based on country
+        // Paid leave quota
         const totalPaidQuota = getPaidQuota(employee)
 
-        // Current employement-anniversary cycle window (resets to 0 every year on joining date)
         const joinDate = new Date(employee.joiningDate)
         const today = new Date()
+
         const { cycleStart, cycleEnd } = getCycleWindow(joinDate, today)
 
-        // Full leaves history for this employee newest first
-        const allLeaves = await Leaves.find({ employee: employeeId })
-            .populate('createdBy', 'name')
-            .populate('employee', 'name')
+        // Total leaves count
+        const totalRecords = await Leaves.countDocuments({
+            employee: employeeId
+        })
+
+        // Paginated leaves (List View)
+        const paginatedLeaves = await Leaves.find({
+            employee: employeeId
+        })
+            .populate("createdBy", "name")
+            .populate("employee", "name")
+            .sort({ fromDate: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+
+        // All leaves (Summary + Calendar)
+        const allLeaves = await Leaves.find({
+            employee: employeeId
+        })
+            .populate("createdBy", "name")
+            .populate("employee", "name")
             .sort({ fromDate: -1 })
 
-        // Only 'Paid' leaves inside the CURENT anniversary window count toward quate used
-        const currentCyclePaidLeaves = allLeaves.filter(leave =>
-            leave.leaveCategory === "Paid" &&
-            new Date(leave.fromDate) >= cycleStart &&
-            new Date(leave.fromDate) <= cycleEnd
+        // Paid leaves in current cycle
+        const currentCyclePaidLeaves = allLeaves.filter(
+            (leave) =>
+                leave.leaveCategory === "Paid" &&
+                new Date(leave.fromDate) >= cycleStart &&
+                new Date(leave.fromDate) <= cycleEnd
         )
 
-        // Aggregate (supports floats like 0.5 for half days)
-        const totalPaidLeavesTakenTillNow = currentCyclePaidLeaves.reduce((sum, leave) =>
-            sum + leave.leaveDays, 0)
-        const remainingPaidBalance = Math.max(0, totalPaidQuota - totalPaidLeavesTakenTillNow)
+        const totalPaidLeavesTakenTillNow =
+            currentCyclePaidLeaves.reduce(
+                (sum, leave) => sum + leave.leaveDays,
+                0
+            )
 
-        const currentCycleUnpaidLeaves = allLeaves.filter((leave) =>
-            leave.leaveCategory === "UnPaid" &&
-            new Date(leave.fromDate) >= cycleStart &&
-            new Date(leave.fromDate) <= cycleEnd
+        const remainingPaidBalance = Math.max(
+            0,
+            totalPaidQuota - totalPaidLeavesTakenTillNow
         )
 
-        const totalUnpaidLeavesTakenTillNow = currentCycleUnpaidLeaves.reduce((sum, leave) => sum + leave.leaveDays, 0)
+        // Unpaid leaves in current cycle
+        const currentCycleUnpaidLeaves = allLeaves.filter(
+            (leave) =>
+                leave.leaveCategory === "UnPaid" &&
+                new Date(leave.fromDate) >= cycleStart &&
+                new Date(leave.fromDate) <= cycleEnd
+        )
 
-        // Full history list (all leaves ever taken, all categories)
-        const formattedHistory = allLeaves.map(leave => ({
+        const totalUnpaidLeavesTakenTillNow =
+            currentCycleUnpaidLeaves.reduce(
+                (sum, leave) => sum + leave.leaveDays,
+                0
+            )
+
+        // List View History (Paginated)
+        const formattedHistory = paginatedLeaves.map((leave) => ({
             id: leave._id,
             employeeName: leave.employee?.name || null,
             leaveCategory: leave.leaveCategory,
             leaveDays: leave.leaveDays,
             type: leave.type,
-            fromDate: leave.fromDate.toISOString().split('T')[0],
-            toDate: leave.toDate.toISOString().split('T')[0],
+            fromDate: leave.fromDate.toISOString().split("T")[0],
+            toDate: leave.toDate.toISOString().split("T")[0],
+            createdBy: leave.createdBy?.name || null
+        }))
+
+        // Calendar History (Full)
+        const formattedCalendarHistory = allLeaves.map((leave) => ({
+            id: leave._id,
+            employeeName: leave.employee?.name || null,
+            leaveCategory: leave.leaveCategory,
+            leaveDays: leave.leaveDays,
+            type: leave.type,
+            fromDate: leave.fromDate.toISOString().split("T")[0],
+            toDate: leave.toDate.toISOString().split("T")[0],
             createdBy: leave.createdBy?.name || null
         }))
 
         return res.status(200).json({
+            success: true,
             message: "Leaves fetched successfully",
+
             cycle: {
-                currentCycleStart: cycleStart.toISOString().split('T')[0],
-                currentCycleEnd: cycleEnd.toISOString().split('T')[0]
+                currentCycleStart:
+                    cycleStart.toISOString().split("T")[0],
+                currentCycleEnd:
+                    cycleEnd.toISOString().split("T")[0]
             },
+
             summary: {
                 totalPaidQuota,
                 totalPaidLeavesTakenTillNow,
                 totalUnpaidLeavesTakenTillNow,
                 remainingPaidBalance
             },
-            history: formattedHistory
+
+            // Table
+            history: formattedHistory,
+
+            // Calendar
+            calendarHistory: formattedCalendarHistory,
+
+            pagination: {
+                page,
+                limit,
+                totalRecords,
+                totalPages: Math.ceil(totalRecords / limit),
+                hasPrev: page > 1,
+                hasNext:
+                    page < Math.ceil(totalRecords / limit)
+            }
         })
     } catch (error) {
-        console.error("Error fetching employee leaves summary:", error)
+        console.error(
+            "Error fetching employee leaves summary:",
+            error
+        )
+
         return res.status(500).json({
             success: false,
             message: "Internal Server Error"
