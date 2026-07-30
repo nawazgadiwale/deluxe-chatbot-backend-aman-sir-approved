@@ -65,6 +65,7 @@ const UserSchema = new mongoose.Schema({
         enum: [
             'owner', 'management', 'accountant', 'jr-accountant', 'developer',
             'seo-specialist', 'jr-seo-specialist', 'sr-graphic-designer', 'graphic-designer', 'creative-designer', 'digital-marketing',
+            'sales-manager',
             'sales-head', 'sales', 'crm-manager', 'customer-support', 'production-head',
             'printing', 'production', 'finishing/packing', 'applicator/carpenter', 'applicator',
             'driver', 'N/A'
@@ -74,7 +75,7 @@ const UserSchema = new mongoose.Schema({
     // role of employee
     role: {
         type: String,
-        enum: ['super-admin', 'admin', 'customer-support', 'sales', 'design', 'production', 'finishing', 'operation', 'family', 'accountant', 'digital'],
+        enum: ['super-admin', 'admin', 'sales-manager', 'customer-support', 'sales', 'design', 'production', 'finishing', 'operation', 'family', 'accountant', 'digital'],
         default: 'sales'
     },
     // access of employee

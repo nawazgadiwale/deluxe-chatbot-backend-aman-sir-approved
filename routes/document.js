@@ -48,4 +48,5 @@ router.patch('/documents/:id/move', authenticateToken, moveDocument)
 
 // raw file upload endpoint (pdf, txt, image, docx, xlsx, pptx, etc)
 router.post("/upload", authenticateToken, uploadDocumentMiddleWare.array("files", 10), uploadDocument);
+
 module.exports = router
