@@ -13,7 +13,6 @@ const supplierSchema = new mongoose.Schema({
     },
     contactPerson: {
         type: String,
-        required: true
     },
     companyName: {
         type: String,
