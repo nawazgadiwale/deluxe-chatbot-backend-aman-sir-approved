@@ -346,7 +346,8 @@ const getAllLeadsData = async (req, res) => {
             year,
             month,
             startDate,
-            endDate
+            endDate,
+            dateFilterType = 'leadAddedDate'
         } = req.query
 
         const now = new Date()
@@ -365,15 +366,23 @@ const getAllLeadsData = async (req, res) => {
         // }
 
         let baseMatch = {}
+        const dateField = ["leadAddedDate", "quoteDate", "invoiceDate"].includes(dateFilterType)
+            ? dateFilterType
+            : 'leadAddedDate'
 
         if (startDate && endDate) {
             const start = new Date(`${startDate}T00:00:00.000Z`);
             const end = new Date(`${endDate}T23:59:59.999Z`);
 
-            baseMatch.leadAddedDate = {
+            // baseMatch.leadAddedDate = {
+            //     $gte: start,
+            //     $lte: end,
+            // };
+            baseMatch[dateField] = {
                 $gte: start,
-                $lte: end,
-            };
+                $lte: end
+            }
+
         } else {
             const monthStartDate = new Date(filterYear, filterMonth - 1, 1)
             const monthEndDate = new Date(filterYear, filterMonth, 1)

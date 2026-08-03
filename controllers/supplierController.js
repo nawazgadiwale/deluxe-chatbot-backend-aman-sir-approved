@@ -112,6 +112,23 @@ const getAllSuppliers = async (req, res) => {
                     lastContactedDate: { $max: "$details.contactedDate" },
                     createdByName: {
                         $ifNull: [{ $arrayElemAt: ["$createdByUser.name", 0] }, null]
+                    },
+                    divisions: {
+                        $setDifference: [
+                            {
+                                $setUnion: [
+                                    {
+                                        $map: {
+                                            input: "$details",
+                                            as: "d",
+                                            in: "$$d.division"
+                                        }
+                                    },
+                                    []
+                                ]
+                            },
+                            ["N/A"]
+                        ]
                     }
                 }
             },

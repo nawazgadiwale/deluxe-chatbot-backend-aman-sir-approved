@@ -35,7 +35,7 @@ const supplierSchema = new mongoose.Schema({
     },
     tradeLicence: {
         type: String
-    }
+    },
 }, {
     timestamps: true
 })
