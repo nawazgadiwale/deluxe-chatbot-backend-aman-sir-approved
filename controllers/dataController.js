@@ -962,7 +962,7 @@ const getLeadDashboardData = async (req, res) => {
         const salesPersonPerformance = await Data.aggregate([
             {
                 $match: {
-                    leadAddedDate: {
+                    invoiceDate: {
                         $gte: startDate,
                         $lt: endDate
                     }
@@ -986,24 +986,24 @@ const getLeadDashboardData = async (req, res) => {
                         }
                     },
 
-                    wonDealValue: {
-                        $sum: {
-                            $cond: [
-                                { $eq: ["$dealStatus", "Won"] },
-                                "$dealAmount",
-                                0
-                            ]
-                        }
-                    }
+                    // wonDealValue: {
+                    //     $sum: {
+                    //         $cond: [
+                    //             { $eq: ["$dealStatus", "Won"] },
+                    //             "$dealAmount",
+                    //             0
+                    //         ]
+                    //     }
+                    // }
                 }
             },
             {
                 $project: {
                     _id: 0,
                     salesPerson: "$_id",
-                    totalLeads: 1,
+                    // totalLeads: 1,
                     wonDeals: 1,
-                    wonDealValue: 1
+                    // wonDealValue: 1
                 }
             },
             {
