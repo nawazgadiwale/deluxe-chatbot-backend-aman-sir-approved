@@ -60,7 +60,9 @@ const addNewLeadData = async (req, res) => {
             quoteDate,
             invoiceDate,
             // salesInvoices,
-            billingAddress
+            billingAddress,
+            assignFollowUp,
+            followUpInstruction
             // followUpDate
         } = req.body
 
@@ -72,7 +74,8 @@ const addNewLeadData = async (req, res) => {
             !source ||
             !assignToSalesPerson ||
             !dealStatus ||
-            !leadAddedDate
+            !leadAddedDate ||
+            !assignFollowUp
         ) {
             return res.status(400).json({
                 message: "All required fields must be filled!"
@@ -116,7 +119,9 @@ const addNewLeadData = async (req, res) => {
             quoteDate,
             invoiceDate,
             // salesInvoices,
-            billingAddress
+            billingAddress,
+            assignFollowUp,
+            followUpInstruction
             // followUps: [
             //     {
             //         followUpDate: finalFollowUpDate
@@ -187,7 +192,9 @@ const updateLeadData = async (req, res) => {
             adminName,
             quoteDate,
             invoiceDate,
-            billingAddress
+            billingAddress,
+            assignFollowUp,
+            followUpInstruction
         } = req.body
 
         const lead = await Data.findOne({ uid })
@@ -264,6 +271,14 @@ const updateLeadData = async (req, res) => {
 
         if (billingAddress !== undefined) {
             lead.billingAddress = billingAddress
+        }
+
+        if (assignFollowUp !== undefined) {
+            lead.assignFollowUp = assignFollowUp
+        }
+
+        if (followUpInstruction !== undefined) {
+            lead.followUpInstruction = followUpInstruction
         }
 
         await lead.save()
@@ -347,7 +362,8 @@ const getAllLeadsData = async (req, res) => {
             month,
             startDate,
             endDate,
-            dateFilterType = 'leadAddedDate'
+            assignFollowUp,
+            dateFilterType = 'leadAddedDate',
         } = req.query
 
         const now = new Date()
@@ -466,6 +482,7 @@ const getAllLeadsData = async (req, res) => {
         const salesPersonArray = assignToSalesPerson ? assignToSalesPerson.split(",") : []
         const divisionArray = division ? division.split(",") : []
         const adminArray = adminName ? adminName.split(",") : []
+        const assignFollowUpArray = assignFollowUp ? assignFollowUp.split(",") : []
 
         if (sourceArray.length > 0) {
             baseMatch.source = {
@@ -491,7 +508,11 @@ const getAllLeadsData = async (req, res) => {
             }
         }
 
-
+        if (assignFollowUpArray.length > 0) {
+            baseMatch.assignFollowUp = {
+                $in: assignFollowUpArray
+            };
+        }
 
         const pipeline = [
             { $match: baseMatch },
@@ -777,7 +798,8 @@ const addFollowUp = async (req, res) => {
             followUpDate,
             followUpTakenVia,
             adminName,
-            followUpNotes
+            followUpNotes,
+            clientResponse
         } = req.body
 
         const lead = await Data.findOne({ uid })
@@ -838,6 +860,8 @@ const addFollowUp = async (req, res) => {
             lead.followUps[pendingIndex].followUpNotes =
                 followUpNotes
 
+            lead.followUps[pendingIndex].clientResponse = clientResponse;
+
             // lead.followUps[pendingIndex].completedDate =
             //     new Date()
 
@@ -859,6 +883,7 @@ const addFollowUp = async (req, res) => {
                 followUpTakenVia,
                 adminName,
                 followUpNotes,
+                clientResponse,
                 // completedDate: new Date(),
                 followUpGap: 0
             })
@@ -882,6 +907,46 @@ const addFollowUp = async (req, res) => {
         return res.status(500).json({
             message: "Internal Server Error"
         })
+    }
+}
+
+// Update clent response
+const updateFollowUpClientResponse = async (req, res) => {
+    try {
+        const { refNo, followUpId } = req.params
+        const { clientResponse } = req.body
+
+        const lead = await Data.findOne({ refNo })
+
+        if (!lead) {
+            return res.status(404).json({
+                success: false,
+                message: 'Lead not found'
+            })
+        }
+
+        const followUp = lead.followUps.id(followUpId)
+
+        if (!followUp) {
+            return res.status(404).json({
+                success: false,
+                message: 'Follow-up not found'
+            })
+        }
+
+        followUp.clientResponse = clientResponse
+
+        await lead.save()
+
+        return res.status(200).json({
+            success: true,
+            message: 'Client response updated successfully',
+            followUps: lead.followUps
+        })
+
+    } catch (error) {
+        console.error("Error updating client response:", error)
+        return res.status(500).json({ message: "Internal server error" })
     }
 }
 
@@ -1285,4 +1350,4 @@ const getFollowUpPriorityList = async (req, res) => {
     }
 }
 
-module.exports = { getAllCustomerIds, addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData }
+module.exports = { getAllCustomerIds, addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData, updateFollowUpClientResponse }

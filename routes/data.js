@@ -1,5 +1,5 @@
 const express = require('express')
-const { addNewLeadData, getAllLeadsData, getAllCustomerIds, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate, getGlobalSearchAllLeadsData } = require('../controllers/dataController')
+const { addNewLeadData, getAllLeadsData, getAllCustomerIds, getIndividualLeadData, addFollowUp, updateLeadData, getLeadDashboardData, getFollowUpPriorityList, updateFirstFollowupdate, getGlobalSearchAllLeadsData, updateFollowUpClientResponse } = require('../controllers/dataController')
 const authenticateToken = require('../middlewares/authMiddleware')
 const router = express.Router()
 
@@ -42,5 +42,9 @@ router.get('/all', getLeadDashboardData)
 // get followup priority list
 // GET
 router.get('/priority-followup', authenticateToken, getFollowUpPriorityList)
+
+// update client response for the client
+// PATCH 
+router.patch('/leads/:refNo/followup/:followUpId/client-response', authenticateToken, updateFollowUpClientResponse)
 
 module.exports = router

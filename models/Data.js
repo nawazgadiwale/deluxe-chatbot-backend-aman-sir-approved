@@ -127,9 +127,22 @@ const dataSchema = new mongoose.Schema({
     //     type: Number,
     //     default: 0
     // },
+    assignFollowUp: {
+        type: String,
+        enum: [
+            'Hafsa', 'Fariha', 'Wasifa', 'Aliasgar',
+            'Arif', 'Atif', 'Azmat', 'Huzaifa', 'MurtazaTS',
+            'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
+            'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
+            'Umair', 'Wajid', 'Ziyad', 'Zohaib', 'Completed'
+        ],
+        required: true
+    },
+    followUpInstruction: {
+        type: String
+    },
     followUps: [
         {
-            // follow up date are auto like if today is 22 then follow up date will be 25 (and next follow up date will be editable but default 25)
             followUpDate: {
                 type: Date,
             },
@@ -139,13 +152,17 @@ const dataSchema = new mongoose.Schema({
             },
             adminName: {
                 type: String,
-                enum: ['Hafsa', 'Fariha', 'Misba', 'Wasifa', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa', 
-                    'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
+                enum: ['Hafsa', 'Fariha', 'Misba', 'Wasifa', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+                    'Junaid', 'Mohsin', 'Muazzam', 'Nayeem', 'MurtazaTS',
                     'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
                     'Umair', 'Wajid', 'Ziyad', 'Zohaib']
             },
             followUpNotes: {
                 type: String
+            },
+            clientResponse: {
+                type: String,
+                default: ""
             },
             followUpGap: {
                 type: Number,
