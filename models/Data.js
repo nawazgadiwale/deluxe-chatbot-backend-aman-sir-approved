@@ -130,11 +130,11 @@ const dataSchema = new mongoose.Schema({
     assignFollowUp: {
         type: String,
         enum: [
-            'Hafsa', 'Fariha', 'Wasifa', 'Aliasgar',
+            'Hafsa', 'Fariha', 'Wasifa', 'Aliasgar', 
             'Arif', 'Atif', 'Azmat', 'Huzaifa', 'MurtazaTS',
             'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
             'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
-            'Umair', 'Wajid', 'Ziyad', 'Zohaib', 'Completed'
+            'Umair', 'Wajid', 'Ziyad', 'Zohaib', 'Completed', 'NA'
         ],
         required: true
     },
