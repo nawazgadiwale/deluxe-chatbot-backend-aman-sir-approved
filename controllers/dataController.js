@@ -364,6 +364,8 @@ const getAllLeadsData = async (req, res) => {
             endDate,
             assignFollowUp,
             dateFilterType = 'leadAddedDate',
+            minDealAmount,
+            maxDealAmount
         } = req.query
 
         const now = new Date()
@@ -484,6 +486,8 @@ const getAllLeadsData = async (req, res) => {
         const adminArray = adminName ? adminName.split(",") : []
         const assignFollowUpArray = assignFollowUp ? assignFollowUp.split(",") : []
 
+
+
         if (sourceArray.length > 0) {
             baseMatch.source = {
                 $in: sourceArray
@@ -512,6 +516,21 @@ const getAllLeadsData = async (req, res) => {
             baseMatch.assignFollowUp = {
                 $in: assignFollowUpArray
             };
+        }
+
+        const hasMin = minDealAmount !== undefined && minDealAmount !== "";
+        const hasMax = maxDealAmount !== undefined && maxDealAmount !== "";
+
+        if (hasMin || hasMax) {
+            baseMatch.dealAmount = {};
+
+            if (hasMin) {
+                baseMatch.dealAmount.$gte = Number(minDealAmount);
+            }
+
+            if (hasMax) {
+                baseMatch.dealAmount.$lte = Number(maxDealAmount);
+            }
         }
 
         const pipeline = [
