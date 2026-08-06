@@ -130,9 +130,9 @@ const dataSchema = new mongoose.Schema({
     assignFollowUp: {
         type: String,
         enum: [
-            'Hafsa', 'Fariha', 'Wasifa', 'Aliasgar', 
+            'Hafsa', 'Fariha', 'Wasifa', 'Sana', 'Aliasgar',
             'Arif', 'Atif', 'Azmat', 'Huzaifa', 'MurtazaTS',
-            'Junaid', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
+            'Junaid', 'Md-Kaif', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
             'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
             'Umair', 'Wajid', 'Ziyad', 'Zohaib', 'Completed', 'NA'
         ],
@@ -152,8 +152,8 @@ const dataSchema = new mongoose.Schema({
             },
             adminName: {
                 type: String,
-                enum: ['Hafsa', 'Fariha', 'Misba', 'Wasifa', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
-                    'Junaid', 'Mohsin', 'Muazzam', 'Nayeem', 'MurtazaTS',
+                enum: ['Hafsa', 'Fariha', 'Misba', 'Wasifa', 'Sana', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+                    'Junaid', 'Md-Kaif', 'Mohsin', 'Muazzam', 'Nayeem', 'MurtazaTS',
                     'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
                     'Umair', 'Wajid', 'Ziyad', 'Zohaib']
             },

@@ -1,5 +1,6 @@
 const Counter = require('../models/Counter')
 const Data = require('../models/Data')
+const { sendNewLeadMessage } = require('../services/telegramService')
 
 // next invoice number
 const getNextInvoiceNumber = async () => {
@@ -130,6 +131,11 @@ const addNewLeadData = async (req, res) => {
         })
 
         const saveLead = await newLead.save()
+
+        const leadWithUser = await Data.findById(saveLead._id)
+            .populate("createdBy", "name");
+
+        await sendNewLeadMessage(leadWithUser)
 
         res.status(200).json({
             success: true,
