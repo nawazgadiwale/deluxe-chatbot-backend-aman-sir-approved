@@ -1,5 +1,6 @@
 const Leaves = require("../models/Leaves")
 const User = require("../models/User")
+const { sendLeaveMessage } = require("../services/telegramService")
 
 const PAID_QUOTA = { UAE: 30, DEFAULT: 15 }
 
@@ -128,6 +129,11 @@ const addLeave = async (req, res) => {
         }
 
         const totalPaidLeavesTakenTillNow = totalPaidLeavetakenBefore + paidDaysToApply
+
+        const leaveWithUser = await Leaves.findById(savedLeaves[0]._id)
+            .populate("employee", "name workingCountry")
+
+        await sendLeaveMessage(leaveWithUser)
 
         return res.status(201).json({
             success: true,
