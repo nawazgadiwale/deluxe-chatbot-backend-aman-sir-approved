@@ -13,7 +13,7 @@ const telegramUsers = {
     Zohaib: '@zabiwarraich225',
     Mohsin: '@mohsinwada01',
     Junaid: '@Junaid_137',
-    Sharifa: '',
+    Sharifa: '@sharifasherrie',
     Azmat: '@AzmaturRehman',
     Nayeem: '@nayeem_momin',
     Saniya: '@SaniyaAslam',
@@ -49,7 +49,7 @@ const sendNewLeadMessage = async (lead) => {
 <b>Division:</b> ${lead.division || '-'}
 <b>Lead Source:</b> ${lead.source}
 <b>Sales Person:</b> ${lead.assignToSalesPerson}
-<b>Username:</b>${userName}
+<b>Username:</b> ${userName}
 <b>Lead Assigned By:</b> ${lead.createdBy?.name || 'Auto'}
 
 <b>⚡Powered by Fusion CRM</b>
