@@ -84,7 +84,6 @@ const sendNewLeadMessage = async (lead) => {
 <b>Phone Number:</b> ${lead.phoneNumber || "-"}
 <b>Required Items:</b>
 ${products}
-
 <b>Division:</b> ${lead.division || "-"}
 <b>Lead Source:</b> ${lead.source}
 <b>Sales Person:</b> ${lead.assignToSalesPerson}
@@ -94,14 +93,21 @@ ${products}
 <b>⚡ Powered by Fusion CRM</b>
 `;
 
+
+        const division = lead.division || "N/A"
+
         // Main Lead Group
-        await sendTelegram(LEAD_CHAT_ID, message);
+        if (division === "N/A") {
+            await sendTelegram(LEAD_CHAT_ID, message);
+        } else {
+            // Division Group (except N/A)
+            const divisionChatId = divisionChatIds[lead.division];
 
-        // Division Group (except N/A)
-        const divisionChatId = divisionChatIds[lead.division];
-
-        if (divisionChatId) {
-            await sendTelegram(divisionChatId, message);
+            if (divisionChatId) {
+                await sendTelegram(divisionChatId, message);
+            } else {
+                await sendTelegram(LEAD_CHAT_ID, message)
+            }
         }
 
     } catch (error) {
