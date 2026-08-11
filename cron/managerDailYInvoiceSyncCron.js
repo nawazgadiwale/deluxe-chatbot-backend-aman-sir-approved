@@ -83,7 +83,7 @@ const syncTodayInvoices = async () => {
 }
 
 cron.schedule(
-    "0 7 * * *",
+    "0 23 * * *",
     async () => {
         await syncTodayInvoices()
     },
