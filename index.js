@@ -71,6 +71,8 @@ app.use("/uploads", express.static(path.join(process.cwd(), 'uploads')))
 // Load CRON
 require('./cron/expiredReminderCron')
 require('./cron/emailSendReminderCron')
+require('./cron/managerDailYInvoiceSyncCron')
+require('./cron/managerDailyQuotesSyncCron')
 
 // connect to our database
 mongoose.connect(process.env.MONGO_URL)
