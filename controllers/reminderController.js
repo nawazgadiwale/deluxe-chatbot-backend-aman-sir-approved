@@ -822,10 +822,18 @@ const getAllReminderList = async (req, res) => {
             } else {
                 pipeline.push({
                     $match: {
-                        sentReminders: {
-                            $elemMatch: {
-                                reminderType: reminderType
-                            }
+                        reminderStatus: { $ne: 'completed' },
+
+                        $expr: {
+                            $eq: [
+                                {
+                                    $arrayElemAt: [
+                                        "$sentReminders.reminderType",
+                                        -1
+                                    ]
+                                },
+                                reminderType
+                            ]
                         }
                     }
                 })
@@ -1132,12 +1140,6 @@ const dashboardStats = async (req, res) => {
 
             totalReminders,
 
-            dueReminders,
-
-            moderateReminders,
-
-            criticalReminders,
-
             totalCategories,
 
             alertEnabled,
@@ -1150,35 +1152,13 @@ const dashboardStats = async (req, res) => {
 
             upcoming3MonthExpiryCount,
 
-            upcoming6MonthExpiryCount
+            upcoming6MonthExpiryCount,
+
+            reminderTypeStats
 
         ] = await Promise.all([
 
             Reminder.countDocuments(),
-
-            Reminder.countDocuments({
-                sentReminders: {
-                    $elemMatch: {
-                        reminderType: 'due'
-                    }
-                }
-            }),
-
-            Reminder.countDocuments({
-                sentReminders: {
-                    $elemMatch: {
-                        reminderType: 'moderate'
-                    }
-                }
-            }),
-
-            Reminder.countDocuments({
-                sentReminders: {
-                    $elemMatch: {
-                        reminderType: 'critical'
-                    }
-                }
-            }),
 
             Category.countDocuments(),
 
@@ -1191,6 +1171,7 @@ const dashboardStats = async (req, res) => {
             }),
 
             Reminder.countDocuments({
+                reminderStatus: { $ne: 'completed' },
                 expiryDate: {
                     $gte: today,
                     $lte: next7Days
@@ -1198,13 +1179,15 @@ const dashboardStats = async (req, res) => {
             }),
 
             Reminder.countDocuments({
+                reminderStatus: { $ne: 'completed' },
                 expiryDate: {
                     $gte: today,
                     $lte: next30Days
                 }
             }),
-
+            
             Reminder.countDocuments({
+                reminderStatus: { $ne: 'completed' },
                 expiryDate: {
                     $gte: today,
                     $lte: next90Days
@@ -1212,12 +1195,84 @@ const dashboardStats = async (req, res) => {
             }),
 
             Reminder.countDocuments({
+                reminderStatus: { $ne: 'completed' },
                 expiryDate: {
                     $gte: today,
                     $lte: next180Days
                 }
-            })
+            }),
+
+            Reminder.aggregate([
+
+                {
+                    $match: {
+                        reminderStatus: {
+                            $ne: 'completed'
+                        }
+                    }
+                },
+
+                {
+                    $project: {
+
+                        latestReminderType: {
+                            $arrayElemAt: [
+                                "$sentReminders.reminderType",
+                                -1
+                            ]
+                        }
+
+                    }
+                },
+
+                {
+                    $group: {
+
+                        _id: "$latestReminderType",
+
+                        count: {
+                            $sum: 1
+                        }
+
+                    }
+                }
+
+            ])
         ])
+
+        const reminderTypeCounts = {
+
+            due: 0,
+
+            moderate: 0,
+
+            critical: 0
+
+        }
+
+
+        // SET COUNTS
+        reminderTypeStats.forEach(item => {
+
+            if (item._id === 'due') {
+
+                reminderTypeCounts.due = item.count
+
+            }
+
+            if (item._id === 'moderate') {
+
+                reminderTypeCounts.moderate = item.count
+
+            }
+
+            if (item._id === 'critical') {
+
+                reminderTypeCounts.critical = item.count
+
+            }
+
+        })
 
         return res.status(200).json({
 
@@ -1241,11 +1296,15 @@ const dashboardStats = async (req, res) => {
 
                 reminderTypes: {
 
-                    due: dueReminders,
+                    due:
+                        reminderTypeCounts.due,
 
-                    moderate: moderateReminders,
+                    moderate:
+                        reminderTypeCounts.moderate,
 
-                    critical: criticalReminders
+                    critical:
+                        reminderTypeCounts.critical
+
                 },
 
                 expiryStats: {

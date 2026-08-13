@@ -37,7 +37,7 @@ router.get('/reminder/:refNumber',authenticateToken, getIndividualReminder)
 
 // get all reminder list
 // GET
-router.get('/reminders',authenticateToken, getAllReminderList)
+router.get('/reminders', getAllReminderList)
 
 // delete reminder
 // DELETE
