@@ -73,6 +73,7 @@ require('./cron/expiredReminderCron')
 require('./cron/emailSendReminderCron')
 require('./cron/managerDailYInvoiceSyncCron')
 require('./cron/managerDailyQuotesSyncCron')
+require('./cron/leaveCron')
 
 // connect to our database
 mongoose.connect(process.env.MONGO_URL)

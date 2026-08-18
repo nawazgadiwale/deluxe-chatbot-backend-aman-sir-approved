@@ -26,35 +26,139 @@ const getCycleWindow = (joinDate, referenceDate) => {
 const getPaidQuota = (employee) =>
     employee.workingCountry === "UAE" ? PAID_QUOTA.UAE : PAID_QUOTA.DEFAULT
 
+const calculateLeaveDays = (fromDate, toDate, type) => {
+    if (type === 'Half') {
+        return 0.5
+    }
+
+    const start = new Date(fromDate)
+    const end = new Date(toDate)
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return 0
+    }
+
+    start.setUTCHours(0, 0, 0, 0)
+    end.setUTCHours(0, 0, 0, 0)
+
+    if (start > end) {
+        return 0
+    }
+
+    let totalDays = 0
+
+    const current = new Date(start)
+
+    while (current <= end) {
+        const dayOfWeek = current.getUTCDay()
+
+        if (dayOfWeek !== 0) {
+            totalDays += 1
+        }
+
+        current.setUTCDate(current.getUTCDate() + 1)
+    }
+
+    return totalDays
+}
+
 // Apply for leave, automatically splitting into Paid/Unpaid based on remaining quota
 const addLeave = async (req, res) => {
     try {
-        const { createdBy, employeeId, fromDate, toDate, leaveDays, type } = req.body
+        const {
+            createdBy,
+            employeeId,
+            fromDate,
+            toDate,
+            type,
+            halfDay
+        } = req.body
 
-        const requestedDays = parseFloat(leaveDays)
-        if (isNaN(requestedDays) || requestedDays <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid fromDate/toDate"
-            })
-        }
-
-        if (!['Half', 'Full'].includes(type)) {
+        // Validate leave type first
+        if (!["Half", "Full"].includes(type)) {
             return res.status(400).json({
                 success: false,
                 message: "type must be 'Half' or 'Full'"
             })
         }
 
-        if (type === 'Half' && requestedDays !== 0.5) {
+        if (type === 'Half') {
+            if (!['First', 'Second'].includes(halfDay)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'HalfDay must be "First" or "Second" when type is "Half"'
+                })
+            }
+        } else {
+            if (halfDay !== undefined && halfDay !== null) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'HalfDay should only be provided for Half day leave'
+                })
+            }
+        }
+
+        // Validate dates
+        const startDate = new Date(fromDate)
+        const endDate = new Date(toDate)
+
+        if (
+            isNaN(startDate.getTime()) ||
+            isNaN(endDate.getTime())
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Half day leave must have leaveDays = 0.5"
+                message: "Invalid fromDate or toDate"
             })
         }
 
-        // Fetch the employee details to check their country
+        if (startDate > endDate) {
+            return res.status(400).json({
+                success: false,
+                message: "fromDate cannot be greater than toDate"
+            })
+        }
+
+        if (type === 'Half') {
+            const startUTC = new Date(startDate)
+            const endUTC = new Date(endDate)
+
+            startUTC.setUTCHours(0, 0, 0, 0)
+            endUTC.setUTCHours(0, 0, 0, 0)
+
+            if (startUTC.getTime() !== endUTC.getTime()) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Half day leave can only be applied for one day'
+                })
+            }
+
+            if (startUTC.getUTCDay() === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Leave cannot be applied on Sunday'
+                })
+            }
+        }
+
+        // Calculate leave days from dates
+        // Do NOT trust leaveDays coming from frontend
+        const requestedDays = calculateLeaveDays(
+            fromDate,
+            toDate,
+            type
+        )
+
+        if (requestedDays <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Selected dates contain no valid leave days."
+            })
+        }
+
+        // Fetch employee
         const employee = await User.findById(employeeId)
+
         if (!employee) {
             return res.status(404).json({
                 success: false,
@@ -69,38 +173,65 @@ const addLeave = async (req, res) => {
             })
         }
 
-        // Total paid leave quota based on country
+        // Total paid leave quota
         const totalPaidQuota = getPaidQuota(employee)
 
-        // Current leave cycle window, based on joining-date anniversary
+        // Current leave cycle
         const joinDate = new Date(employee.joiningDate)
         const leaveStartDate = new Date(fromDate)
-        const { cycleStart, cycleEnd } = getCycleWindow(joinDate, leaveStartDate)
 
-        // Paid leaves already taken within this cycle
+        const {
+            cycleStart,
+            cycleEnd
+        } = getCycleWindow(
+            joinDate,
+            leaveStartDate
+        )
+
+        // Paid leaves already taken in current cycle
         const takenLeaves = await Leaves.find({
             employee: employeeId,
-            leaveCategory: 'Paid',
-            fromDate: { $gte: cycleStart, $lte: cycleEnd }
+            leaveCategory: "Paid",
+            fromDate: {
+                $gte: cycleStart,
+                $lte: cycleEnd
+            }
         })
 
-        const totalPaidLeavetakenBefore = takenLeaves.reduce((sum, leave) => sum + leave.leaveDays, 0)
+        const totalPaidLeavetakenBefore =
+            takenLeaves.reduce(
+                (sum, leave) => sum + Number(leave.leaveDays || 0),
+                0
+            )
 
-        const remainingPaidBalance = Math.max(0, totalPaidQuota - totalPaidLeavetakenBefore)
+        // Remaining paid balance
+        const remainingPaidBalance = Math.max(
+            0,
+            totalPaidQuota - totalPaidLeavetakenBefore
+        )
 
-        // Split requested days between Paid and Unpaid based on remaining balance
-        let paidDaysToApply = 0;
-        let unpaidDaysToApply = 0;
+        // Split requested leave
+        let paidDaysToApply = 0
+        let unpaidDaysToApply = 0
 
         if (remainingPaidBalance >= requestedDays) {
             paidDaysToApply = requestedDays
         } else {
             paidDaysToApply = remainingPaidBalance
-            unpaidDaysToApply = requestedDays - remainingPaidBalance
+            unpaidDaysToApply =
+                requestedDays - remainingPaidBalance
         }
 
         const savedLeaves = []
 
+        const savedHalfDay =
+            type === "Half"
+                ? halfDay
+                : null
+
+        // -----------------------------
+        // PAID LEAVE
+        // -----------------------------
         if (paidDaysToApply > 0) {
             const paidLeave = new Leaves({
                 createdBy,
@@ -108,13 +239,23 @@ const addLeave = async (req, res) => {
                 fromDate,
                 toDate,
                 leaveDays: paidDaysToApply,
-                leaveCategory: 'Paid',
-                // type reflects whether THIS record is half day, not whether it was quota-split
-                type: paidDaysToApply === 0.5 ? 'Half' : 'Full'
+                leaveCategory: "Paid",
+                type: paidDaysToApply === 0.5
+                    ? "Half"
+                    : "Full",
+                halfDay: paidDaysToApply === 0.5
+                    ? savedHalfDay
+                    : null
             })
-            savedLeaves.push(await paidLeave.save())
+
+            savedLeaves.push(
+                await paidLeave.save()
+            )
         }
 
+        // -----------------------------
+        // UNPAID LEAVE
+        // -----------------------------
         if (unpaidDaysToApply > 0) {
             const unpaidLeave = new Leaves({
                 createdBy,
@@ -122,39 +263,83 @@ const addLeave = async (req, res) => {
                 fromDate,
                 toDate,
                 leaveDays: unpaidDaysToApply,
-                leaveCategory: 'UnPaid',
-                type: unpaidDaysToApply === 0.5 ? 'Half' : 'Full'
+                leaveCategory: "UnPaid",
+                type: unpaidDaysToApply === 0.5
+                    ? "Half"
+                    : "Full",
+                halfDay: unpaidDaysToApply === 0.5
+                    ? savedHalfDay
+                    : null
             })
-            savedLeaves.push(await unpaidLeave.save())
+
+            savedLeaves.push(
+                await unpaidLeave.save()
+            )
         }
 
-        const totalPaidLeavesTakenTillNow = totalPaidLeavetakenBefore + paidDaysToApply
+        // Total paid leaves after this request
+        const totalPaidLeavesTakenTillNow =
+            totalPaidLeavetakenBefore +
+            paidDaysToApply
 
-        const leaveWithUser = await Leaves.findById(savedLeaves[0]._id)
-            .populate("employee", "name workingCountry")
+        // Telegram message
+        const leaveWithUser = await Leaves
+            .findById(savedLeaves[0]._id)
+            .populate(
+                "employee",
+                "name workingCountry"
+            )
 
-        await sendLeaveMessage(leaveWithUser)
+        // await sendLeaveMessage(leaveWithUser)
 
+        // Response
         return res.status(201).json({
             success: true,
             message: "Leave added successfully!",
+
             cycle: {
-                currentCycleStart: cycleStart.toISOString().split('T')[0],
-                currentCycleEnd: cycleEnd.toISOString().split('T')[0]
+                currentCycleStart:
+                    cycleStart
+                        .toISOString()
+                        .split("T")[0],
+
+                currentCycleEnd:
+                    cycleEnd
+                        .toISOString()
+                        .split("T")[0]
             },
+
             summary: {
                 totalRequested: requestedDays,
-                allocatedPaid: paidDaysToApply,
-                allocatedUnpaid: unpaidDaysToApply,
+
+                allocatedPaid:
+                    paidDaysToApply,
+
+                allocatedUnpaid:
+                    unpaidDaysToApply,
+
                 totalPaidQuota,
+
                 totalPaidLeavesTakenTillNow,
-                remainingPaidBalance: Math.max(0, totalPaidQuota - totalPaidLeavesTakenTillNow)
+
+                remainingPaidBalance:
+                    Math.max(
+                        0,
+                        totalPaidQuota -
+                        totalPaidLeavesTakenTillNow
+                    )
             },
+
             details: savedLeaves
         })
+
     } catch (error) {
-        console.error("Internal Server Error", error)
-        res.status(500).json({
+        console.error(
+            "Internal Server Error",
+            error
+        )
+
+        return res.status(500).json({
             success: false,
             message: "Internal Server Error"
         })
@@ -261,6 +446,7 @@ const getLeavesByEmployee = async (req, res) => {
             leaveCategory: leave.leaveCategory,
             leaveDays: leave.leaveDays,
             type: leave.type,
+            halfDay: leave.halfDay,
             fromDate: leave.fromDate.toISOString().split("T")[0],
             toDate: leave.toDate.toISOString().split("T")[0],
             createdBy: leave.createdBy?.name || null
@@ -273,6 +459,7 @@ const getLeavesByEmployee = async (req, res) => {
             leaveCategory: leave.leaveCategory,
             leaveDays: leave.leaveDays,
             type: leave.type,
+            halfDay: leave.halfDay,
             fromDate: leave.fromDate.toISOString().split("T")[0],
             toDate: leave.toDate.toISOString().split("T")[0],
             createdBy: leave.createdBy?.name || null
@@ -390,10 +577,12 @@ const getLeavesByYear = async (req, res) => {
 const updateLeave = async (req, res) => {
     try {
         const { leaveId } = req.params
+
         const {
             fromDate,
             toDate,
-            type
+            type,
+            halfDay
         } = req.body
 
         const leave = await Leaves.findById(leaveId)
@@ -405,7 +594,6 @@ const updateLeave = async (req, res) => {
             })
         }
 
-        // Prevent editing if this leave is part of a split request
         const splitLeaves = await Leaves.find({
             employee: leave.employee,
             fromDate: leave.fromDate,
@@ -415,7 +603,8 @@ const updateLeave = async (req, res) => {
         if (splitLeaves.length > 1) {
             return res.status(400).json({
                 success: false,
-                message: "This leave was split into Paid/Paid. Please delete and recreate."
+                message:
+                    "This leave was split into Paid/UnPaid. Please delete and recreate."
             })
         }
 
@@ -426,17 +615,45 @@ const updateLeave = async (req, res) => {
             })
         }
 
-        if (type === "Half" && leaveDays !== 0.5) {
-            return res.status(400).json({
-                success: false,
-                message: "Half day must have leaveDays = 0.5"
-            })
+        if (type === "Half") {
+
+            if (!["First", "Second"].includes(halfDay)) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "halfDay must be 'First' or 'Second' for Half day leave"
+                })
+            }
+
+        } else {
+
+            // Full day should not have First / Second
+            if (
+                halfDay !== undefined &&
+                halfDay !== null &&
+                halfDay !== ""
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "halfDay should only be provided for Half day leave"
+                })
+            }
         }
 
         const from = new Date(fromDate)
-        const to = new Date(type === "Half" ? fromDate : toDate)
 
-        if (isNaN(from) || isNaN(to)) {
+        const to = new Date(
+            type === "Half"
+                ? fromDate
+                : toDate
+        )
+
+
+        if (
+            isNaN(from.getTime()) ||
+            isNaN(to.getTime())
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid date(s) supplied"
@@ -446,35 +663,106 @@ const updateLeave = async (req, res) => {
         if (to < from) {
             return res.status(400).json({
                 success: false,
-                message: "To date cannot be before from date"
+                message:
+                    "To date cannot be before from date"
             })
         }
 
-        // Recompute leaveDays server-side — never trust the client's number
-        const leaveDays = type === "Half"
-            ? 0.5
-            : Math.round((to - from) / (1000 * 60 * 60 * 24)) + 1
+        if (type === "Half") {
+
+            const fromDay = new Date(from)
+            const toDay = new Date(to)
+
+            fromDay.setUTCHours(0, 0, 0, 0)
+            toDay.setUTCHours(0, 0, 0, 0)
+
+            if (
+                fromDay.getTime() !==
+                toDay.getTime()
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Half day leave can only be applied for one date"
+                })
+            }
+
+
+            // Sunday check
+            if (fromDay.getUTCDay() === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Leave cannot be applied on Sunday"
+                })
+            }
+        }
+
+        let leaveDays = 0
+
+
+        if (type === "Half") {
+
+            leaveDays = 0.5
+
+        } else {
+
+            const start = new Date(from)
+            const end = new Date(to)
+
+            start.setUTCHours(0, 0, 0, 0)
+            end.setUTCHours(0, 0, 0, 0)
+
+            let current = new Date(start)
+
+            while (current <= end) {
+
+                const dayOfWeek =
+                    current.getUTCDay()
+
+                // Sunday = 0
+                if (dayOfWeek !== 0) {
+                    leaveDays += 1
+                }
+
+                current.setUTCDate(
+                    current.getUTCDate() + 1
+                )
+            }
+        }
 
 
         if (leaveDays <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid leave days"
+                message:
+                    "Selected dates contain no valid leave days"
             })
         }
 
-        // Block overlap with this employee's other leave records
         const overlapping = await Leaves.findOne({
-            _id: { $ne: leave._id },
+            _id: {
+                $ne: leave._id
+            },
+
             employee: leave.employee,
-            fromDate: { $lte: to },
-            toDate: { $gte: from }
+
+            fromDate: {
+                $lte: to
+            },
+
+            toDate: {
+                $gte: from
+            }
         })
 
+
         if (overlapping) {
+
             return res.status(400).json({
                 success: false,
-                message: "This date range overlaps with an existing leave record"
+                message:
+                    "This date range overlaps with an existing leave record"
             })
         }
 
@@ -483,18 +771,37 @@ const updateLeave = async (req, res) => {
         leave.leaveDays = leaveDays
         leave.type = type
 
+        // NEW
+        leave.halfDay =
+            type === "Half"
+                ? halfDay
+                : null
+
+
         await leave.save()
 
         return res.status(200).json({
+
             success: true,
-            message: "Leave updated successfully",
+
+            message:
+                "Leave updated successfully",
+
             data: leave
         })
+
+
     } catch (error) {
-        console.error("Error while updating leave:", error)
+
+        console.error(
+            "Error while updating leave:",
+            error
+        )
+
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error"
+            message:
+                "Internal Server Error"
         })
     }
 }

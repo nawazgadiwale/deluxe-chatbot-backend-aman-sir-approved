@@ -52,7 +52,9 @@ const dataSchema = new mongoose.Schema({
             'Social Media-(DLX)',
             'Exprintmart-(WA)',
             'Exprintmart-(Email)',
-            'Social Media-(Exprint)'
+            'Social Media-(Exprint)',
+            'Exprintmart-(WebChat)',
+            'DLX-(WebChat)'
         ],
         required: true,
     },
@@ -130,7 +132,7 @@ const dataSchema = new mongoose.Schema({
     assignFollowUp: {
         type: String,
         enum: [
-            'Hafsa', 'Fariha', 'Wasifa', 'Sana', 'Aliasgar',
+            'Hafsa', 'Wasifa', 'Sana', 'Aliasgar',
             'Arif', 'Atif', 'Azmat', 'Huzaifa', 'MurtazaTS',
             'Junaid', 'Md-Kaif', 'Misba', 'Mohsin', 'Muazzam', 'Nayeem',
             'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
@@ -140,6 +142,10 @@ const dataSchema = new mongoose.Schema({
     },
     followUpInstruction: {
         type: String
+    },
+    productionStatus: {
+        type: Boolean,
+        default: false
     },
     followUps: [
         {
@@ -152,7 +158,7 @@ const dataSchema = new mongoose.Schema({
             },
             adminName: {
                 type: String,
-                enum: ['Hafsa', 'Fariha', 'Misba', 'Wasifa', 'Sana', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
+                enum: ['Hafsa', 'Misba', 'Wasifa', 'Sana', 'Aliasgar', 'Arif', 'Atif', 'Azmat', 'Huzaifa',
                     'Junaid', 'Md-Kaif', 'Mohsin', 'Muazzam', 'Nayeem', 'MurtazaTS',
                     'Nishan', 'Rizwan', 'Saniya', 'Salman', 'Sharifa',
                     'Umair', 'Wajid', 'Ziyad', 'Zohaib']

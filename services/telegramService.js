@@ -126,10 +126,18 @@ const sendLeaveMessage = async (leave) => {
         let message = "";
 
         if (fromDate === toDate) {
+            const leaveDuration =
+                leave.type === "Full"
+                    ? 'Full Day'
+                    : leave.halfDay === 'First'
+                        ? 'First Half'
+                        : leave.halfDay === "Second"
+                            ? 'Second Half'
+                            : 'Half Day'
 
             message =
                 `<b>📅 Employee Leave Notification</b>\n\n` +
-                `${flag} <b>${leave.employee?.name}</b> is on <b>${leave.type === "Half" ? "Half Day" : "Full Day"}</b> leave on <b>${fromDate}</b>.\n\n` +
+                `${flag} <b>${leave.employee?.name}</b> is on <b>${leaveDuration}</b> leave on <b>${fromDate}</b>.\n\n` +
                 `<b>⚡ Powered by Fusion CRM</b>`;
 
         } else {
@@ -148,7 +156,77 @@ const sendLeaveMessage = async (leave) => {
     }
 };
 
+const sendDailyLeaveReminder = async (leaves) => {
+    try {
+        if (!leaves || leaves.length === 0) {
+            return
+        }
+
+        let message =
+            `<b>📅 Today's Employee Leave Notification</b>\n\n`;
+        leaves.forEach((leave) => {
+            const flag = countryFlags[
+                leave.employee?.workingCountry
+            ] || "🏳️"
+
+            const fromDate = new Date(leave.fromDate).toLocaleDateString(
+                "en-GB",
+                {
+                    timeZone: "Asia/Kolkata"
+                }
+            )
+
+            const toDate = new Date(leave.toDate).toLocaleDateString(
+                "en-GB",
+                {
+                    timeZone: 'Asia/Kolkata'
+                }
+            )
+
+            let leaveType = 'Full Day'
+
+            if (leave.type === 'Half') {
+                leaveType =
+                    leave.halfDay === 'First'
+                        ? 'First Half'
+                        : 'Second Half'
+            }
+
+            message +=
+                `${flag} <b>${leave.employee?.name}</b>\n`
+
+            if (leave.type === 'Half') {
+                message +=
+                    `📅 <b>Date:</b> ${fromDate}\n` +
+                    `🕐 <b>Leave:</b> ${leaveType}\n`
+            } else if (fromDate === toDate) {
+                message +=
+                    `📅 <b>Date:</b> ${fromDate}\n` +
+                    `🕐 <b>Leave:</b> Full Day\n`
+            } else {
+                message +=
+                    `📅 <b>From:</b> ${fromDate}\n\n` +
+                    `📅 <b>To:</b> ${toDate}\n\n` +
+                    `🕐 <b>Leave:</b> Full Day\n\n`
+            }
+
+        })
+
+        message +=
+            `<b>⚡ Powered by Fusion CRM</b>`
+
+
+        await sendTelegram(
+            LEAVE_CHAT_ID,
+            message
+        )
+    } catch (error) {
+        console.error("Leave Notification Error", error);
+    }
+}
+
 module.exports = {
     sendNewLeadMessage,
-    sendLeaveMessage
+    sendLeaveMessage,
+    sendDailyLeaveReminder
 };

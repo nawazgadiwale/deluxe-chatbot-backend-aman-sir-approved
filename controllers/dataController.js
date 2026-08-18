@@ -145,7 +145,8 @@ const addNewLeadData = async (req, res) => {
 
     } catch (error) {
         console.error('Error creating lead', error.message)
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
@@ -296,7 +297,8 @@ const updateLeadData = async (req, res) => {
         })
     } catch (error) {
         console.error("Error updating lead:", error.message)
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
@@ -346,7 +348,8 @@ const updateFirstFollowupdate = async (req, res) => {
     } catch (error) {
         console.error("Error updating first followup date:", error.message)
 
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
@@ -501,8 +504,36 @@ const getAllLeadsData = async (req, res) => {
         }
 
         if (dealStatusArray.length > 0) {
-            baseMatch.dealStatus = {
-                $in: dealStatusArray
+
+            const hasInProduction = dealStatusArray.includes("In-Production");
+
+            const normalStatuses = dealStatusArray.filter(
+                status => status !== "In-Production"
+            )
+
+            const statusConditions = []
+
+            if (normalStatuses.length > 0) {
+                statusConditions.push({
+                    dealStatus: {
+                        $in: normalStatuses
+                    }
+                })
+            }
+
+            if (hasInProduction) {
+                statusConditions.push({
+                    dealStatus: "Won",
+                    productionStatus: true
+                })
+            }
+
+            if (statusConditions.length === 1) {
+                Object.assign(baseMatch, statusConditions[0])
+            }
+
+            else if (statusConditions.length > 1) {
+                baseMatch.$or = statusConditions
             }
         }
 
@@ -930,6 +961,7 @@ const addFollowUp = async (req, res) => {
         )
 
         return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
@@ -1124,7 +1156,8 @@ const getLeadDashboardData = async (req, res) => {
             error.message
         )
 
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
@@ -1369,10 +1402,53 @@ const getFollowUpPriorityList = async (req, res) => {
             error.message
         )
 
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
             message: "Internal Server Error"
         })
     }
 }
 
-module.exports = { getAllCustomerIds, addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData, updateFollowUpClientResponse }
+const toggleProductionStatus = async (req, res) => {
+    try {
+        const { uid } = req.params
+
+        const lead = await Data.findOne({ uid })
+
+        if (!lead) {
+            return res.status(404).json({
+                message: "Lead not found"
+            })
+        }
+
+        if (lead.dealStatus !== "Won") {
+            return res.status(400).json({
+                success: false,
+                message: "Only Won leads can change production status"
+            })
+        }
+
+        lead.productionStatus = !lead.productionStatus
+
+        await lead.save()
+
+        return res.status(200).json({
+            success: true,
+            message: lead.productionStatus
+                ? "Lead moved to In-Production"
+                : "Lead removed from In-Production",
+            productionStatus: lead.productionStatus
+        })
+    } catch (error) {
+        console.error("Error updating production status:",
+            error.message
+        )
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
+
+module.exports = { getAllCustomerIds, addNewLeadData, updateLeadData, updateFirstFollowupdate, getAllLeadsData, getIndividualLeadData, addFollowUp, getLeadDashboardData, getFollowUpPriorityList, getGlobalSearchAllLeadsData, updateFollowUpClientResponse, toggleProductionStatus }
