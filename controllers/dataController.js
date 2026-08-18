@@ -309,8 +309,6 @@ const updateFirstFollowupdate = async (req, res) => {
     try {
         const { uid } = req.params
         const { followUpDate } = req.body
-        console.log(req.body)
-        console.log(typeof req.body)
         if (!followUpDate) {
             return res.status(400).json({
                 message: "Follow-up date is required"

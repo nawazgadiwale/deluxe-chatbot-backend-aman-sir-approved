@@ -1,15 +1,11 @@
 const cron = require('node-cron')
 const Reminder = require('../models/Reminder')
 const sendEmail = require('../services/mailService')
-// const sendWhatsAppMessage = require('../services/whatsappService')
 
 cron.schedule(
     '30 13 * * *',
     async () => {
         try {
-
-            // console.log('Reminder CRON Started')
-
             const reminders = await Reminder.find({
                 reminderStatus: {
                     $nin: ['completed', 'canceled']
@@ -127,40 +123,7 @@ cron.schedule(
                                     </p>
                                 `
                             })
-
-                            // if (mailSent.success) {
-                            //     console.log(
-                            //         `Reminder mail sent to ${user.email}`
-                            //     )
-                            // } else {
-                            //     console.log(
-                            //         `Reminder mail failed for ${user.email}`
-                            //     )
-                            // }
-                        }
-
-                        // OPTIONAL WHATSAPP
-                        /*
-                        const whatsappNumbers = [
-                            process.env.WHATSAPP_ADMIN_1,
-                            process.env.WHATSAPP_ADMIN_2
-                        ]
-
-                        for (const phone of whatsappNumbers) {
-
-                            await sendWhatsAppMessage({
-
-                                phone,
-
-                                message:
-                                    `${type.toUpperCase()} ALERT\n\n` +
-                                    `Ref No: ${reminder.refNumber}\n` +
-                                    `Employee: ${reminder.employee?.name}\n` +
-                                    `Category: ${reminder.category?.categoryName}\n` +
-                                    `Expiry In: ${daysLeft} day(s)`
-                            })
-                        }
-                        */
+                        }            
 
                         // SAVE SENT REMINDER HISTORY
                         reminder.sentReminders.push({
@@ -170,19 +133,10 @@ cron.schedule(
                         })
 
                         await reminder.save()
-
-                        // console.log(
-                        //     `${type} reminder sent for Ref ${reminder.refNumber}`
-                        // )
+                   
                     }
                 }
             }
-
-            // console.log(
-            //     `${overdueCount} reminders marked as overdue`
-            // )
-
-            // console.log('Reminder CRON Completed')
 
         } catch (error) {
 

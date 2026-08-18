@@ -12,7 +12,6 @@ const syncTodayInvoices = async () => {
         const invoices = [...ddaInvoices, ...stationeryInvoices]
 
         if (invoices.length === 0) {
-            console.log("No invoices found for today.")
             return
         }
 
@@ -22,9 +21,6 @@ const syncTodayInvoices = async () => {
             const salesQuote = invoice?.salesQuote
 
             if (!salesQuote) {
-                console.log(
-                    `Skipping invoice ${invoice?.reference} - no salesQuote`
-                )
                 continue
             }
 

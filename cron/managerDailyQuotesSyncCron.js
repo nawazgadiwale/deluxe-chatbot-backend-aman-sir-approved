@@ -623,7 +623,6 @@ const pickTargetLead = (leads = []) => {
 
 const syncTodayQuotes = async () => {
     try {
-        console.log("Starting today's quotes sync...")
 
         const [ddaQuotes, stationeryQuotes] = await Promise.all([
             managerSyncDailyQuotesOfDDA(),
@@ -724,13 +723,6 @@ const syncTodayQuotes = async () => {
                     continue
                 }
 
-                // if (matchingLeads.length > 1) {
-                //     console.log(
-                //         `Customer ${customer} has ${matchingLeads.length} eligible leads - `
-                //         + `using most recent (id: ${targetLead._id}, created: ${targetLead.createdAt || targetLead.leadAddedDate})`
-                //     )
-                // }
-
                 const result =
                     await Data.updateOne(
                         {
@@ -758,9 +750,6 @@ const syncTodayQuotes = async () => {
                 matched += result.matchedCount || 0
                 modified += result.modifiedCount || 0
 
-                // console.log(
-                //     `Quote ${reference} -> ${customer} -> ${result.modifiedCount} lead(s) updated`
-                // )
             }
             catch (quoteError) {
                 failed++

@@ -66,10 +66,6 @@ const sendEmail = async ({
             html
         })
 
-        console.log(
-            `Mail sent to ${to}: ${info.messageId}`
-        )
-
         return {
             success: true,
             messageId: info.messageId
