@@ -290,7 +290,7 @@ const addLeave = async (req, res) => {
                 "name workingCountry"
             )
 
-        // await sendLeaveMessage(leaveWithUser)
+        await sendLeaveMessage(leaveWithUser)
 
         // Response
         return res.status(201).json({
