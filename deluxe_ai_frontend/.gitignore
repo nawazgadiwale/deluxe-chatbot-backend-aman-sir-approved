@@ -1,8 +1,13 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# ============================================================
+# DEPENDENCIES
+# ============================================================
+
+node_modules/
+**/node_modules/
+
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +15,165 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
 
-# next.js
-/.next/
-/out/
+# ============================================================
+# TESTING / COVERAGE
+# ============================================================
 
-# production
-/build
+coverage/
+**/coverage/
 
-# misc
-.DS_Store
-*.pem
+.nyc_output/
 
-# debug
+
+# ============================================================
+# NEXT.JS
+# ============================================================
+
+.next/
+**/.next/
+
+out/
+**/out/
+
+
+# ============================================================
+# PRODUCTION / BUILD
+# ============================================================
+
+build/
+**/build/
+
+dist/
+**/dist/
+
+
+# ============================================================
+# ENVIRONMENT VARIABLES / SECRETS
+# ============================================================
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Allow example environment files
+!.env.example
+!**/.env.example
+
+
+# ============================================================
+# VERCEL
+# ============================================================
+
+.vercel/
+**/.vercel/
+
+
+# ============================================================
+# TYPESCRIPT
+# ============================================================
+
+*.tsbuildinfo
+
+# Next.js generated TypeScript file
+next-env.d.ts
+
+
+# ============================================================
+# DEBUG / LOG FILES
+# ============================================================
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+*.log
+logs/
+**/logs/
 
-# vercel
-.vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ============================================================
+# OS / SYSTEM FILES
+# ============================================================
+
+.DS_Store
+Thumbs.db
+
+
+# ============================================================
+# CERTIFICATES / PRIVATE KEYS
+# ============================================================
+
+*.pem
+*.key
+*.crt
+
+
+# ============================================================
+# IDE / EDITOR
+# ============================================================
+
+.vscode/
+.idea/
+
+# VS Code settings can be committed selectively if needed
+!.vscode/extensions.json
+
+
+# ============================================================
+# TEMPORARY FILES
+# ============================================================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+
+
+# ============================================================
+# UPLOADS / GENERATED FILES
+# ============================================================
+
+# Uncomment these if uploads are generated/private:
+# uploads/
+# **/uploads/
+
+
+# ============================================================
+# CACHE
+# ============================================================
+
+.cache/
+.parcel-cache/
+.turbo/
+
+
+# ============================================================
+# PYTHON CACHE (if used anywhere in the backend)
+# ============================================================
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+
+# ============================================================
+# LOCAL DATABASE / DEVELOPMENT FILES
+# ============================================================
+
+*.sqlite
+*.sqlite3
+*.db
+
+
+# ============================================================
+# AI / VECTOR STORE GENERATED FILES
+# ============================================================
+
+# Uncomment if these are generated locally rather than source data:
+# faiss_index/
+# vector_store/
+# chroma/
+# qdrant_storage/
