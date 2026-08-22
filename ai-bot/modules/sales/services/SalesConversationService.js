@@ -16,60 +16,40 @@ export default class SalesConversationService {
 
   async generate(context = {}, decision = {}) {
     try {
-      /*
-       * =====================================================
-       * Prompt Context
-       * =====================================================
-       */
-
       const promptContext = {
+        a: decision.type,
         ...context,
-        decision,
       };
 
       const systemPrompt = SalesConversationPrompt({
         context: promptContext,
       });
-      console.log("Conversation Context");
-      console.dir(context, { depth: null });
 
-      console.log("Decision");
-      console.dir(decision, { depth: null });
       const response = await this.llm.invokeStructured({
         systemPrompt,
-
-        userMessage:
-          "Generate the next response as Deluxe Printing's AI Sales Consultant.",
-
+        userMessage: "Generate the next response.",
         schema: {
           type: "object",
-
           properties: {
             message: {
               type: "string",
             },
           },
-
           required: ["message"],
         },
       });
 
       return {
         message: response?.message?.trim() ?? "",
-
-        interaction: decision.actions?.length > 0 ? "BUTTONS" : "MESSAGE",
-
+        interaction: decision.actions?.length ? "BUTTONS" : "MESSAGE",
         actions: decision.actions ?? [],
-
         sections: decision.sections ?? [],
       };
     } catch (error) {
       console.error("SalesConversationService:", error);
-
       return this.generateDeterministic(context, decision);
     }
   }
-
   /*
    * =====================================================
    * Deterministic Conversation

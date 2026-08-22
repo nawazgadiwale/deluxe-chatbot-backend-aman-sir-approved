@@ -2,203 +2,168 @@ import DecisionTypes from "../helpers/DecisionTypes.js";
 
 export default class ConversationContextBuilder {
   build(requirement = {}, decision = {}, customerMessage = "") {
-    const context = decision.context ?? {};
+    const c = decision.context ?? {};
+    const base = {
+      a: decision.type,
+      m: customerMessage,
+    };
 
     switch (decision.type) {
       case DecisionTypes.SELECT_PRODUCT:
         return {
-          action: DecisionTypes.SELECT_PRODUCT,
-          customerMessage,
-          products: (context.products ?? []).map((product) => ({
-            id: product.id,
-            name: product.name,
+          ...base,
+          products: (c.products ?? []).map((p) => ({
+            i: p.id,
+            n: p.name,
           })),
         };
 
       case DecisionTypes.RECOMMEND_SELECTION:
         return {
-          action: DecisionTypes.RECOMMEND_SELECTION,
-          customerMessage,
-          product: this.product(context.product),
-          recommendation: this.recommendation(context.recommendation),
+          ...base,
+          p: this.product(c.product),
+          r: this.recommendation(c.recommendation),
         };
 
       case DecisionTypes.SELECT_SELECTION:
         return {
-          action: DecisionTypes.SELECT_SELECTION,
-          customerMessage,
-          product: this.product(context.product),
-          selectionLabel: context.selection?.label ?? null,
-          options: (context.options ?? []).map((option) => ({
-            id: option.id,
-            name: option.name,
-            badge: option.badge ?? null,
-            startingPrice: option.startingPrice ?? null,
+          ...base,
+          p: this.product(c.product),
+          label: c.selection?.label ?? null,
+          options: (c.options ?? []).map((o) => ({
+            i: o.id,
+            n: o.name,
+            b: o.badge ?? null,
+            price: o.startingPrice ?? null,
           })),
         };
 
       case DecisionTypes.COLLECT_PRODUCT_FIELD:
         return {
-          action: DecisionTypes.COLLECT_PRODUCT_FIELD,
-          customerMessage,
-          product: this.product(context.product),
-          field: this.field(context.field),
+          ...base,
+          p: this.product(c.product),
+          field: this.field(c.field),
         };
 
       case DecisionTypes.COLLECT_REQUIREMENT:
         return {
-          action: DecisionTypes.COLLECT_REQUIREMENT,
-          customerMessage,
-          product: this.product(context.product),
-          requirement: this.requirement(context.requirement),
+          ...base,
+          p: this.product(c.product),
+          requirement: this.requirement(c.requirement),
         };
 
       case DecisionTypes.SELECT_ADDONS:
         return {
-          action: DecisionTypes.SELECT_ADDONS,
-          customerMessage,
-          product: this.product(context.product),
-          addons: (context.addons?.options ?? []).map((addon) => ({
-            id: addon.id,
-            name: addon.name,
+          ...base,
+          p: this.product(c.product),
+          addons: (c.addons?.options ?? []).map((a) => ({
+            i: a.id,
+            n: a.name,
           })),
         };
 
       case DecisionTypes.SKIP_ADDONS:
         return {
-          action: DecisionTypes.SKIP_ADDONS,
-          customerMessage,
-          product: this.product(context.product),
+          ...base,
+          p: this.product(c.product),
         };
 
       case DecisionTypes.COLLECT_QUANTITY:
         return {
-          action: DecisionTypes.COLLECT_QUANTITY,
-          customerMessage,
-          product: this.product(context.product),
-          selection: context.selection?.name ?? null,
+          ...base,
+          p: this.product(c.product),
+          selection: c.selection?.name ?? null,
         };
 
       case DecisionTypes.COLLECT_ARTWORK:
         return {
-          action: DecisionTypes.COLLECT_ARTWORK,
-          customerMessage,
-          product: this.product(context.product),
+          ...base,
+          p: this.product(c.product),
         };
 
       case DecisionTypes.SELECT_DELIVERY_METHOD:
         return {
-          action: DecisionTypes.SELECT_DELIVERY_METHOD,
-          customerMessage,
+          ...base,
           options: ["Delivery", "Pickup"],
         };
 
       case DecisionTypes.ASK_DELIVERY_ADDRESS:
-        return {
-          action: DecisionTypes.ASK_DELIVERY_ADDRESS,
-          customerMessage,
-        };
-
       case DecisionTypes.ASK_DELIVERY_DATE:
-        return {
-          action: DecisionTypes.ASK_DELIVERY_DATE,
-          customerMessage,
-        };
+        return base;
 
       case DecisionTypes.REVIEW_ORDER:
         return {
-          action: DecisionTypes.REVIEW_ORDER,
-          customerMessage,
-          order: this.reviewContext(context.order),
+          ...base,
+          order: this.reviewContext(c.order),
         };
 
       case DecisionTypes.ORDER_COMPLETED:
-        return {
-          action: DecisionTypes.ORDER_COMPLETED,
-          customerMessage,
-        };
+        return base;
 
       default:
-        return {
-          action: decision.type,
-          customerMessage,
-        };
+        return base;
     }
   }
 
   product(product) {
-    if (!product) {
-      return null;
-    }
+    if (!product) return null;
 
     return {
-      id: product.id,
-      name: product.name,
+      i: product.id,
+      n: product.name,
     };
   }
 
   recommendation(recommendation) {
-    if (!recommendation) {
-      return null;
-    }
+    if (!recommendation) return null;
 
     return {
-      id: recommendation.id,
-      name: recommendation.name,
-      badge: recommendation.badge ?? null,
-      description: recommendation.description ?? null,
-      startingPrice: recommendation.startingPrice ?? null,
-      reason: recommendation.recommendationReason ?? null,
-      features: (recommendation.features ?? []).slice(0, 3),
+      i: recommendation.id,
+      n: recommendation.name,
+      b: recommendation.badge ?? null,
+      price: recommendation.startingPrice ?? null,
+      why: recommendation.recommendationReason ?? null,
+      f: (recommendation.features ?? []).slice(0, 2),
     };
   }
 
   field(field) {
-    if (!field) {
-      return null;
-    }
+    if (!field) return null;
 
     return {
-      id: field.id,
-      label: field.label ?? field.name,
-      question: field.question,
-      description: field.description ?? null,
-      type: field.type,
-      options: (field.options ?? []).slice(0, 10),
+      i: field.id,
+      l: field.label ?? field.name,
+      q: field.question,
+      d: field.description ?? null,
+      t: field.type,
+      o: (field.options ?? []).slice(0, 8).map((o) => ({
+        i: o.id,
+        n: o.label ?? o.name ?? o.value,
+      })),
     };
   }
 
   requirement(requirement) {
-    if (!requirement) {
-      return null;
-    }
+    if (!requirement) return null;
 
     return {
-      id: requirement.id,
-      name: requirement.name,
-      description: requirement.description ?? null,
-      instruction: requirement.instruction ?? null,
-      required: requirement.required ?? false,
+      i: requirement.id,
+      n: requirement.name,
+      d: requirement.description ?? null,
+      q: requirement.instruction ?? null,
+      req: requirement.required ?? false,
     };
   }
 
   reviewContext(order = {}) {
-    if (!order) {
-      return null;
-    }
+    if (!order) return null;
 
     return {
-      customer: order.customer
-        ? {
-            name: order.customer.name ?? null,
-          }
-        : null,
+      customer: order.customer?.name ?? null,
 
       items: (order.items ?? []).map((item) => ({
         product: item.product?.name ?? null,
-
         selection: item.selection?.name ?? null,
-
         quantity: item.quantity ?? null,
       })),
 
@@ -206,7 +171,7 @@ export default class ConversationContextBuilder {
         ? {
             method: order.delivery.method ?? null,
             address: order.delivery.address ?? null,
-            requiredDate: order.delivery.requiredDate ?? null,
+            date: order.delivery.requiredDate ?? null,
           }
         : null,
 
