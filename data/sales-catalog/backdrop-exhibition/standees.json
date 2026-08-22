@@ -1,0 +1,284 @@
+{
+    "mainCategory": "Backdrops & Exhibition",
+    "subCategory": "Standees",
+    "products": [
+        {
+            "id": 4,
+            "name": "Roll-Up Banner",
+            "slug": "roll-up-banner",
+            "image": "https://www.dlxprint.com/images/products/roll_up_banner.webp",
+            "description": "Premium indoor roll-up banner supplied with aluminium stand and carry bag.",
+            "aliases": [
+                "roll up banner",
+                "rollup banner",
+                "banner stand",
+                "display banner",
+                "standing banner"
+            ],
+            "pricing": {
+                "currency": "AED",
+                "priceType": "fixed",
+                "unit": "piece",
+                "quantityStep": 1,
+                "quotationRequired": false
+            },
+            "workflow": [
+                {
+                    "id": "selection",
+                    "type": "selection",
+                    "required": true
+                },
+                {
+                    "id": "requirement",
+                    "type": "requirement",
+                    "order": 1,
+                    "required": true
+                },
+                {
+                    "id": "quotation",
+                    "type": "quotation",
+                    "order": 2,
+                    "required": true
+                },
+                {
+                    "id": "artwork",
+                    "type": "artwork",
+                    "order": 3,
+                    "required": true
+                },
+                {
+                    "id": "delivery",
+                    "type": "delivery",
+                    "order": 4,
+                    "required": true
+                },
+                {
+                    "id": "confirmation",
+                    "type": "confirmation",
+                    "order": 5,
+                    "required": true
+                },
+                {
+                    "id": "production",
+                    "type": "production",
+                    "order": 6,
+                    "required": true
+                },
+                {
+                    "id": "dispatch",
+                    "type": "dispatch",
+                    "order": 7,
+                    "required": true
+                }
+            ],
+            "selection": {
+                "id": "bannerType",
+                "label": "Roll-Up Banner",
+                "description": "Choose the banner size that best suits your display requirement.",
+                "required": true,
+                "recommended": "85x200",
+                "options": [
+                    {
+                        "id": "85x200",
+                        "name": "85 × 200 cm",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/rollup_banner_dubai_85x200_standard.webp",
+                        "price": 130,
+                        "badge": "Best Seller",
+                        "description": "Compact and popular roll-up banner size suitable for most indoor events.",
+                        "recommendationReason": "Our most popular roll-up banner size, offering an excellent balance between visibility, portability and price.",
+                        "idealFor": [
+                            "Trade Shows",
+                            "Conferences",
+                            "Corporate Events",
+                            "Retail Promotions",
+                            "Presentations"
+                        ],
+                        "sellingPoints": [
+                            "Best Seller",
+                            "Easy to transport",
+                            "Quick setup",
+                            "Compact footprint"
+                        ],
+                        "features": [
+                            "Premium print",
+                            "Aluminium roll-up stand",
+                            "Carry bag included"
+                        ],
+                        "specifications": {
+                            "size": "85 × 200 cm",
+                            "frame": "Aluminium",
+                            "usage": "Indoor",
+                            "installation": "Tool-free",
+                            "standIncluded": true,
+                            "carryBagIncluded": true
+                        }
+                    },
+                    {
+                        "id": "100x200",
+                        "name": "100 × 200 cm",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/rollup_banner_dubai_100x200_standard.webp",
+                        "price": 190,
+                        "description": "Wider roll-up banner providing increased visual coverage.",
+                        "idealFor": [
+                            "Trade Shows",
+                            "Conferences",
+                            "Corporate Events",
+                            "Retail Promotions"
+                        ],
+                        "features": [
+                            "Premium print",
+                            "Aluminium roll-up stand",
+                            "Carry bag included"
+                        ],
+                        "specifications": {
+                            "size": "100 × 200 cm",
+                            "frame": "Aluminium",
+                            "usage": "Indoor",
+                            "installation": "Tool-free",
+                            "standIncluded": true,
+                            "carryBagIncluded": true
+                        }
+                    },
+                    {
+                        "id": "120x200",
+                        "name": "120 × 200 cm",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/rollup_banner_dubai_120x200_standard.webp",
+                        "price": 225,
+                        "description": "Large-format roll-up banner for greater brand visibility.",
+                        "idealFor": [
+                            "Exhibitions",
+                            "Trade Shows",
+                            "Corporate Events",
+                            "Product Promotions"
+                        ],
+                        "features": [
+                            "Premium print",
+                            "Aluminium roll-up stand",
+                            "Carry bag included"
+                        ],
+                        "specifications": {
+                            "size": "120 × 200 cm",
+                            "frame": "Aluminium",
+                            "usage": "Indoor",
+                            "installation": "Tool-free",
+                            "standIncluded": true,
+                            "carryBagIncluded": true
+                        }
+                    },
+                    {
+                        "id": "150x200",
+                        "name": "150 × 200 cm",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/rollup_banner_dubai_150x200_standard.webp",
+                        "price": 310,
+                        "description": "Extra-wide roll-up banner designed for maximum visual impact.",
+                        "idealFor": [
+                            "Large Exhibitions",
+                            "Trade Shows",
+                            "Corporate Events",
+                            "Brand Promotions"
+                        ],
+                        "sellingPoints": [
+                            "Maximum display width",
+                            "High visual impact",
+                            "Portable display system"
+                        ],
+                        "features": [
+                            "Premium print",
+                            "Aluminium roll-up stand",
+                            "Carry bag included"
+                        ],
+                        "specifications": {
+                            "size": "150 × 200 cm",
+                            "frame": "Aluminium",
+                            "usage": "Indoor",
+                            "installation": "Tool-free",
+                            "standIncluded": true,
+                            "carryBagIncluded": true
+                        }
+                    }
+                ]
+            },
+            "fields": [
+                {
+                    "id": "quantity",
+                    "order": 1,
+                    "label": "Quantity",
+                    "type": "number",
+                    "required": true,
+                    "question": "How many roll-up banners do you need?",
+                    "minimum": 1
+                }
+            ],
+            "requirements": [
+                {
+                    "id": "artwork",
+                    "order": 1,
+                    "name": "Artwork",
+                    "required": true,
+                    "description": "Customer can provide print-ready artwork or request assistance from our design team.",
+                    "customerProvides": true,
+                    "approvalRequired": true,
+                    "acceptedFormats": [
+                        "PDF",
+                        "AI",
+                        "EPS",
+                        "PSD"
+                    ],
+                    "notes": [
+                        "Artwork must match the selected banner size.",
+                        "Printing starts only after artwork approval."
+                    ]
+                }
+            ],
+            "addons": {
+                "enabled": false,
+                "required": false,
+                "selection": "multiple",
+                "options": []
+            },
+            "features": [
+                "Premium Print",
+                "Roll-up Stand Included",
+                "Carry Bag Included",
+                "Portable Display",
+                "Quick Installation",
+                "Reusable Display System",
+                "Indoor Exhibition Use"
+            ],
+            "salesNotes": [
+                "Stand Included",
+                "Carry Bag Included",
+                "Prices are per piece",
+                "Delivery charges depend on location",
+                "Artwork approval required before printing"
+            ],
+            "production": {
+                "proof": {
+                    "required": true,
+                    "description": "A digital artwork proof will be shared for approval before production."
+                },
+                "turnaround": {
+                    "standard": "1 Working Day",
+                    "express": "Express production available upon request."
+                },
+                "delivery": {
+                    "pickupAvailable": true,
+                    "deliveryAvailable": true
+                },
+                "installation": {
+                    "selfInstallation": true,
+                    "professionalInstallationAvailable": false
+                },
+                "notes": [
+                    "Suitable for indoor exhibitions, conferences and promotional events.",
+                    "Printing begins only after artwork approval.",
+                    "Roll-up stand and carry bag are included."
+                ]
+            },
+            "metadata": {
+                "priority": 5,
+                "searchBoost": 10
+            }
+        }
+    ]
+}

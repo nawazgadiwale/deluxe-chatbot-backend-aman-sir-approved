@@ -1,69 +1,131 @@
-const mongoose = require('mongoose')
+import mongoose from "mongoose";
+import crypto from "crypto";
 
-const messageSchema = new mongoose.Schema({
+const messageSchema = new mongoose.Schema(
+  {
+    messageId: {
+      type: String,
+      default: () => crypto.randomUUID(),
+      index: true,
+    },
+
     role: {
-        type: String,
-        enum: ['user', 'assistant', 'system'],
-        required: true
+      type: String,
+      enum: ["user", "assistant", "system"],
+      required: true,
     },
+
     content: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
+      trim: true,
     },
+
     timestamp: {
-        type: Date,
-        default: Date.now
-    }
-}, { _id: false })
-
-const conversationSchema = new mongoose.Schema({
-    site: {
-        type: String,
-        enum: ['exprintmart', 'dlxprint'],
-        required: true
+      type: Date,
+      default: Date.now,
     },
+  },
+  {
+    _id: false,
+  },
+);
+
+const customerSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+    },
+    company: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+const conversationSchema = new mongoose.Schema(
+  {
     sessionId: {
-        type: String,
-        required: true,
-        index: true
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
     },
-    visitor: {
-        name: { type: String, default: null },
-        phoneNumber: { type: String, default: null },
-        emailId: { type: String, default: null },
-        ip: { type: String, default: null },
-        userAgent: { type: String, default: null },
-        pageUrl: { type: String, default: null } // page the chat widget was opened on
+
+    customer: {
+      type: customerSchema,
+      default: () => ({}),
     },
-    messages: [messageSchema],
-    // Running structured extraction of lead info as the AI infers it across turns.
-    // Kept separate from `visitor` above so we don't overwrite confirmed fields with guesses.
-    extractedLead: {
-        name: { type: String, default: null },
-        companyName: { type: String, default: null },
-        emailId: { type: String, default: null },
-        phoneNumber: { type: String, default: null },
-        billingAddress: { type: String, default: null },
-        division: { type: String, default: null },
-        products: [{ type: String }],
-        initialRemartks: { type: String, default: null }
+
+    /*
+     * =====================================================
+     * REQUEST TYPE
+     * =====================================================
+     *
+     * Conversation-level information.
+     *
+     * This does NOT belong in the CRM Data document.
+     */
+    requestType: {
+      type: String,
+      enum: ["ORDER", "QUOTATION", "EXPERT", "CONTACT_SALES"],
+      default: null,
     },
+
+    messages: {
+      type: [messageSchema],
+      default: [],
+    },
+
+    workflow: {
+      type: String,
+      default: null,
+    },
+
+    currentStep: {
+      type: String,
+      default: null,
+    },
+
+    memory: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
     status: {
-        type: String,
-        enum: ['active', 'lead_captured', 'closed', 'abandoned'],
-        default: 'active'
+      type: String,
+      enum: ["ACTIVE", "COMPLETED", "ABANDONED"],
+      default: "ACTIVE",
     },
-    leadRef: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Data',
-        default: null
+
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
-    leadCapturedAt: {
-        type: Date,
-        default: null
-    }
-}, { timestamps: true })
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+  },
+);
 
-conversationSchema.index({ site: 1, sessionId: 1 }, { unique: true })
+const Conversation = mongoose.model("Conversation", conversationSchema);
 
-module.exports = mongoose.model('Conversation', conversationSchema)
+export default Conversation;

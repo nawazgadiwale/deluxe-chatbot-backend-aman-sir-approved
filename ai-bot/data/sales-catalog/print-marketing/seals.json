@@ -1,0 +1,342 @@
+{
+  "version": "2.0",
+  "mainCategory": "Print & Marketing",
+  "subCategory": "Seals",
+  "products": [
+    {
+      "id": "self-ink-stamps",
+      "image": "https://www.dlxprint.com/images/print&marketing/self_ink_stamps_dubai.webp",
+      "name": "Self Ink Stamps",
+      "slug": "self-ink-stamps",
+      "status": {
+        "active": true,
+        "featured": false
+      },
+      "description": "Professional custom self ink stamps for businesses and offices across the UAE. Designed for clean, consistent impressions with durable self-inking mechanisms suitable for everyday use.",
+      "aliases": [
+        "stamp",
+        "company stamp",
+        "office stamp",
+        "rubber stamp",
+        "custom stamp",
+        "office seal",
+        "self ink stamp",
+        "self inking stamp"
+      ],
+      "workflow": [
+        "selection",
+        "fields"
+      ],
+      "pricing": {
+        "currency": "AED",
+        "type": "starting-from",
+        "startingPrice": 65,
+        "unit": "piece",
+        "quantityStep": 1,
+        "minimumQuantity": 1,
+        "quotationRequired": false
+      },
+      "selection": {
+        "id": "stampShape",
+        "label": "Stamp Type",
+        "description": "Choose the type of self ink stamp that best suits your business.",
+        "required": true,
+        "allowRecommendation": true,
+        "recommended": "round",
+        "options": [
+          {
+            "id": "rectangle",
+            "order": 1,
+            "name": "Rectangle Shape Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/rectangle_self_ink_stamps_dubai.webp",
+            "badge": "Recommended",
+            "startingPrice": 65,
+            "priceType": "starting-from",
+            "quotationRequired": false,
+            "description": "The most popular choice for company stamps and official business documents.",
+            "recommendationReason": "Best option for most businesses requiring company documentation.",
+            "idealFor": [
+              "Companies",
+              "Corporate offices",
+              "Government paperwork"
+            ],
+            "sellingPoints": [
+              "Professional appearance",
+              "Excellent readability"
+            ],
+            "specifications": {
+              "shape": "Rectangle",
+              "size": "3 × 5 cm",
+              "availableColors": [
+                "Blue",
+                "Black",
+                "Red",
+                "Green"
+              ]
+            },
+            "features": [
+              "Text only or logo",
+              "Re-inkable",
+              "Professional finish",
+              "Long lasting"
+            ]
+          },
+          {
+            "id": "round",
+            "order": 2,
+            "name": "Round Shape Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/round_self_ink_stamps_dubai.webp",
+            "badge": "Popular",
+            "startingPrice": 65,
+            "priceType": "starting-from",
+            "quotationRequired": false,
+            "description": "Perfect for official seals and certification stamps.",
+            "recommendationReason": "Ideal for official seals and circular logos.",
+            "idealFor": [
+              "Government",
+              "Schools",
+              "Certification"
+            ],
+            "sellingPoints": [
+              "Most popular",
+              "Best Seller",
+              "Professional",
+              "Compact",
+              "Premium impression"
+            ],
+            "specifications": {
+              "shape": "Round",
+              "size": "3.9 cm",
+              "availableColors": [
+                "Blue",
+                "Black",
+                "Red",
+                "Green"
+              ]
+            },
+            "features": [
+              "Self-inking",
+              "Durable",
+              "Portable",
+              "Clean impressions"
+            ]
+          },
+          {
+            "id": "oval",
+            "order": 3,
+            "name": "Oval Shape Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/oval_self_ink_stamps_dubai.webp",
+            "badge": "",
+            "startingPrice": 65,
+            "priceType": "starting-from",
+            "quotationRequired": false,
+            "description": "Elegant professional stamp with a distinctive oval appearance.",
+            "recommendationReason": "Suitable for premium branding and professional office use.",
+            "idealFor": [
+              "Professional businesses",
+              "Corporate branding",
+              "Premium offices"
+            ],
+            "sellingPoints": [
+              "Elegant appearance",
+              "Professional finish",
+              "Compact design"
+            ],
+            "specifications": {
+              "shape": "Oval",
+              "size": "5 × 3 cm",
+              "availableColors": [
+                "Blue",
+                "Black",
+                "Red",
+                "Green"
+              ]
+            },
+            "features": [
+              "Professional design",
+              "Self-inking",
+              "Durable construction",
+              "Premium finish"
+            ]
+          },
+          {
+            "id": "square",
+            "order": 4,
+            "name": "Square Shape Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/square_self_ink_stamps_dubai.webp",
+            "badge": "",
+            "startingPrice": 65,
+            "priceType": "starting-from",
+            "quotationRequired": false,
+            "description": "Modern square stamp suitable for logos and company identity.",
+            "recommendationReason": "Great for logos and modern branding.",
+            "idealFor": [
+              "Retail",
+              "Creative businesses",
+              "Brand identity"
+            ],
+            "sellingPoints": [
+              "Modern appearance",
+              "Excellent for logos",
+              "Easy to use"
+            ],
+            "specifications": {
+              "shape": "Square",
+              "size": "3.9 × 3.9 cm",
+              "availableColors": [
+                "Blue",
+                "Black",
+                "Red",
+                "Green"
+              ]
+            },
+            "features": [
+              "Self-inking",
+              "Custom logo support",
+              "Professional quality",
+              "Long lasting"
+            ]
+          },
+          {
+            "id": "dater-numbering",
+            "order": 5,
+            "name": "Dater & Numbering Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/date_and_numbering_stamps_dubai.webp",
+            "badge": "Quotation Required",
+            "startingPrice": null,
+            "priceType": "quotation",
+            "quotationRequired": true,
+            "description": "Custom dater and numbering stamps designed for office workflows.",
+            "recommendationReason": "Ideal for businesses requiring sequential numbering or date stamping.",
+            "idealFor": [
+              "Warehouses",
+              "Accounts",
+              "Government",
+              "Logistics"
+            ],
+            "sellingPoints": [
+              "Custom numbering",
+              "Date stamping",
+              "Industrial quality"
+            ],
+            "specifications": {},
+            "features": [
+              "Custom configuration",
+              "Quotation required",
+              "Professional grade"
+            ]
+          },
+          {
+            "id": "readymade",
+            "order": 6,
+            "name": "Readymade Stamp",
+            "image": "https://www.dlxprint.com/images/print&marketing/readymade_stamps_dubai.webp",
+            "badge": "",
+            "startingPrice": null,
+            "priceType": "quotation",
+            "quotationRequired": true,
+            "description": "Ready-to-use standard text stamps.",
+            "recommendationReason": "Best when you need a commonly used stamp immediately.",
+            "idealFor": [
+              "Office use",
+              "Reception",
+              "Administration"
+            ],
+            "sellingPoints": [
+              "Ready to use",
+              "Fast availability",
+              "No customization required"
+            ],
+            "specifications": {},
+            "features": [
+              "Pre-made text",
+              "Quick delivery",
+              "Office ready"
+            ]
+          }
+        ]
+      },
+      "fields": [
+        {
+          "id": "tradeLicense",
+          "order": 1,
+          "label": "Trade License",
+          "type": "confirmation",
+          "required": true,
+          "question": "Do you have a valid Trade License for your company?",
+          "description": "A valid Trade License is required before production. You can share a copy later with our sales specialist.",
+          "validation": null,
+          "options": [
+            {
+              "id": "yes",
+              "label": "Yes",
+              "value": true
+            },
+            {
+              "id": "no",
+              "label": "No",
+              "value": false
+            }
+          ]
+        },
+        {
+          "id": "emiratesId",
+          "order": 2,
+          "label": "Emirates ID",
+          "type": "confirmation",
+          "required": true,
+          "question": "Do you have a valid Emirates ID available?",
+          "description": "An Emirates ID may be required before production. You can share it later with our sales specialist if needed.",
+          "validation": null,
+          "options": [
+            {
+              "id": "yes",
+              "label": "Yes",
+              "value": true
+            },
+            {
+              "id": "no",
+              "label": "No",
+              "value": false
+            }
+          ]
+        }
+      ],
+      "features": [
+        "Professional self-inking mechanism",
+        "Sharp and consistent impressions",
+        "High quality laser engraving",
+        "Custom company logo or text",
+        "Durable construction",
+        "Re-inkable design",
+        "Suitable for business and legal documents",
+        "Digital proof before production",
+        "Next day delivery available",
+        "Design assistance available if required"
+      ],
+      "production": {
+        "proof": {
+          "required": true,
+          "description": "Digital artwork proof will be emailed within a few minutes before production begins."
+        },
+        "turnaround": {
+          "standard": "Next day delivery or collection after same-day proof approval before 2:00 PM.",
+          "express": null
+        },
+        "delivery": {
+          "pickupAvailable": true,
+          "deliveryAvailable": true
+        },
+        "notes": [
+          "Trade License and Emirates ID are required before production.",
+          "Artwork can be provided by the customer or created by our design team."
+        ]
+      },
+      "metadata": {
+        "priority": 1,
+        "searchBoost": 10,
+        "lastUpdated": "2026-07-27"
+      }
+    }
+  ]
+}

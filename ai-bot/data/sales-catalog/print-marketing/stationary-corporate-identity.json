@@ -1,0 +1,292 @@
+{
+  "mainCategory": "Print & Marketing",
+  "subCategory": "Stationery & Corporate Identity",
+  "products": [
+    {
+      "id": "business-cards",
+      "name": "Business Cards",
+      "image": "https://www.dlxprint.com/images/digital-business-cards/standard_business_cards_printing_dubai.webp",
+      "slug": "business-cards",
+      "description": "Professional custom business cards available in a wide range of materials, finishes and premium printing options.",
+      "aliases": [
+        "business card",
+        "business cards",
+        "visiting card",
+        "visiting cards",
+        "name card",
+        "name cards",
+        "corporate card",
+        "corporate cards"
+      ],
+      "workflow": [
+        {
+          "id": "selection",
+          "type": "selection",
+          "required": true
+        },
+        {
+          "id": "fields",
+          "type": "fields",
+          "required": true
+        },
+        {
+          "id": "requirements",
+          "type": "requirements",
+          "required": false
+        },
+        {
+          "id": "addons",
+          "type": "addons",
+          "required": false
+        }
+      ],
+      "pricing": {
+        "currency": "AED",
+        "priceType": "starting-from",
+        "unit": "100-pieces",
+        "quantityStep": 100,
+        "quotationRequired": true
+      },
+      "selection": {
+        "id": "material",
+        "label": "Business Card Type",
+        "description": "Choose the business card style that best matches your brand.",
+        "required": true,
+        "recommended": "Executive",
+        "options": [
+          {
+            "id": "standard",
+            "name": "Standard Business Cards",
+            "image": "https://www.dlxprint.com/images/products/standard_business_cards.webp",
+            "badge": "Budget Friendly",
+            "startingPrice": 60,
+            "description": "Affordable professional business cards for everyday networking.",
+            "recommendationReason": "Our best-selling business card offering the best balance of quality, appearance and affordability for most businesses.",
+            "idealFor": [
+              "Startups",
+              "Small businesses",
+              "Corporate professionals",
+              "Daily networking"
+            ],
+            "sellingPoints": [
+              "Most popular choice",
+              "Excellent value for money",
+              "Professional appearance",
+              "Fast production"
+            ],
+            "features": [
+              "400 gsm Smooth White Card",
+              "Matt, Gloss or Silk Touch Finish",
+              "Premium look and feel",
+              "Same-day printing available"
+            ]
+          },
+          {
+            "id": "executive",
+            "name": "Executive Business Cards",
+            "image": "https://www.dlxprint.com/images/print&marketing/laminated_business_cards_printing_dubai.webp",
+            "badge": "Best Seller",
+            "startingPrice": 100,
+            "description": "Premium executive cards with elegant finish.",
+            "recommendationReason": "Recommended for professionals who want a more premium corporate image.",
+            "idealFor": [
+              "Managers",
+              "Executives",
+              "Corporate meetings"
+            ],
+            "sellingPoints": [
+              "Premium finish",
+              "Elegant appearance",
+              "Professional branding"
+            ],
+            "features": [
+              "400 gsm Pristine White Card",
+              "Matt coating on both sides",
+              "Smooth touch",
+              "Executive premium appearance"
+            ]
+          },
+          {
+            "id": "velvet",
+            "name": "Velvet Business Cards",
+            "image": "https://www.dlxprint.com/images/print&marketing/velvet_business_cards_printing_dubai.webp",
+            "badge": "Premium",
+            "startingPrice": 180,
+            "description": "Luxury soft-touch velvet laminated business cards.",
+            "recommendationReason": "Perfect for businesses looking for a luxury soft-touch finish.",
+            "idealFor": [
+              "Luxury brands",
+              "Real estate",
+              "Fashion",
+              "High-end businesses"
+            ],
+            "sellingPoints": [
+              "Soft-touch finish",
+              "Premium feel",
+              "Memorable first impression"
+            ],
+            "features": [
+              "Velvet Lamination",
+              "Soft Touch Finish",
+              "Premium Card Stock"
+            ]
+          },
+          {
+            "id": "spot-uv",
+            "name": "3D Spot UV Business Cards",
+            "image": "https://www.dlxprint.com/images/print&marketing/spot_uv_business_cards_printing_dubai.webp",
+            "startingPrice": 320,
+            "badge": "Luxury",
+            "recommendationReason": "Ideal when you want important elements like your logo to stand out.",
+            "idealFor": [
+              "Luxury brands",
+              "Creative agencies",
+              "Architects"
+            ],
+            "sellingPoints": [
+              "Raised Spot UV",
+              "Premium visual impact",
+              "Excellent brand recognition"
+            ],
+            "description": "Raised Spot UV with premium finish.",
+            "features": [
+              "400 gsm White Card",
+              "Matt laminated",
+              "3D embossed Spot UV"
+            ]
+          },
+          {
+            "id": "foil",
+            "name": "3D Foil Business Cards",
+            "image": "https://www.dlxprint.com/images/print&marketing/3d_gold_foil_business_cards_dubai.webp",
+            "startingPrice": 395,
+            "badge": "Luxury",
+            "description": "Premium metallic foil finish."
+          },
+          {
+            "id": "royal",
+            "name": "3D Spot UV & 3D Foil",
+            "image": "https://www.dlxprint.com/images/print&marketing/royal_business_card_printing_dubai.webp",
+            "startingPrice": 570,
+            "badge": "Signature",
+            "recommendationReason": "Our most premium business card combining Spot UV, Foiling and Velvet finish for maximum impact.",
+            "idealFor": [
+              "CEOs",
+              "Luxury brands",
+              "High-end corporate identity"
+            ],
+            "sellingPoints": [
+              "Highest quality",
+              "Luxury presentation",
+              "Signature finish"
+            ],
+            "description": "Our highest-end luxury business card.",
+            "features": [
+              "3D Spot UV",
+              "3D Foiling",
+              "Soft Touch Velvet",
+              "3-4 Working Days"
+            ]
+          },
+          {
+            "id": "translucent-pack",
+            "name": "Translucent Business Cards",
+            "image": "https://www.dlxprint.com/images/print&marketing/translucent_business_card_printing_10.webp",
+            "startingPrice": 250,
+            "badge": "Unique",
+            "description": "Semi-transparent waterproof PVC business cards that create a modern and memorable first impression.",
+            "recommendationReason": "Ideal for businesses that want a distinctive, modern business card that stands out from traditional paper cards.",
+            "idealFor": [
+              "Creative agencies",
+              "Interior designers",
+              "Architects",
+              "Luxury brands",
+              "Technology companies",
+              "Premium businesses"
+            ],
+            "sellingPoints": [
+              "Unique transparent appearance",
+              "Waterproof and durable",
+              "Long-lasting PVC material",
+              "Leaves a memorable first impression"
+            ],
+            "features": [
+              "400 Micron PVC",
+              "Semi-transparent finish",
+              "Water Resistant",
+              "Premium Appearance",
+              "Tear Resistant",
+              "Long-lasting durability"
+            ]
+          }
+        ]
+      },
+      "fields": [
+        {
+          "id": "numberOfNames",
+          "order": 1,
+          "label": "Number of Names",
+          "type": "number",
+          "required": true,
+          "question": "How many different names should be printed?",
+          "description": "Specify how many unique names will appear on the cards."
+        }
+      ],
+      "requirements": [
+        {
+          "id": "designRequired",
+          "order": 1,
+          "name": "Artwork",
+          "required": false,
+          "description": "Customer can provide artwork or request our design service."
+        }
+      ],
+      "addons": {
+        "enabled": true,
+        "required": false,
+        "selection": "multiple",
+        "label": "Finishing Options",
+        "options": [
+          {
+            "id": "round-corners",
+            "name": "Round Corners",
+            "image": "https://www.dlxprint.com/images/add-ons/finishing_round_corners_business_cards_dubai.webp",
+            "description": "Rounded corner finishing.",
+            "price": {
+              "amount": 35,
+              "currency": "AED",
+              "unit": "per 500 cards"
+            }
+          },
+          {
+            "id": "foiling",
+            "name": "Foiling",
+            "image": "https://www.dlxprint.com/images/add-ons/finishing_foil_business_cards_dubai.webp",
+            "description": "Premium metallic foil finishing."
+          },
+          {
+            "id": "colored-edge",
+            "name": "Colored Edge",
+            "image": "https://www.dlxprint.com/images/print&marketing/colored_edge_business_cards_dubai.webp",
+            "description": "Custom coloured edge finishing."
+          }
+        ]
+      },
+      "features": [
+        "Professional CMYK Digital Printing",
+        "Premium Quality Materials",
+        "Sharp Text & Vibrant Colours",
+        "Multiple Premium Card Stocks",
+        "Luxury Finishing Options",
+        "Custom Sizes Available",
+        "Fast Turnaround",
+        "Same Day Printing Available",
+        "Digital Artwork Proof Before Printing"
+      ],
+      "production": {
+        "proof": "Digital artwork proof will be shared before printing.",
+        "turnaround": "Same-day production available for eligible products. Premium finishes may require additional production time."
+      }
+    }
+  ]
+}

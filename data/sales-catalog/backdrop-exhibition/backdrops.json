@@ -1,0 +1,539 @@
+{
+    "mainCategory": "Backdrops & Exhibition",
+    "subCategory": "Backdrops",
+    "products": [
+        {
+            "id": 3,
+            "name": "Pop Up Display Stands",
+            "slug": "pop-up-display-stands",
+            "description": "Professional collapsible pop up display stands for exhibitions, trade shows, conferences, retail promotions and corporate events across Dubai and the UAE.",
+            "aliases": [
+                "pop up stand",
+                "popup stand",
+                "pop up display",
+                "popup display",
+                "exhibition stand",
+                "trade show stand",
+                "display wall",
+                "backdrop stand",
+                "portable display",
+                "exhibition backdrop"
+            ],
+            "workflow": [
+                {
+                    "id": "selection",
+                    "type": "selection",
+                    "required": true
+                },
+                {
+                    "id": "fields",
+                    "type": "fields",
+                    "required": true
+                },
+                {
+                    "id": "requirements",
+                    "type": "requirements",
+                    "required": false
+                },
+                {
+                    "id": "addons",
+                    "type": "addons",
+                    "required": false
+                }
+            ],
+            "pricing": {
+                "currency": "AED",
+                "priceType": "fixed",
+                "unit": "piece",
+                "priceQuantity": 1,
+                "quotationRequired": true
+            },
+            "selection": {
+                "id": "displayType",
+                "label": "Pop Up Display Type",
+                "description": "Choose the exhibition display system that best suits your event.",
+                "required": true,
+                "recommended": "softcase-straight",
+                "options": [
+                    {
+                        "id": "softcase-straight",
+                        "name": "Pop Up Softcase - Straight",
+                        "images": "https://www.dlxprint.com/images/backdrops&exhibition/softcase_straight_popup_banner_printing_dubai.webp",
+                        "badge": "Best Seller",
+                        "description": "Straight exhibition backdrop supplied with a lightweight softcase trolley.",
+                        "recommendationReason": "Our most popular exhibition display offering the perfect balance of quality, portability and affordability.",
+                        "idealFor": [
+                            "Trade Shows",
+                            "Conferences",
+                            "Corporate Events",
+                            "Retail Promotions"
+                        ],
+                        "sellingPoints": [
+                            "Most popular choice",
+                            "Lightweight transport",
+                            "Quick installation",
+                            "Reusable display system"
+                        ],
+                        "features": [
+                            "Straight display wall",
+                            "Collapsible aluminum frame",
+                            "Softcase trolley",
+                            "High-resolution graphics"
+                        ],
+                        "specifications": {
+                            "frame": "Aluminum",
+                            "shape": "Straight",
+                            "case": "Softcase Trolley",
+                            "usage": "Indoor",
+                            "installation": "Tool-free"
+                        },
+                        "fields": [
+                            {
+                                "id": "size",
+                                "order": 1,
+                                "label": "Display Size",
+                                "type": "select",
+                                "required": true,
+                                "question": "Which display size do you need?",
+                                "options": [
+                                    {
+                                        "id": "2x3",
+                                        "label": "2 × 3",
+                                        "printArea": "284.2 × 230 cm",
+                                        "viewArea": "204.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "3x3",
+                                        "label": "3 × 3",
+                                        "printArea": "359.2 × 230 cm",
+                                        "viewArea": "279.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "4x3",
+                                        "label": "4 × 3",
+                                        "printArea": "434.2 × 230 cm",
+                                        "viewArea": "354.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "5x3",
+                                        "label": "5 × 3",
+                                        "printArea": "509.2 × 230 cm",
+                                        "viewArea": "429.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "6x3",
+                                        "label": "6 × 3",
+                                        "printArea": "584.2 × 230 cm",
+                                        "viewArea": "504.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "8x3",
+                                        "label": "8 × 3",
+                                        "printArea": "734.2 × 230 cm",
+                                        "viewArea": "654.2 × 230 cm"
+                                    }
+                                ]
+                            },
+                            {
+                                "id": "printingSide",
+                                "order": 2,
+                                "label": "Printing Side",
+                                "type": "select",
+                                "required": true,
+                                "question": "Would you like single-sided or double-sided printing?",
+                                "options": [
+                                    {
+                                        "id": "single",
+                                        "label": "Single Side"
+                                    },
+                                    {
+                                        "id": "double",
+                                        "label": "Double Side"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "softcase-curved",
+                        "name": "Pop Up Softcase - Curved",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/softcase_curved_popup_banner_printing_dubai.webp",
+                        "badge": "Recommended",
+                        "description": "Curved exhibition backdrop that provides a more immersive presentation.",
+                        "recommendationReason": "Ideal for brands wanting greater visual impact during exhibitions.",
+                        "idealFor": [
+                            "Exhibitions",
+                            "Trade Shows",
+                            "Product Launches"
+                        ],
+                        "sellingPoints": [
+                            "Curved presentation",
+                            "Professional appearance",
+                            "Portable",
+                            "Reusable"
+                        ],
+                        "features": [
+                            "Curved display wall",
+                            "Collapsible aluminum frame",
+                            "Softcase trolley",
+                            "Premium graphics"
+                        ],
+                        "specifications": {
+                            "frame": "Aluminum",
+                            "shape": "Curved",
+                            "case": "Softcase Trolley",
+                            "usage": "Indoor",
+                            "installation": "Tool-free"
+                        },
+                        "fields": [
+                            {
+                                "id": "size",
+                                "order": 1,
+                                "label": "Display Size",
+                                "type": "select",
+                                "required": true,
+                                "question": "Which display size do you need?",
+                                "options": [
+                                    {
+                                        "id": "2x3",
+                                        "label": "2 × 3",
+                                        "printArea": "273.8 × 230 cm",
+                                        "viewArea": "193.8 × 230 cm",
+                                        "weight": "24 kg"
+                                    },
+                                    {
+                                        "id": "3x3",
+                                        "label": "3 × 3",
+                                        "printArea": "343.6 × 230 cm",
+                                        "viewArea": "263.6 × 230 cm",
+                                        "weight": "25 kg"
+                                    },
+                                    {
+                                        "id": "4x3",
+                                        "label": "4 × 3",
+                                        "printArea": "413.4 × 230 cm",
+                                        "viewArea": "333.4 × 230 cm",
+                                        "weight": "28 kg"
+                                    },
+                                    {
+                                        "id": "5x3",
+                                        "label": "5 × 3",
+                                        "printArea": "483.2 × 230 cm",
+                                        "viewArea": "403.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "6x3",
+                                        "label": "6 × 3",
+                                        "printArea": "553 × 230 cm",
+                                        "viewArea": "473 × 230 cm"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "hardcase-straight",
+                        "name": "Pop Up Hardcase - Straight",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/hardcase_straight_popup_banner_printing.webp",
+                        "badge": "Premium",
+                        "description": "Straight exhibition backdrop supplied with a durable hardcase trolley for maximum protection during transport.",
+                        "recommendationReason": "Recommended for businesses that frequently participate in exhibitions and transport displays between multiple venues.",
+                        "idealFor": [
+                            "Road Shows",
+                            "Frequent Exhibitors",
+                            "Corporate Events",
+                            "International Exhibitions"
+                        ],
+                        "sellingPoints": [
+                            "Maximum transport protection",
+                            "Professional presentation",
+                            "Reusable display",
+                            "Brandable trolley"
+                        ],
+                        "features": [
+                            "Straight display wall",
+                            "Heavy-duty aluminum frame",
+                            "Hardcase trolley",
+                            "Premium graphics"
+                        ],
+                        "specifications": {
+                            "frame": "Aluminum",
+                            "shape": "Straight",
+                            "case": "Hardcase Trolley",
+                            "usage": "Indoor",
+                            "installation": "Tool-free"
+                        },
+                        "fields": [
+                            {
+                                "id": "size",
+                                "order": 1,
+                                "label": "Display Size",
+                                "type": "select",
+                                "required": true,
+                                "question": "Which display size do you need?",
+                                "options": [
+                                    {
+                                        "id": "2x3",
+                                        "label": "2 × 3",
+                                        "printArea": "284.2 × 230 cm",
+                                        "viewArea": "204.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "3x3",
+                                        "label": "3 × 3",
+                                        "printArea": "359.2 × 230 cm",
+                                        "viewArea": "279.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "4x3",
+                                        "label": "4 × 3",
+                                        "printArea": "434.2 × 230 cm",
+                                        "viewArea": "354.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "5x3",
+                                        "label": "5 × 3",
+                                        "printArea": "509.2 × 230 cm",
+                                        "viewArea": "429.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "6x3",
+                                        "label": "6 × 3",
+                                        "printArea": "584.2 × 230 cm",
+                                        "viewArea": "504.2 × 230 cm"
+                                    },
+                                    {
+                                        "id": "8x3",
+                                        "label": "8 × 3",
+                                        "printArea": "734.2 × 230 cm",
+                                        "viewArea": "654.2 × 230 cm"
+                                    }
+                                ]
+                            },
+                            {
+                                "id": "printingSide",
+                                "order": 2,
+                                "label": "Printing Side",
+                                "type": "select",
+                                "required": true,
+                                "question": "Would you like single-sided or double-sided printing?",
+                                "options": [
+                                    {
+                                        "id": "single",
+                                        "label": "Single Side"
+                                    },
+                                    {
+                                        "id": "double",
+                                        "label": "Double Side"
+                                    }
+                                ]
+                            }
+                        ],
+                        "addons": {
+                            "enabled": true,
+                            "required": false,
+                            "selection": "multiple",
+                            "label": "Optional Add-ons",
+                            "options": [
+                                {
+                                    "id": "trolley-branding",
+                                    "name": "Branding on Trolley",
+                                    "description": "Add custom branding to the hardcase trolley."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "id": "hardcase-curved",
+                        "name": "Pop Up Hardcase - Curved",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/hardcase_curved_popup_banner_printing_dubai_1.webp",
+                        "badge": "Luxury",
+                        "description": "Premium curved exhibition backdrop supplied with a durable hardcase trolley.",
+                        "recommendationReason": "Perfect for premium brands that require a luxury exhibition presentation.",
+                        "idealFor": [
+                            "Luxury Brands",
+                            "Trade Shows",
+                            "Corporate Exhibitions",
+                            "International Events"
+                        ],
+                        "sellingPoints": [
+                            "Premium curved design",
+                            "Maximum protection",
+                            "Professional presentation",
+                            "Reusable"
+                        ],
+                        "features": [
+                            "Curved display wall",
+                            "Heavy-duty aluminum frame",
+                            "Hardcase trolley",
+                            "Premium graphics"
+                        ],
+                        "specifications": {
+                            "frame": "Aluminum",
+                            "shape": "Curved",
+                            "case": "Hardcase Trolley",
+                            "usage": "Indoor",
+                            "installation": "Tool-free"
+                        },
+                        "fields": [
+                            {
+                                "id": "size",
+                                "order": 1,
+                                "label": "Display Size",
+                                "type": "select",
+                                "required": true,
+                                "question": "Which display size do you need?",
+                                "options": [
+                                    {
+                                        "id": "2x3",
+                                        "label": "2 × 3",
+                                        "printArea": "273.8 × 230 cm",
+                                        "viewArea": "193.8 × 230 cm",
+                                        "weight": "30 kg"
+                                    },
+                                    {
+                                        "id": "3x3",
+                                        "label": "3 × 3",
+                                        "printArea": "343.6 × 230 cm",
+                                        "viewArea": "263.6 × 230 cm",
+                                        "weight": "32 kg"
+                                    },
+                                    {
+                                        "id": "4x3",
+                                        "label": "4 × 3",
+                                        "printArea": "413.4 × 230 cm",
+                                        "viewArea": "333.4 × 230 cm",
+                                        "weight": "35 kg"
+                                    },
+                                    {
+                                        "id": "5x3",
+                                        "label": "5 × 3",
+                                        "printArea": "483.2 × 230 cm",
+                                        "viewArea": "403.2 × 230 cm",
+                                        "weight": "45 kg"
+                                    },
+                                    {
+                                        "id": "6x3",
+                                        "label": "6 × 3",
+                                        "printArea": "553 × 230 cm",
+                                        "viewArea": "473 × 230 cm",
+                                        "weight": "50 kg"
+                                    }
+                                ]
+                            }
+                        ],
+                        "addons": {
+                            "enabled": true,
+                            "required": false,
+                            "selection": "multiple",
+                            "label": "Optional Add-ons",
+                            "options": [
+                                {
+                                    "id": "trolley-branding",
+                                    "name": "Branding on Trolley",
+                                    "description": "Add custom branding to the hardcase trolley."
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "id": "display-counter",
+                        "name": "Pop Up Display Counter",
+                        "image": "https://www.dlxprint.com/images/backdrops&exhibition/popup_counter_display_dubai.webp",
+                        "badge": "Accessory",
+                        "description": "Portable magnetic exhibition counter with internal shelving and a fully branded front panel.",
+                        "recommendationReason": "Perfect for completing your exhibition booth and providing brochure and product storage.",
+                        "idealFor": [
+                            "Reception",
+                            "Trade Shows",
+                            "Product Demonstrations",
+                            "Exhibitions"
+                        ],
+                        "sellingPoints": [
+                            "Quick assembly",
+                            "Portable",
+                            "Internal shelves",
+                            "Fully branded"
+                        ],
+                        "features": [
+                            "Magnetic collapsible frame",
+                            "Internal storage shelves",
+                            "Carry bags included",
+                            "Branded front panel"
+                        ],
+                        "specifications": {
+                            "size": "120 × 95 cm",
+                            "weight": "16 kg",
+                            "frame": "Magnetic",
+                            "usage": "Indoor"
+                        },
+                        "fields": [],
+                        "addons": {
+                            "enabled": false,
+                            "required": false,
+                            "selection": "multiple",
+                            "options": []
+                        }
+                    }
+                ]
+            },
+            "fields": [],
+            "requirements": [
+                {
+                    "id": "artwork",
+                    "order": 1,
+                    "name": "Artwork",
+                    "required": false,
+                    "description": "Customers can upload print-ready artwork or request our design team to prepare it."
+                }
+            ],
+            "addons": {
+                "enabled": false,
+                "required": false,
+                "selection": "multiple",
+                "options": []
+            },
+            "features": [
+                "Premium exhibition graphics",
+                "High-resolution printing",
+                "Reusable display systems",
+                "Portable exhibition solution",
+                "Collapsible aluminum frame",
+                "Tool-free installation",
+                "Indoor exhibition use",
+                "Trade show ready",
+                "Professional presentation",
+                "Venue delivery across UAE",
+                "Replacement graphics available",
+                "Digital artwork proof before production"
+            ],
+            "production": {
+                "proof": {
+                    "required": true,
+                    "description": "A digital artwork proof will be shared for approval before production."
+                },
+                "turnaround": {
+                    "standard": "Production time depends on selected configuration and quantity.",
+                    "express": "Express production available for selected requirements."
+                },
+                "delivery": {
+                    "pickupAvailable": true,
+                    "deliveryAvailable": true
+                },
+                "installation": {
+                    "selfInstallation": true,
+                    "professionalInstallationAvailable": true
+                },
+                "notes": [
+                    "Suitable for indoor exhibitions and trade shows.",
+                    "Graphics can be replaced for future events.",
+                    "Professional installation available upon request."
+                ]
+            },
+            "metadata": {
+                "priority": 5,
+                "searchBoost": 10
+            }
+        }
+    ]
+}
