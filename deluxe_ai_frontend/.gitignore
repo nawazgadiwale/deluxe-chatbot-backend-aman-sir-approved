@@ -63,6 +63,17 @@ dist/
 
 
 # ============================================================
+# CREDENTIALS / SECRETS
+# ============================================================
+
+credentials.json
+**/credentials.json
+
+credentials/
+**/credentials/
+
+
+# ============================================================
 # VERCEL
 # ============================================================
 
@@ -90,6 +101,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 *.log
+
 logs/
 **/logs/
 
@@ -151,7 +163,7 @@ Thumbs.db
 
 
 # ============================================================
-# PYTHON CACHE (if used anywhere in the backend)
+# PYTHON CACHE
 # ============================================================
 
 __pycache__/
@@ -172,7 +184,7 @@ __pycache__/
 # AI / VECTOR STORE GENERATED FILES
 # ============================================================
 
-# Uncomment if these are generated locally rather than source data:
+# Uncomment these if generated locally rather than source data:
 # faiss_index/
 # vector_store/
 # chroma/
