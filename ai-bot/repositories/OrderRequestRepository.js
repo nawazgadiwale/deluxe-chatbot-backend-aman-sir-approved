@@ -1,6 +1,15 @@
+import mongoose from "mongoose";
 import OrderModel from "../../models/OrderRequest.js";
 
 export default class OrderRepository {
+  isConnected() {
+    return Boolean(
+      mongoose.connection &&
+        (mongoose.connection.readyState === 1 ||
+          mongoose.connection.readyState === 2),
+    );
+  }
+
   /*
    * =====================================================
    * CREATE
@@ -8,6 +17,9 @@ export default class OrderRepository {
    */
 
   async create(order = {}) {
+    if (!this.isConnected()) {
+      return { _id: new mongoose.Types.ObjectId(), ...order };
+    }
     return OrderModel.create(order);
   }
 
@@ -20,6 +32,9 @@ export default class OrderRepository {
   async save(order) {
     if (!order) {
       return null;
+    }
+    if (!this.isConnected()) {
+      return order;
     }
 
     order.updatedAt = new Date();
@@ -34,7 +49,7 @@ export default class OrderRepository {
    */
 
   async findById(orderId) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -48,7 +63,7 @@ export default class OrderRepository {
    */
 
   async findByOrderNumber(orderNumber) {
-    if (!orderNumber) {
+    if (!orderNumber || !this.isConnected()) {
       return null;
     }
 
@@ -64,7 +79,7 @@ export default class OrderRepository {
    */
 
   async findActiveBySession(sessionId) {
-    if (!sessionId) {
+    if (!sessionId || !this.isConnected()) {
       return null;
     }
 
@@ -86,7 +101,7 @@ export default class OrderRepository {
    */
 
   async findByConversationId(conversationId) {
-    if (!conversationId) {
+    if (!conversationId || !this.isConnected()) {
       return null;
     }
 
@@ -104,7 +119,7 @@ export default class OrderRepository {
    */
 
   async findByLeadId(leadId) {
-    if (!leadId) {
+    if (!leadId || !this.isConnected()) {
       return null;
     }
 
@@ -120,7 +135,7 @@ export default class OrderRepository {
    */
 
   async findHistory(sessionId) {
-    if (!sessionId) {
+    if (!sessionId || !this.isConnected()) {
       return [];
     }
 
@@ -138,6 +153,10 @@ export default class OrderRepository {
    */
 
   async findPendingOrders() {
+    if (!this.isConnected()) {
+      return [];
+    }
+
     return OrderModel.find({
       status: "CONFIRMED",
 
@@ -156,7 +175,7 @@ export default class OrderRepository {
    */
 
   async update(orderId, updates = {}) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -184,7 +203,7 @@ export default class OrderRepository {
    */
 
   async attachLead(orderId, leadId) {
-    if (!orderId || !leadId) {
+    if (!orderId || !leadId || !this.isConnected()) {
       return null;
     }
 
@@ -212,7 +231,7 @@ export default class OrderRepository {
    */
 
   async updateCustomer(orderId, customer = {}) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -239,7 +258,7 @@ export default class OrderRepository {
    */
 
   async attachLeadAndCustomer(orderId, leadId = null, customer = {}) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -272,7 +291,7 @@ export default class OrderRepository {
    */
 
   async updateStatus(orderId, status) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -300,7 +319,7 @@ export default class OrderRepository {
    */
 
   async delete(orderId) {
-    if (!orderId) {
+    if (!orderId || !this.isConnected()) {
       return null;
     }
 
@@ -328,8 +347,17 @@ export default class OrderRepository {
    */
 
   async saveDraft(sessionId, conversationId, order = {}) {
-    if (!sessionId || !order) {
+    if (!sessionId || !order || !this.isConnected()) {
       return null;
+    }
+
+    const isConfirming = order.status === "CONFIRMED" || order.confirmed === true;
+    if (!isConfirming) {
+      // Guard against stale draft overwriting an already CONFIRMED order
+      const existing = await OrderModel.findOne({ sessionId, status: "CONFIRMED" });
+      if (existing) {
+        return existing;
+      }
     }
 
     const update = {

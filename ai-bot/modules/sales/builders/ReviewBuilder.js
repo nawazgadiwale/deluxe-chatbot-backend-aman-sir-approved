@@ -1,151 +1,158 @@
 export default class ReviewBuilder {
   build(requirement = {}, pricing = {}, delivery = {}, recommendations = []) {
+    const items = this.buildItems(requirement.items ?? []);
+
+    const deliveryData = this.buildDelivery(delivery);
+
+    const pricingData = this.buildPricing(pricing, delivery);
+
+    const summary = this.buildSummary(requirement, pricing, delivery);
+
     return {
-      items: this.buildItems(requirement.items ?? []),
+      items,
 
-      delivery: this.buildDelivery(delivery),
+      delivery: deliveryData,
 
-      pricing: this.buildPricing(pricing, delivery),
+      pricing: pricingData,
 
       recommendations,
 
-      summary: this.buildSummary(requirement, pricing, delivery),
+      summary,
 
       sections: this.buildSections(
-        requirement,
-        pricing,
-        delivery,
+        items,
+        deliveryData,
+        pricingData,
+        summary,
         recommendations,
       ),
     };
   }
 
-  /*
-   * =====================================================
-   * Items
-   * =====================================================
-   */
-
   buildItems(items = []) {
-    return items.map((item) => ({
-      product: item.product,
+    return items.map((item) => {
+      const fields = {
+        ...(item.formData ?? {}),
+        ...(item.productData ?? {}),
+      };
 
-      variant: item.variant,
+      return {
+        product: item.selectedProduct ?? item.product ?? null,
 
-      fields: item.fields ?? {},
+        parentProduct: item.product ?? null,
 
-      quantity: item.fields?.quantity ?? null,
+        selection: item.selection ?? item.variant ?? null,
 
-      artwork: item.fields?.artwork ?? null,
+        selectedProduct: item.selectedProduct ?? null,
 
-      pricing: item.pricing ?? {},
+        fields,
 
-      addons: item.addons ?? [],
+        formData: fields,
 
-      notes: item.notes ?? [],
-    }));
+        pricing: item.pricing ?? {},
+
+        addons: item.addons?.items ?? [],
+
+        notes: item.notes ?? [],
+
+        completed: Boolean(item.completed),
+      };
+    });
   }
-
-  /*
-   * =====================================================
-   * Delivery
-   * =====================================================
-   */
 
   buildDelivery(delivery = {}) {
     return {
-      method: delivery.method,
+      method: delivery.method ?? delivery.type ?? null,
 
-      address: delivery.address,
+      address: delivery.address ?? null,
 
-      requiredDate: delivery.requiredDate,
+      requiredDate: delivery.requiredDate ?? null,
 
-      charge: delivery.charge ?? 0,
+      charge: Number(delivery.charge ?? 0),
     };
   }
 
-  /*
-   * =====================================================
-   * Pricing
-   * =====================================================
-   */
-
   buildPricing(pricing = {}, delivery = {}) {
-    const deliveryCharge = delivery.charge ?? 0;
+    const subtotal = Number(pricing.subtotal ?? 0);
+
+    const deliveryCharge = Number(delivery.charge ?? pricing.delivery ?? pricing.deliveryCharge ?? 0);
+
+    const totalBeforeVAT = Number(pricing.totalBeforeVAT ?? pricing.total ?? subtotal + deliveryCharge);
 
     return {
-      subtotal: pricing.subtotal ?? 0,
+      subtotal,
 
       deliveryCharge,
 
-      total: pricing.total ?? (pricing.subtotal ?? 0) + deliveryCharge,
+      tax: 0,
+
+      totalBeforeVAT,
+
+      total: totalBeforeVAT,
 
       currency: pricing.currency ?? "AED",
     };
   }
-
-  /*
-   * =====================================================
-   * Summary
-   * =====================================================
-   */
 
   buildSummary(requirement = {}, pricing = {}, delivery = {}) {
+    const subtotal = Number(pricing.subtotal ?? 0);
+
+    const deliveryCharge = Number(delivery.charge ?? pricing.deliveryCharge ?? pricing.delivery ?? 0);
+
+    const totalBeforeVAT = Number(pricing.totalBeforeVAT ?? pricing.total ?? subtotal + deliveryCharge);
+
     return {
-      totalItems: requirement.items?.length ?? 0,
+      totalItems: Array.isArray(requirement.items)
+        ? requirement.items.length
+        : 0,
 
-      subtotal: pricing.subtotal ?? 0,
+      subtotal,
 
-      deliveryCharge: delivery.charge ?? 0,
+      deliveryCharge,
 
-      total: pricing.total ?? (pricing.subtotal ?? 0) + (delivery.charge ?? 0),
+      totalBeforeVAT,
+
+      total: totalBeforeVAT,
 
       currency: pricing.currency ?? "AED",
     };
   }
 
-  /*
-   * =====================================================
-   * Review Sections
-   * =====================================================
-   */
-
-  buildSections(
-    requirement = {},
-    pricing = {},
-    delivery = {},
-    recommendations = [],
-  ) {
-    return [
+  buildSections(items, delivery, pricing, summary, recommendations = []) {
+    const sections = [
       {
         id: "ORDER_ITEMS",
         title: "Order Summary",
-        items: this.buildItems(requirement.items ?? []),
+        items,
       },
+
       {
         id: "DELIVERY",
         title: "Delivery",
-        data: this.buildDelivery(delivery),
+        data: delivery,
       },
+
       {
         id: "PRICING",
         title: "Pricing",
-        data: this.buildPricing(pricing, delivery),
+        data: pricing,
       },
+
       {
         id: "SUMMARY",
         title: "Summary",
-        data: this.buildSummary(requirement, pricing, delivery),
+        data: summary,
       },
-      ...(recommendations.length
-        ? [
-            {
-              id: "RECOMMENDATIONS",
-              title: "Recommended Products",
-              items: recommendations,
-            },
-          ]
-        : []),
     ];
+
+    if (recommendations.length > 0) {
+      sections.push({
+        id: "RECOMMENDATIONS",
+        title: "Recommended Products",
+        items: recommendations,
+      });
+    }
+
+    return sections;
   }
 }

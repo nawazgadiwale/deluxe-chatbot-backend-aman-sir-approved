@@ -90,9 +90,27 @@ export default class WorkflowNode {
 
     /*
      * =====================================================
-     * Build Execution Plan
+     * Build Execution Plan & Track Transient Execution
      * =====================================================
      */
+
+    const isPersistent = planner.isPersistent(capability);
+
+    if (!isPersistent) {
+      state.transientExecution = {
+        active: true,
+        capability,
+        persistentWorkflow: state.workflow,
+        persistentStep: state.currentStep,
+        persistentOrder: state.order,
+        persistentSelectedProduct: state.selectedProduct,
+        persistentLiveRequirement: state.liveRequirement,
+        persistentProductSales: state.productSales,
+        persistentAwaitingDecision: state.awaitingDecision,
+      };
+    } else {
+      state.transientExecution = null;
+    }
 
     state.executionPlan = plan;
     state.currentExecutionIndex = 0;

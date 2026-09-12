@@ -3,6 +3,7 @@ import WorkflowConfig from "./WorkflowConfig.js";
 import {
   GREETING_PATTERNS,
   FAQ_PATTERNS,
+  SERVICE_PATTERNS,
   COMPARISON_PATTERNS,
   DETAIL_PATTERNS,
   SUPPORT_PATTERNS,
@@ -47,23 +48,23 @@ export default class WorkflowState {
   }
 
   clear(state) {
-    switch (state.workflow) {
-      case "SALES":
-        state.liveRequirement = null;
-        break;
+    state.liveRequirement = null;
+    state.productSales = null;
+    state.leadRequest = null;
+    state.recommendationContext = null;
+    state.selectedProduct = null;
+    state.orderContext = null;
 
-      case "LEAD":
-        state.leadRequest = null;
-        break;
-
-      case "RECOMMENDATION":
-        state.recommendationContext = null;
-        break;
+    if (state.order) {
+      state.order.status = "CANCELLED";
     }
 
     state.workflow = null;
     state.currentStep = null;
     state.awaitingDecision = false;
+    state.workflowStack = [];
+    state.executionPlan = [];
+    state.currentExecutionIndex = 0;
 
     return state;
   }
@@ -136,7 +137,7 @@ export default class WorkflowState {
    */
 
   isActive(state) {
-    return Boolean(state.workflow);
+    return Boolean(state.workflow && state.workflow !== "NONE");
   }
 
   /*
@@ -167,7 +168,11 @@ export default class WorkflowState {
     }
     const config = WorkflowConfig[state.workflow];
 
-    return config?.interruptibleBy.includes(capability);
+    return config?.interruptibleBy?.includes(capability) ?? false;
+  }
+
+  canInterrupt(state, capability) {
+    return this.shouldPause(state, capability);
   }
 
   pause(state) {
@@ -292,16 +297,6 @@ export default class WorkflowState {
       return false;
     }
 
-    /*
-     * =====================================================
-     * Workflow already completed
-     * =====================================================
-     */
-
-    if (this.isCompleted(state)) {
-      return false;
-    }
-
     const text = (state.userMessage ?? "").trim().toLowerCase();
 
     if (!text) {
@@ -310,7 +305,8 @@ export default class WorkflowState {
 
     /*
      * =====================================================
-     * Greetings
+     * Greetings - Pure greetings must route to GreetingNode without
+     * capturing or corrupting the active workflow state.
      * =====================================================
      */
 
@@ -324,7 +320,10 @@ export default class WorkflowState {
      * =====================================================
      */
 
-    if (FAQ_PATTERNS.some((pattern) => pattern.test(text))) {
+    if (
+      FAQ_PATTERNS.some((pattern) => pattern.test(text)) ||
+      SERVICE_PATTERNS.some((pattern) => pattern.test(text))
+    ) {
       return false;
     }
 
@@ -382,6 +381,34 @@ export default class WorkflowState {
 
     /*
      * =====================================================
+     * Cancellation / Interruption / Restart
+     * =====================================================
+     */
+
+    if (
+      /\b(cancel|cancelled|stop|restart|start over|start again|reset|quit|exit|nevermind|back)\b/i.test(
+        text,
+      )
+    ) {
+      return false;
+    }
+
+    /*
+     * =====================================================
+     * Human Handoff / Expert
+     * =====================================================
+     */
+
+    if (
+      /\b(human|agent|talk to human|talk to agent|representative|executive|expert|live agent)\b/i.test(
+        text,
+      )
+    ) {
+      return false;
+    }
+
+    /*
+     * =====================================================
      * Everything else belongs to the current workflow.
      * Let RecommendationQuestionEngine / OrderEngine
      * interpret the answer.
@@ -401,9 +428,11 @@ export default class WorkflowState {
 
     return {
       capability,
-      capabilities: [capability],
+      capabilities: [capability].filter(Boolean),
       confidence: 1,
       source: "WORKFLOW",
+      workflow: state.workflow,
+      step: state.currentStep,
     };
   }
 }

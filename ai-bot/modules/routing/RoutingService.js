@@ -7,64 +7,26 @@ const validator = new RoutingValidator();
 const workflow = new WorkflowState();
 
 export default class RoutingService {
-  /*
-   * =====================================================
-   * Route Request
-   * =====================================================
-   */
-
   async route(state) {
-    console.log("===== ROUTE INPUT =====");
-    console.log({
-      workflow: state.workflow,
-      currentStep: state.currentStep,
-      awaitingDecision: state.awaitingDecision,
-      action: state.action,
-    });
-
     try {
-      /*
-       * =====================================================
-       * UI Actions
-       * =====================================================
-       */
-
+      // 1. UI Actions
       if (state.action) {
-        console.log("ACTION FOUND");
-
         const actionRouting = engine.routeAction(state.action);
-
-        console.log("ACTION ROUTING:", actionRouting);
-
         if (actionRouting) {
+          console.log("[WhatsApp][Routing] classification=ACTION");
           return validator.validate(actionRouting);
         }
       }
 
-      /*
-       * =====================================================
-       * Active Workflow
-       * =====================================================
-       */
-
-      console.log("WORKFLOW ACTIVE:", workflow.isActive(state));
+      // 2. Active Workflow
       if (workflow.isActive(state)) {
-        console.log("ROUTING WORKFLOW");
         return this.routeWorkflow(state);
       }
 
-      console.log("ROUTING INTENT");
-      return this.routeIntent(state);
-      /*
-       * =====================================================
-       * Normal Routing
-       * =====================================================
-       */
-
+      // 3. Intent Routing
       return this.routeIntent(state);
     } catch (error) {
       console.error("Routing Error:", error);
-
       return validator.validate({
         capability: "out_of_scope",
         confidence: 0,
@@ -73,102 +35,67 @@ export default class RoutingService {
     }
   }
 
-  /*
-   * =====================================================
-   * Workflow Routing
-   * =====================================================
-   */
-
   async routeWorkflow(state) {
-    /*
-     * =====================================================
-     * Continue Current Workflow
-     * =====================================================
-     */
-
+    // Continue current workflow if condition met
     if (workflow.shouldContinue(state)) {
+      console.log("[WhatsApp][Routing] classification=WORKFLOW");
+      console.log("[WhatsApp Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
+        workflow: state.workflow,
+        currentStep: state.currentStep,
+        awaitingDecision: state.awaitingDecision,
+      });
       return workflow.currentRouting(state);
     }
 
-    /*
-     * =====================================================
-     * Check for New Intent
-     * =====================================================
-     */
-
+    // Check for new intent
     const routing = await this.routeIntent(state);
 
-    /*
-     * =====================================================
-     * Resume Same Workflow
-     * =====================================================
-     */
-
+    // Resume same workflow
     if (routing.capability === workflow.currentCapability(state)) {
+      console.log("[WhatsApp][Routing] classification=WORKFLOW");
       return workflow.currentRouting(state);
     }
 
-    /*
-     * =====================================================
-     * Interrupt Workflow
-     * =====================================================
-     */
-
+    // Check if new capability can interrupt active workflow
     if (workflow.canInterrupt(state, routing.capability)) {
+      const capName = String(routing.capability || "").toUpperCase();
+      const classification =
+        capName === "GREETING"
+          ? "GREETING"
+          : capName === "FAQ" || capName === "SUPPORT"
+            ? "FAQ"
+            : capName === "SALES"
+              ? "NEW_PRODUCT"
+              : capName;
+      console.log(`[WhatsApp][Routing] classification=${classification}`);
       workflow.pause(state);
       return routing;
     }
 
-    /*
-     * =====================================================
-     * Continue Existing Workflow
-     * =====================================================
-     */
-
+    // Otherwise preserve existing workflow
+    console.log("[WhatsApp][Routing] classification=WORKFLOW");
+    console.log("[WhatsApp Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
+      workflow: state.workflow,
+      currentStep: state.currentStep,
+      awaitingDecision: state.awaitingDecision,
+      attemptedInterruptBy: routing.capability,
+    });
     return workflow.currentRouting(state);
   }
-
-  /*
-   * =====================================================
-   * Intent Routing
-   * =====================================================
-   */
 
   async routeIntent(state) {
     const routing = validator.validate(await engine.route(state));
 
-    /*
-     * =====================================================
-     * Resume Workflow
-     * =====================================================
-     */
-
     if (routing.capability === "resume_workflow") {
       const resumed = workflow.resume(state);
-
       return resumed
         ? workflow.currentRouting(state)
-        : {
-            capability: "out_of_scope",
-            confidence: 1,
-            source: "ACTION",
-          };
+        : { capability: "out_of_scope", confidence: 1, source: "ACTION" };
     }
-
-    /*
-     * =====================================================
-     * Cancel Workflow
-     * =====================================================
-     */
 
     if (routing.capability === "cancel_workflow") {
       workflow.discardPausedWorkflow(state);
-
-      return {
-        capability: "out_of_scope",
-        confidence: 1,
-        source: "ACTION",
-      };
+      return { capability: "out_of_scope", confidence: 1, source: "ACTION" };
     }
 
     return routing;

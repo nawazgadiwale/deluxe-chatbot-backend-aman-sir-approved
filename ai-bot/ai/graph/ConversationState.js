@@ -6,6 +6,14 @@ const ConversationState = Annotation.Root({
     default: () => null,
   }),
 
+  ipAddress: Annotation({
+    default: () => null,
+  }),
+
+  visitorId: Annotation({
+    default: () => null,
+  }),
+
   conversationId: Annotation({
     default: () => null,
   }),

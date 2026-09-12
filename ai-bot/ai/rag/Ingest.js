@@ -6,6 +6,8 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import DocumentLoader from "../rag/ingestion/loaders/DocumentLoader.js";
 import VectorStoreService from "./VectorStoreService.js";
 
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

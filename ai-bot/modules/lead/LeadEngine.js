@@ -15,7 +15,11 @@ const leadService = new LeadService();
 
 export default class LeadEngine {
   async execute(state = {}) {
-    console.log("========== LEAD ENGINE ==========");
+    console.log("========== WHATSAPP LEAD ENGINE ==========");
+
+    const channel = state.channel ?? state.whatsapp?.channel ?? "WEBCHAT";
+
+    const isWhatsApp = channel === LeadConstants.CHANNELS.WHATSAPP;
 
     /*
      * =====================================================
@@ -63,19 +67,6 @@ export default class LeadEngine {
      * =====================================================
      * REQUEST TYPE
      * =====================================================
-     *
-     * REQUEST TYPE BELONGS TO CONVERSATION.
-     *
-     * Priority:
-     *
-     * 1. Existing Conversation requestType
-     * 2. Runtime leadContext requestType
-     * 3. Runtime state requestType
-     * 4. Routing requestType
-     * 5. ORDER if actual order exists
-     * 6. EXPERT fallback
-     *
-     * The frontend action is NOT trusted.
      */
 
     const conversationRequestType =
@@ -94,12 +85,6 @@ export default class LeadEngine {
         ? LeadConstants.REQUEST_TYPES.ORDER
         : LeadConstants.REQUEST_TYPES.EXPERT);
 
-    /*
-     * =====================================================
-     * PRESERVE RUNTIME REQUEST TYPE
-     * =====================================================
-     */
-
     state.requestType = requestType;
 
     state.leadContext = {
@@ -107,13 +92,9 @@ export default class LeadEngine {
       requestType,
     };
 
-    console.log("Lead Request Type:", requestType);
-
-    console.log("Lead Has Order:", hasOrder);
-
     /*
      * =====================================================
-     * PERSIST REQUEST TYPE IN CONVERSATION
+     * SAVE REQUEST TYPE
      * =====================================================
      */
 
@@ -121,264 +102,57 @@ export default class LeadEngine {
       await leadService.updateConversationRequestType(sessionId, requestType);
     }
 
+    const hasCustomerData =
+      Boolean(state.customer?.name || requirement.customer?.name) &&
+      Boolean(
+        state.customer?.email ||
+        state.customer?.emailId ||
+        requirement.customer?.email ||
+        requirement.customer?.emailId,
+      );
+
+    const isDirectSubmission =
+      hasCustomerData ||
+      state.action?.id === LeadConstants.ACTIONS.SUBMIT_LEAD;
+
     /*
      * =====================================================
-     * FIRST ENTRY
+     * FIRST LEAD ENTRY
      * =====================================================
      */
 
-    if (state.action?.id !== "SUBMIT_LEAD") {
-      console.log("Lead form required - waiting for customer details");
+    if (!isDirectSubmission) {
+      console.log("WhatsApp lead form required.");
 
       /*
-       * =================================================
-       * CUSTOMER
-       * =================================================
+       * IMPORTANT:
+       *
+       * WhatsAppResponseAdapter will render interactive
+       * lead collection controls.
        */
 
-      const customer = requirement.customer ?? state.customer ?? {};
+      if (isWhatsApp) {
+        return {
+          status: "COLLECTING_CUSTOMER",
 
-      /*
-       * =================================================
-       * FORM CONFIGURATION
-       * =================================================
-       */
+          completed: false,
 
-      let title = "Talk to Our Sales Team";
+          interaction: "FORM",
 
-      let subtitle = "Please provide your contact information";
+          requestType,
 
-      let message =
-        "Please provide your contact information so our sales team can assist you.";
+          leadContext,
 
-      let description = "Our sales team will contact you shortly.";
-
-      /*
-       * =================================================
-       * ORDER
-       * =================================================
-       */
-
-      if (requestType === LeadConstants.REQUEST_TYPES.ORDER) {
-        title = "Complete Your Order";
-
-        subtitle = "Please provide your contact information";
-
-        message =
-          "Your order details are ready. Please provide your contact information so our sales team can process your request.";
-
-        description =
-          "Our sales team will contact you to confirm the order and final quotation.";
+          order: requirement,
+        };
       }
 
       /*
        * =================================================
-       * QUOTATION
+       * WEBCHAT FALLBACK
        * =================================================
-       */
-
-      if (requestType === LeadConstants.REQUEST_TYPES.QUOTATION) {
-        title = "Request a Quotation";
-
-        subtitle = "Tell us what you need a quotation for";
-
-        message =
-          "Please provide the item or printing requirement you need a quotation for, along with your contact information.";
-
-        description =
-          "Our sales team will review your requirements and contact you with the quotation.";
-      }
-
-      /*
-       * =================================================
-       * EXPERT
-       * =================================================
-       */
-
-      if (requestType === LeadConstants.REQUEST_TYPES.EXPERT) {
-        title = "Talk to an Expert";
-
-        subtitle = "Tell us what you need help with";
-
-        message =
-          "Please tell us what you need help with and provide your contact information so our printing expert can assist you.";
-
-        description = "Our printing expert will contact you shortly.";
-      }
-
-      /*
-       * =================================================
-       * CONTACT SALES
-       * =================================================
-       */
-
-      if (requestType === LeadConstants.REQUEST_TYPES.CONTACT_SALES) {
-        title = "Contact Sales";
-
-        subtitle = "Tell us what you would like to discuss";
-
-        message =
-          "Please tell us what you would like to discuss and provide your contact information so our sales team can assist you.";
-
-        description = "Our sales team will contact you shortly.";
-      }
-
-      /*
-       * =================================================
-       * FIELDS
-       * =================================================
-       */
-
-      const fields = [];
-
-      /*
-       * =================================================
-       * REQUIRED ITEM
-       * =================================================
-       */
-
-      if (requestType !== LeadConstants.REQUEST_TYPES.ORDER) {
-        let label = "What do you need assistance with?";
-
-        let placeholder = "e.g. Business cards, signage, packaging";
-
-        if (requestType === LeadConstants.REQUEST_TYPES.QUOTATION) {
-          label = "What would you like a quotation for?";
-
-          placeholder = "e.g. Business cards, flyers, brochures";
-        }
-
-        if (requestType === LeadConstants.REQUEST_TYPES.EXPERT) {
-          label = "What would you like help with?";
-
-          placeholder = "e.g. Business cards, signage, packaging";
-        }
-
-        if (requestType === LeadConstants.REQUEST_TYPES.CONTACT_SALES) {
-          label = "What would you like to discuss with sales?";
-
-          placeholder = "e.g. Business cards, signage, bulk printing";
-        }
-
-        fields.push({
-          id: "requiredItem",
-
-          label,
-
-          placeholder,
-
-          type: "text",
-
-          required: true,
-
-          value: leadContext.requiredItem ?? "",
-        });
-      }
-
-      /*
-       * =================================================
-       * NAME
-       * =================================================
-       */
-
-      fields.push({
-        id: "name",
-
-        label: "Full Name",
-
-        placeholder: "Enter your full name",
-
-        type: "text",
-
-        required: true,
-
-        value: customer.name ?? "",
-      });
-
-      /*
-       * =================================================
-       * PHONE
-       * =================================================
-       */
-
-      fields.push({
-        id: "phoneNumber",
-
-        label: "Phone Number",
-
-        placeholder: "Enter your phone number",
-
-        type: "tel",
-
-        required: true,
-
-        value: customer.phone ?? customer.phoneNumber ?? "",
-      });
-
-      /*
-       * =================================================
-       * EMAIL
-       * =================================================
-       */
-
-      fields.push({
-        id: "emailId",
-
-        label: "Email Address",
-
-        placeholder: "Enter your email address",
-
-        type: "email",
-
-        required: false,
-
-        value: customer.email ?? customer.emailId ?? "",
-      });
-
-      /*
-       * =================================================
-       * COMPANY
-       * =================================================
-       */
-
-      fields.push({
-        id: "companyName",
-
-        label: "Company Name",
-
-        placeholder: "Enter your company name",
-
-        type: "text",
-
-        required: false,
-
-        value: customer.company ?? customer.companyName ?? "",
-      });
-
-      /*
-       * =================================================
-       * SUBMIT LABEL
-       * =================================================
-       */
-
-      let submitLabel = "Submit Order Request";
-
-      if (requestType === LeadConstants.REQUEST_TYPES.QUOTATION) {
-        submitLabel = "Request Quotation";
-      }
-
-      if (requestType === LeadConstants.REQUEST_TYPES.EXPERT) {
-        submitLabel = "Talk to Expert";
-      }
-
-      if (requestType === LeadConstants.REQUEST_TYPES.CONTACT_SALES) {
-        submitLabel = "Contact Sales";
-      }
-
-      /*
-       * =================================================
-       * FORM
-       * =================================================
+       *
+       * Keep only if WebChat is still used.
        */
 
       return {
@@ -386,34 +160,53 @@ export default class LeadEngine {
 
         completed: false,
 
+        interaction: "FORM",
+
+        requestType,
+
         form: {
           step: "COLLECT_CUSTOMER",
 
           type: "FORM",
 
-          title,
+          title:
+            requestType === LeadConstants.REQUEST_TYPES.ORDER
+              ? "Complete Your Order"
+              : "Talk to Our Sales Team",
 
-          subtitle,
+          fields: [
+            {
+              id: "name",
+              label: "Full Name",
+              type: "text",
+              required: true,
+            },
 
-          message,
+            {
+              id: "phoneNumber",
+              label: "Phone Number",
+              type: "tel",
+              required: true,
+            },
 
-          description,
+            {
+              id: "emailId",
+              label: "Email Address",
+              type: "email",
+              required: false,
+            },
 
-          fields,
-
-          /*
-           * IMPORTANT:
-           *
-           * requestType is NOT sent to frontend.
-           *
-           * Backend already knows it from
-           * Conversation.
-           */
+            {
+              id: "companyName",
+              label: "Company Name",
+              type: "text",
+              required: false,
+            },
+          ],
 
           submitAction: {
             id: "SUBMIT_LEAD",
-
-            label: submitLabel,
+            label: "Submit",
           },
         },
       };
@@ -421,17 +214,15 @@ export default class LeadEngine {
 
     /*
      * =====================================================
-     * EXTRACT
+     * EXTRACT WHATSAPP FLOW DATA
      * =====================================================
      */
 
     const extractedLead = leadExtractor.extract(state);
 
-    console.log("Extracted Lead:");
+    console.log("Extracted WhatsApp Lead:");
 
-    console.dir(extractedLead, {
-      depth: null,
-    });
+    console.dir(extractedLead, { depth: null });
 
     /*
      * =====================================================
@@ -439,12 +230,8 @@ export default class LeadEngine {
      * =====================================================
      */
 
-    const validatedLead = leadValidator.validate(extractedLead);
-
-    console.log("Validated Lead:");
-
-    console.dir(validatedLead, {
-      depth: null,
+    const validatedLead = leadValidator.validate(extractedLead, {
+      channel,
     });
 
     /*
@@ -455,28 +242,23 @@ export default class LeadEngine {
 
     const refNo = await leadService.getNextRefNumber();
 
-    console.log("Generated Ref No:", refNo);
-
     /*
      * =====================================================
      * BUILD
      * =====================================================
      */
 
-    const leadDocument = leadBuilder.build(validatedLead, refNo, requirement);
-
-    console.log("Lead Document:");
-
-    console.dir(leadDocument, {
-      depth: null,
-    });
+    const leadDocument = leadBuilder.build(
+      validatedLead,
+      refNo,
+      requirement,
+      channel,
+    );
 
     /*
      * =====================================================
-     * SAVE LEAD
+     * SAVE
      * =====================================================
-     *
-     * requestType is NOT inside leadDocument.
      */
 
     const savedLead = await leadService.createLead(
@@ -486,33 +268,19 @@ export default class LeadEngine {
 
     /*
      * =====================================================
-     * UPDATE EXISTING ORDER
+     * ATTACH LEAD TO ORDER
      * =====================================================
      */
 
     let updatedOrder = null;
 
     if (requestType === LeadConstants.REQUEST_TYPES.ORDER && hasOrder) {
-      /*
-       * =================================================
-       * RESOLVE REAL ORDER ID
-       * =================================================
-       */
-
       const orderId =
         requirement._id ??
         requirement.id ??
         state.orderContext?._id ??
         state.order?._id ??
         state.liveRequirement?._id;
-
-      console.log("Order ID for Lead Attachment:", orderId);
-
-      /*
-       * =================================================
-       * CUSTOMER
-       * =================================================
-       */
 
       const customer = {
         name: savedLead.name ?? null,
@@ -524,12 +292,6 @@ export default class LeadEngine {
         email: savedLead.emailId ?? null,
       };
 
-      /*
-       * =================================================
-       * UPDATE ORDER
-       * =================================================
-       */
-
       if (orderId) {
         updatedOrder = await leadService.updateOrderAfterLead(
           orderId,
@@ -537,8 +299,6 @@ export default class LeadEngine {
           savedLead._id,
           savedLead,
         );
-      } else {
-        console.warn("ORDER EXISTS BUT NO ORDER ID WAS FOUND.");
       }
     }
 
@@ -553,9 +313,17 @@ export default class LeadEngine {
 
       completed: true,
 
+      interaction: "WHATSAPP",
+
       lead: savedLead,
 
       order: updatedOrder,
+
+      whatsapp: {
+        phoneNumber: state.whatsapp?.phoneNumber ?? savedLead.phoneNumber,
+
+        message: "Thank you! Our sales team will contact you shortly.",
+      },
     };
   }
 }

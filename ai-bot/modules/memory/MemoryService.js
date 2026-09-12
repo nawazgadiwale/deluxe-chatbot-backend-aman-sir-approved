@@ -94,7 +94,18 @@ export default class MemoryService {
       workflow: conversation.workflow ?? null,
 
       currentStep: conversation.currentStep ?? null,
-      selectedProduct: null,
+      selectedProduct:
+        conversation.memory?.selectedProduct ??
+        (conversation.memory?.liveRequirement?.items?.[
+          conversation.memory?.liveRequirement?.currentItem ?? 0
+        ]?.selectedProduct ??
+          conversation.memory?.liveRequirement?.items?.[
+            conversation.memory?.liveRequirement?.currentItem ?? 0
+          ]?.selection ??
+          conversation.memory?.liveRequirement?.items?.[
+            conversation.memory?.liveRequirement?.currentItem ?? 0
+          ]?.product ??
+          null),
 
       recommendation: conversation.memory?.recommendation ?? null,
 
@@ -129,7 +140,6 @@ export default class MemoryService {
 
         ...(conversation.memory?.recommendationContext ?? {}),
       },
-      selectedProduct: conversation.memory?.selectedProduct ?? null,
 
       comparison: conversation.memory?.comparison ?? null,
 
@@ -142,22 +152,53 @@ export default class MemoryService {
   }
 
   merge(memory = {}, state = {}) {
+    // If state explicitly cleared liveRequirement (null), do not fall back to old memory
+    const liveReq =
+      state.liveRequirement === null
+        ? null
+        : (state.liveRequirement ??
+          (state.productSales === null
+            ? null
+            : (state.productSales ??
+              (state.workflow === "NONE" ? null : (memory.liveRequirement ?? memory.productSales ?? null)))));
+
+    const currentItem =
+      liveReq?.items?.[liveReq?.currentItem ?? 0] ?? null;
+
+    const resolvedProduct =
+      state.selectedProduct === null || liveReq === null || state.workflow === "NONE"
+        ? null
+        : (state.selectedProduct ??
+          currentItem?.selectedProduct ??
+          currentItem?.selection ??
+          currentItem?.product ??
+          memory.selectedProduct ??
+          null);
+
+    const resolvedWorkflow =
+      state.workflow === null || state.workflow === "NONE"
+        ? null
+        : (state.workflow ?? memory.workflow);
+
+    const resolvedCurrentStep =
+      state.currentStep === null || state.workflow === "NONE"
+        ? null
+        : (state.currentStep ?? memory.currentStep);
+
     return {
       ...memory,
 
       customer: state.customer ?? memory.customer,
 
-      workflow: state.workflow ?? memory.workflow,
+      workflow: resolvedWorkflow,
 
-      currentStep: state.currentStep ?? memory.currentStep,
+      currentStep: resolvedCurrentStep,
 
-      leadRequest: state.leadRequest ?? memory.leadRequest,
+      leadRequest: state.leadRequest === null ? null : (state.leadRequest ?? memory.leadRequest),
 
-      liveRequirement:
-        state.liveRequirement ?? memory.liveRequirement ?? memory.productSales,
+      liveRequirement: liveReq,
 
-      productSales:
-        state.productSales ?? state.liveRequirement ?? memory.productSales,
+      productSales: liveReq,
 
       recommendation: state.recommendation ?? memory.recommendation,
 
@@ -200,7 +241,7 @@ export default class MemoryService {
           ]),
         ],
       },
-      selectedProduct: state.selectedProduct ?? memory.selectedProduct,
+      selectedProduct: resolvedProduct,
 
       comparison: state.comparison ?? memory.comparison,
 

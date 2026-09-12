@@ -15,7 +15,11 @@ const CONFIRM_KEYWORDS = [
   "yes",
   "confirm",
   "confirmed",
+  "confirm order",
   "place order",
+  "place the order",
+  "want to place the order",
+  "i want to place the order",
   "submit",
   "continue",
   "looks good",
@@ -30,143 +34,65 @@ const ADD_PRODUCT_KEYWORDS = ["also", "another", "add", "plus", "along with"];
 export default class SalesExtractor {
   extract(requirement = {}, message = "", currentStep = null) {
     const text = this.normalize(message);
-
-    /*
-     * =====================================================
-     * Customer
-     * =====================================================
-     *
-     * Customer details are collected AFTER the order
-     * requirements are completed.
-     *
-     * Do not run product extraction during this stage.
-     */
-
-    if (currentStep === "COLLECT_CUSTOMER") {
-      return this.extractCustomer(message);
-    }
-
     const currentItem = requirement.items?.[requirement.currentItem] ?? {};
 
-    /*
-     * =====================================================
-     * Product
-     * =====================================================
-     */
+    const rawProductMatches = productResolver.resolveMany(text);
+    const categoryProducts =
+      rawProductMatches.length === 0
+        ? catalogService.findCategoryProducts(text)
+        : [];
+    const isNewProduct =
+      rawProductMatches.length > 0 &&
+      (!currentItem.product?.id ||
+        rawProductMatches[0].id !== currentItem.product.id);
+    const isNewCategory =
+      categoryProducts.length > 0 &&
+      (!currentItem.product?.id ||
+        !categoryProducts.some((p) => p.id === currentItem.product.id));
 
-    const product = this.resolveProduct(currentItem, text);
+    // FINAL CATALOG FORM BOUNDARY:
+    // If in formMode and NOT requesting a new product or category, free text cannot mutate order fields
+    if (currentItem.formMode === true && !isNewProduct && !isNewCategory) {
+      return {};
+    }
 
-    /*
-     * =====================================================
-     * Selection
-     * =====================================================
-     */
+    const productMatches =
+      isNewProduct || !currentItem.product?.id
+        ? rawProductMatches
+        : this.resolveProductMatches(currentItem, text);
+    const product = productMatches.length === 1 ? productMatches[0] : null;
+    const selection = isNewProduct
+      ? null
+      : this.resolveSelection(product, currentItem, text);
 
-    const selection = this.resolveSelection(product, currentItem, text);
-
-    /*
-     * =====================================================
-     * Product Data
-     * =====================================================
-     */
-
-    const productData = this.resolveField(product, currentItem, text);
-
-    /*
-     * =====================================================
-     * Requirements
-     * =====================================================
-     */
-
-    const requirements = [];
-
-    /*
-     * =====================================================
-     * Quantity
-     * =====================================================
-     */
-
-    const quantity = this.extractQuantity(
-      product,
-      currentItem,
-      text,
-      currentStep,
-    );
-
-    /*
-     * =====================================================
-     * Artwork
-     * =====================================================
-     */
-
-    const artwork = this.extractArtwork(text);
-
-    /*
-     * =====================================================
-     * Delivery
-     * =====================================================
-     */
-
-    const delivery = this.extractDelivery(text, currentStep, message);
+    const nestedProduct = isNewProduct
+      ? null
+      : this.resolveNestedProduct(currentItem, selection, text);
 
     return {
-      /*
-       * Product
-       */
-
-      product: currentItem.product?.id ? null : product,
-
-      /*
-       * Selection
-       */
-
+      product: isNewProduct || !currentItem.product?.id ? product : null,
+      products: isNewProduct || !currentItem.product?.id ? productMatches : [],
+      categoryProducts,
+      isNewProduct: isNewProduct || isNewCategory,
+      browseCatalog:
+        /\b(what products|show products|browse|catalog|products do you have|what do you print|something printed|want to print)\b/i.test(
+          text,
+        ),
       selection,
-
-      /*
-       * Product Data
-       */
-
-      productData,
-
-      /*
-       * Requirements
-       */
-
-      requirements,
-
-      /*
-       * Workflow
-       */
-
-      quantity,
-
-      artwork,
-
-      /*
-       * Delivery
-       */
-
-      deliveryMethod: delivery.method,
-
-      address: delivery.address,
-
-      requiredDate: delivery.requiredDate,
-
-      /*
-       * Conversation
-       */
-
-      confirmed: this.extractConfirmation(text),
-
+      nestedProduct,
+      productData: {},
+      requirements: [],
+      quantity: null,
+      artwork: null,
+      deliveryMethod: null,
+      address: null,
+      requiredDate: null,
+      confirmed: false,
       addAnotherProduct: this.extractAddAnotherProduct(text),
     };
   }
 
-  /*
-   * =====================================================
-   * Customer
-   * =====================================================
-   */
+  // Customer
 
   extractCustomer(message = "") {
     const value = message.trim();
@@ -177,11 +103,7 @@ export default class SalesExtractor {
       };
     }
 
-    /*
-     * -----------------------------------------------------
-     * Phone
-     * -----------------------------------------------------
-     */
+    // Phone
 
     const phone = this.extractPhone(value);
 
@@ -193,12 +115,7 @@ export default class SalesExtractor {
       };
     }
 
-    /*
-     * -----------------------------------------------------
-     * Email
-     * -----------------------------------------------------
-     */
-
+    // Email
     const email = this.extractEmail(value);
 
     if (email) {
@@ -209,14 +126,8 @@ export default class SalesExtractor {
       };
     }
 
-    /*
-     * -----------------------------------------------------
-     * Name
-     * -----------------------------------------------------
-     *
-     * At COLLECT_CUSTOMER the decision service asks
-     * for name first, so plain text is treated as name.
-     */
+    // Name
+    // At COLLECT_CUSTOMER the decision service asks for name first, so plain text is treated as name.
 
     return {
       customer: {
@@ -225,11 +136,7 @@ export default class SalesExtractor {
     };
   }
 
-  /*
-   * =====================================================
-   * Phone
-   * =====================================================
-   */
+  // Phone
 
   extractPhone(value = "") {
     const match = value.match(/(?:\+?\d[\d\s\-().]{6,}\d)/);
@@ -245,11 +152,8 @@ export default class SalesExtractor {
     return phoneRegex.test(phone) ? phone : null;
   }
 
-  /*
-   * =====================================================
-   * Email
-   * =====================================================
-   */
+
+  // Email
 
   extractEmail(value = "") {
     const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
@@ -257,25 +161,25 @@ export default class SalesExtractor {
     return match ? match[0].trim() : null;
   }
 
-  /*
-   * =====================================================
-   * Product
-   * =====================================================
-   */
+  // Product
 
-  resolveProduct(currentItem = {}, text = "") {
+  resolveProductMatches(currentItem = {}, text = "") {
     if (currentItem.product?.id) {
-      return catalogService.getProduct(currentItem.product.id);
+      const product = catalogService.getProduct(currentItem.product.id);
+      return product ? [product] : [];
     }
 
-    return productResolver.resolve(text);
+    const matches = productResolver.resolveMany(text);
+    return matches.length ? matches : catalogService.discover(text);
   }
 
-  /*
-   * =====================================================
-   * Selection
-   * =====================================================
-   */
+  resolveProduct(currentItem = {}, text = "") {
+    const matches = this.resolveProductMatches(currentItem, text);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+
+  // Selection
 
   resolveSelection(product = null, currentItem = {}, text = "") {
     if (!product) {
@@ -292,11 +196,39 @@ export default class SalesExtractor {
     return selectionResolver.resolve(product, text);
   }
 
-  /*
-   * =====================================================
-   * Product Field
-   * =====================================================
-   */
+  // Nested Catalog Product
+  // Some catalog products expose a category/selection whose options
+  // contain concrete child products. The child product is still catalog data; it must never be invented or resolved as a top-level product.
+
+  resolveNestedProduct(currentItem = {}, selection = null, text = "") {
+    if (!selection || !Array.isArray(selection.products) || !text) {
+      return null;
+    }
+
+    const normalized = this.normalize(text);
+
+    return (
+      selection.products.find((product) => {
+        const candidates = [
+          product.id,
+          product.name,
+          product.slug,
+          ...(product.aliases ?? []),
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase());
+
+        return candidates.some(
+          (candidate) =>
+            normalized === candidate ||
+            normalized.includes(candidate) ||
+            candidate.includes(normalized),
+        );
+      }) ?? null
+    );
+  }
+
+  // Product Field
 
   resolveField(product = null, currentItem = {}, text = "") {
     if (!product) {
@@ -312,11 +244,7 @@ export default class SalesExtractor {
     return fieldResolver.resolve(field, text);
   }
 
-  /*
-   * =====================================================
-   * Quantity
-   * =====================================================
-   */
+  // Quantity
 
   extractQuantity(
     product = null,
@@ -351,11 +279,7 @@ export default class SalesExtractor {
     return quantity;
   }
 
-  /*
-   * =====================================================
-   * Artwork
-   * =====================================================
-   */
+  // Artwork
 
   extractArtwork(text = "") {
     if (/need design|design service|design it|create artwork/i.test(text)) {
@@ -374,20 +298,15 @@ export default class SalesExtractor {
 
     return null;
   }
-  /*
-   * =====================================================
-   * Delivery
-   * =====================================================
-   */
+
+  // Delivery
 
   extractDelivery(text = "", currentStep = null, message = "") {
     const delivery = deliveryService.parse(text);
 
-    /*
-     * =====================================================
-     * Delivery Address
-     * =====================================================
-     */
+
+    // Delivery Address
+
 
     if (
       currentStep === "ASK_DELIVERY_ADDRESS" &&
@@ -397,11 +316,9 @@ export default class SalesExtractor {
       delivery.address = message.trim();
     }
 
-    /*
-     * =====================================================
-     * Delivery Date
-     * =====================================================
-     */
+
+    // Delivery Date
+
 
     if (currentStep === "ASK_DELIVERY_DATE") {
       if (!delivery.requiredDate && message.trim()) {
@@ -412,32 +329,21 @@ export default class SalesExtractor {
     return delivery;
   }
 
-  /*
-   * =====================================================
-   * Resolve Delivery Date
-   * =====================================================
-   */
+
+  // Resolve Delivery Date
 
   resolveDeliveryDate(message = "") {
     const text = message.trim().toLowerCase();
 
     const today = new Date();
 
-    /*
-     * -----------------------------------------------------
-     * Today
-     * -----------------------------------------------------
-     */
+    // Today
 
     if (/\btoday\b/.test(text)) {
       return this.formatDate(today);
     }
 
-    /*
-     * -----------------------------------------------------
-     * Tomorrow
-     * -----------------------------------------------------
-     */
+    // Tomorrow
 
     if (/\btomorrow\b/.test(text)) {
       const date = new Date(today);
@@ -446,11 +352,7 @@ export default class SalesExtractor {
       return this.formatDate(date);
     }
 
-    /*
-     * -----------------------------------------------------
-     * Day names
-     * -----------------------------------------------------
-     */
+    // Day names
 
     const days = {
       sunday: 0,
@@ -468,18 +370,7 @@ export default class SalesExtractor {
       }
     }
 
-    /*
-     * -----------------------------------------------------
-     * Explicit date
-     * -----------------------------------------------------
-     *
-     * If the customer says:
-     *
-     * 20/08/2026
-     * 20-08-2026
-     *
-     * keep the existing value.
-     */
+    // Explicit date: If the customer says: 20/08/2026 or 20-08-2026, keep the existing value.
 
     const explicitDate = this.extractExplicitDate(text);
 
@@ -487,20 +378,12 @@ export default class SalesExtractor {
       return explicitDate;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Fallback
-     * -----------------------------------------------------
-     */
+    // Fallback
 
     return message.trim();
   }
 
-  /*
-   * =====================================================
-   * Get Next Day
-   * =====================================================
-   */
+  // Get Next Day
 
   getNextDay(targetDay, fromDate = new Date()) {
     const date = new Date(fromDate);
@@ -509,10 +392,7 @@ export default class SalesExtractor {
 
     let difference = targetDay - currentDay;
 
-    /*
-     * If today is Friday and customer says Friday,
-     * interpret it as NEXT Friday rather than today.
-     */
+    // If today is Friday and customer says Friday, interpret it as NEXT Friday rather than today.
 
     if (difference <= 0) {
       difference += 7;
@@ -523,11 +403,7 @@ export default class SalesExtractor {
     return this.formatDate(date);
   }
 
-  /*
-   * =====================================================
-   * Format Date
-   * =====================================================
-   */
+  // Format Date
 
   formatDate(date) {
     const year = date.getFullYear();
@@ -539,11 +415,7 @@ export default class SalesExtractor {
     return `${year}-${month}-${day}`;
   }
 
-  /*
-   * =====================================================
-   * Explicit Date
-   * =====================================================
-   */
+  // Explicit Date
 
   extractExplicitDate(text = "") {
     const match = text.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\b/);
@@ -565,10 +437,7 @@ export default class SalesExtractor {
 
     const date = new Date(year, month - 1, day);
 
-    /*
-     * Validate the date so something like
-     * 32/99/2026 isn't accepted.
-     */
+    // Validate the date so something like 32/99/2026 isn't accepted.
 
     if (
       date.getFullYear() !== year ||
@@ -580,31 +449,21 @@ export default class SalesExtractor {
 
     return this.formatDate(date);
   }
-  /*
-   * =====================================================
-   * Confirmation
-   * =====================================================
-   */
+
+  // Confirmation
 
   extractConfirmation(text = "") {
-    return this.contains(text, CONFIRM_KEYWORDS);
+    const normalized = this.normalize(text);
+    return this.contains(normalized, CONFIRM_KEYWORDS);
   }
 
-  /*
-   * =====================================================
-   * Add Product
-   * =====================================================
-   */
+  // Add Product
 
   extractAddAnotherProduct(text = "") {
     return this.contains(text, ADD_PRODUCT_KEYWORDS);
   }
 
-  /*
-   * =====================================================
-   * Helpers
-   * =====================================================
-   */
+  //  Helpers
 
   normalize(message = "") {
     return message.trim().toLowerCase().replace(/\s+/g, " ");

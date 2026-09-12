@@ -1,272 +1,30 @@
 import DecisionTypes from "../helpers/DecisionTypes.js";
 import SalesCatalogService from "./SalesCatalogService.js";
-import DeliveryService from "./DeliveryService.js";
+import PricingService from "./PricingService.js";
+import DeliveryService, {
+  DELIVERY_CHARGES,
+  DELIVERY_METHODS,
+} from "./DeliveryService.js";
+import { resolveCatalogImage } from "../helpers/CatalogHelper.js";
 
 const catalogService = new SalesCatalogService();
+const pricingService = new PricingService();
 const deliveryService = new DeliveryService();
 
 export default class ConversationDecisionService {
-  /*
-   * =====================================================
-   * Product Selection
-   * =====================================================
-   */
-
-  buildProductSelection() {
-    const products = catalogService.getProducts();
-
-    return this.createDecision({
-      type: DecisionTypes.SELECT_PRODUCT,
-
-      context: {
-        action: DecisionTypes.SELECT_PRODUCT,
-
-        products: products.map((product) => ({
-          id: product.id,
-          name: product.name,
-        })),
-      },
-
-      actions: products.map((product) => ({
-        id: DecisionTypes.SELECT_PRODUCT,
-
-        label: product.name,
-
-        payload: {
-          productId: product.id,
-        },
-      })),
-    });
-  }
-
-  /*
-   * =====================================================
-   * Selection Recommendation
-   * =====================================================
-   */
-
-  buildSelectionRecommendation(requirement = {}, product = {}) {
-    /*
-     * Product doesn't have variants.
-     */
-
-    if (!catalogService.hasSelection(product)) {
-      return null;
-    }
-
-    /*
-     * Customer requested all options.
-     */
-
-    if (requirement.showAllSelections) {
-      const options = catalogService.getSelectionOptions(product);
-
-      return this.createDecision({
-        type: DecisionTypes.SELECT_SELECTION,
-
-        context: {
-          action: DecisionTypes.SELECT_SELECTION,
-
-          product: {
-            id: product.id,
-            name: product.name,
-          },
-
-          selection: {
-            label: product.selection?.label ?? "Option",
-          },
-
-          options: options.map((option) => ({
-            name: option.name,
-            badge: option.badge ?? null,
-            startingPrice: option.startingPrice ?? null,
-          })),
-        },
-
-        actions: options.map((option) => ({
-          id: DecisionTypes.SELECT_SELECTION,
-
-          label: option.name,
-
-          payload: {
-            productId: product.id,
-            selectionId: option.id,
-
-            selection: {
-              id: option.id,
-              name: option.name,
-              badge: option.badge ?? null,
-              description: option.description ?? null,
-              image: option.image ?? null,
-              images: option.images ?? [],
-              startingPrice: option.startingPrice ?? null,
-              features: (option.features ?? []).slice(0, 4),
-            },
-          },
-        })),
-      });
-    }
-
-    const recommendation = catalogService.getRecommendedSelection(product);
-
-    /*
-     * No recommendation available.
-     */
-
-    if (!recommendation) {
-      return this.buildSelectionOptions(product);
-    }
-
-    const alternatives = catalogService.getAlternativeSelections(
-      product,
-      recommendation.id,
-    );
-
-    return this.createDecision({
-      type: DecisionTypes.RECOMMEND_SELECTION,
-
-      context: {
-        action: DecisionTypes.RECOMMEND_SELECTION,
-
-        product: {
-          id: product.id,
-          name: product.name,
-        },
-
-        recommendation: {
-          id: recommendation.id,
-          name: recommendation.name,
-          badge: recommendation.badge ?? null,
-          description: recommendation.description ?? null,
-          startingPrice: recommendation.startingPrice ?? null,
-          recommendationReason:
-            recommendation.recommendationReason ??
-            catalogService.getRecommendationReason(product, recommendation),
-          features: (recommendation.features ?? []).slice(0, 3),
-        },
-      },
-
-      actions: [
-        {
-          id: DecisionTypes.SELECT_SELECTION,
-
-          label: recommendation.name,
-
-          payload: {
-            productId: product.id,
-            selectionId: recommendation.id,
-          },
-        },
-
-        ...(alternatives.length
-          ? [
-              {
-                id: DecisionTypes.SHOW_SELECTIONS,
-
-                label: "Show Other Options",
-
-                payload: {
-                  productId: product.id,
-                },
-              },
-            ]
-          : []),
-      ],
-    });
-  }
-
-  /*
-   * =====================================================
-   * Selection Options
-   * =====================================================
-   */
-
-  buildSelectionOptions(product = {}) {
-    const options = catalogService.getSelectionOptions(product);
-
-    return this.createDecision({
-      type: DecisionTypes.SELECT_SELECTION,
-
-      context: {
-        action: DecisionTypes.SELECT_SELECTION,
-
-        product: {
-          id: product.id,
-          name: product.name,
-        },
-
-        selection: {
-          label: product.selection?.label ?? "Option",
-        },
-
-        options: options.map((option) => ({
-          id: option.id,
-          name: option.name,
-          badge: option.badge ?? null,
-          startingPrice: option.startingPrice ?? null,
-        })),
-      },
-
-      actions: options.map((option) => ({
-        id: DecisionTypes.SELECT_SELECTION,
-
-        label: option.name,
-
-        payload: {
-          productId: product.id,
-          selectionId: option.id,
-
-          selection: {
-            id: option.id,
-            name: option.name,
-            badge: option.badge ?? null,
-            description: option.description ?? null,
-            image: option.image ?? null,
-            images: option.images ?? [],
-            startingPrice: option.startingPrice ?? null,
-            features: (option.features ?? []).slice(0, 4),
-          },
-        },
-      })),
-    });
-  }
-
-  /*
-   * =====================================================
-   * Decision Builder
-   * =====================================================
-   */
-
-  createDecision({ type, context = {}, actions = [], sections = [] }) {
-    return {
-      type,
-
-      stage: "SALES",
-
-      context,
-
-      actions,
-
-      sections,
-    };
-  }
-  /*
-   * =====================================================
-   * Decide
-   * =====================================================
-   */
-
   decide(requirement = {}) {
-    const item = requirement.items?.[requirement.currentItem] ?? null;
-
-    /*
-     * =====================================================
-     * Product
-     * =====================================================
-     */
+    const item = requirement.items?.[requirement.currentItem ?? 0] ?? null;
 
     if (!item?.product?.id) {
-      return this.buildProductSelection();
+      const candidates = Array.isArray(requirement.discoveryMatches)
+        ? requirement.discoveryMatches
+        : [];
+
+      if (candidates.length) return this.buildProductSelection(candidates);
+      if (requirement.browseCatalog === true)
+        return this.buildProductSelection();
+
+      return this.buildUnknownProduct();
     }
 
     const product = catalogService.getProduct(item.product.id);
@@ -275,659 +33,753 @@ export default class ConversationDecisionService {
       return this.buildProductSelection();
     }
 
-    /*
-     * =====================================================
-     * CONFIRMED
-     * =====================================================
-     *
-     * IMPORTANT:
-     * Once the customer has clicked Confirm Order,
-     * NEVER return REVIEW_ORDER again.
-     *
-     * The next stage is customer information collection.
-     */
+    if (item.selectedProduct?.id) {
+      const parentId =
+        item.product?.parentProductId ||
+        item.selectedProduct?.parentProductId ||
+        item.product?.id;
 
-    if (requirement.confirmed === true) {
-      return this.buildCompletedDecision(requirement);
+      const parentProd = parentId
+        ? catalogService.getProduct(parentId)
+        : product;
+
+      const selection = item.selection?.id
+        ? catalogService.getSelectionOption(parentProd, item.selection.id) ||
+          item.selection
+        : null;
+
+      if (!item.orderStarted) {
+        return this.buildProductDetails(item.selectedProduct, selection);
+      }
+
+      return this.nextCatalogStep(item.selectedProduct, item);
     }
 
-    /*
-     * =====================================================
-     * Product Workflow
-     * =====================================================
-     */
-
-    const workflowStep = catalogService.getCurrentWorkflowStep(product, item);
-
-    if (workflowStep) {
-      return this.buildWorkflowDecision(
-        workflowStep,
+    if (item.selection?.id) {
+      const selection = catalogService.getSelectionOption(
         product,
-        item,
-        requirement,
+        item.selection.id,
       );
+
+      if (!selection) {
+        return this.buildSelection(product);
+      }
+
+      if (
+        Array.isArray(selection.products) &&
+        selection.products.length > 0 &&
+        !item.selectedProduct?.id
+      ) {
+        return this.buildNestedProducts(product, selection);
+      }
+
+      const concreteProduct = item.selectedProduct ??
+        catalogService.getProduct(item.selection.id) ?? {
+          ...product,
+          ...selection,
+          id: selection.id,
+          name: selection.name ?? selection.label ?? product.name,
+        };
+
+      if (!item.orderStarted) {
+        return this.buildProductDetails(concreteProduct, selection);
+      }
+
+      return this.nextCatalogStep(concreteProduct, item);
     }
 
-    /*
-     * =====================================================
-     * Edit Mode
-     * =====================================================
-     */
+    const selections = catalogService.getSelectionOptions(product);
 
-    if (requirement.editing?.active) {
-      switch (requirement.editing.step) {
-        case DecisionTypes.SELECT_SELECTION:
-          return this.buildSelectionRecommendation(requirement, product);
+    if (selections.length > 0) {
+      return this.buildSelection(product);
+    }
 
-        case DecisionTypes.COLLECT_PRODUCT_FIELD:
+    if (!item.orderStarted) {
+      return this.buildProductDetails(product, null);
+    }
+
+    return this.nextCatalogStep(product, item);
+  }
+
+  buildProductSelection(candidates = null) {
+    const products =
+      Array.isArray(candidates) && candidates.length
+        ? candidates
+        : catalogService.getProducts();
+
+    return this.decision(
+      DecisionTypes.SELECT_PRODUCT,
+      {
+        products: products.map(this.productSummary),
+      },
+      products.map((product) => ({
+        id: DecisionTypes.SELECT_PRODUCT,
+        label: product.name,
+        payload: {
+          productId: product.id,
+        },
+      })),
+    );
+  }
+
+  buildUnknownProduct() {
+    return this.decision(
+      "UNKNOWN_PRODUCT",
+      {
+        message: "I couldn't find that exact item in our catalog.",
+      },
+      [
+        {
+          id: "BROWSE_PRODUCTS",
+          label: "Browse Products",
+          payload: {},
+        },
+        {
+          id: "HUMAN_HANDOFF",
+          label: "Talk to Expert",
+          payload: {},
+        },
+      ],
+    );
+  }
+
+  buildSelection(product) {
+    const options = catalogService.getSelectionOptions(product);
+
+    return this.decision(
+      DecisionTypes.SELECT_SELECTION,
+      {
+        product: this.productSummary(product),
+        selection: {
+          id: product.selection?.id ?? "selection",
+          name:
+            product.selection?.name ?? product.selection?.label ?? "Options",
+          description: product.selection?.description ?? null,
+          required: product.selection?.required !== false,
+        },
+        options: options.map((option) => ({
+          id: option.id,
+          name: option.name ?? option.label ?? option.id,
+          description: option.description ?? null,
+          image: resolveCatalogImage(option),
+          badge: option.badge ?? null,
+          startingPrice: option.startingPrice ?? option.price ?? null,
+          products: Array.isArray(option.products)
+            ? option.products.map((product) => this.productSummary(product))
+            : [],
+        })),
+      },
+      options.map((option) => ({
+        id: DecisionTypes.SELECT_SELECTION,
+        label: option.name ?? option.label ?? option.id,
+        payload: {
+          productId: product.id,
+          selectionId: option.id,
+        },
+      })),
+    );
+  }
+
+  buildNestedProducts(product, selection) {
+    const products = Array.isArray(selection.products)
+      ? selection.products
+      : [];
+
+    return this.decision(
+      "SELECT_NESTED_PRODUCT",
+      {
+        product: this.productSummary(product),
+        category: {
+          id: selection.id,
+          name: selection.name ?? selection.label ?? selection.id,
+          description: selection.description ?? null,
+          image: resolveCatalogImage(selection),
+        },
+        products: products.map(this.productSummary),
+      },
+      products.map((child) => ({
+        id: "SELECT_NESTED_PRODUCT",
+        label: child.name ?? child.productName ?? child.title ?? child.id,
+        payload: {
+          productId: product.id,
+          selectionId: selection.id,
+          nestedProductId: child.id,
+        },
+      })),
+    );
+  }
+
+  buildProductDetails(concreteProduct, selection = null) {
+    return this.decision(
+      "PRODUCT_DETAILS",
+      {
+        product: this.productSummary(concreteProduct),
+        selectedProduct: concreteProduct,
+        selection: selection
+          ? {
+              id: selection.id,
+              name: selection.name ?? selection.label ?? selection.id,
+              description: selection.description ?? null,
+              image: resolveCatalogImage(selection),
+            }
+          : null,
+      },
+      [
+        {
+          id: "ORDER_NOW",
+          type: "ORDER_NOW",
+          label: "ORDER NOW",
+          payload: {
+            productId: concreteProduct.id,
+          },
+        },
+      ],
+    );
+  }
+
+  nextCatalogStep(product, item) {
+    const step = catalogService.getCurrentWorkflowStep(product, item);
+
+    if (step) {
+      const type = catalogService.getWorkflowStepType(step);
+
+      switch (type) {
+        case "fields":
           return this.buildFieldDecision(product, item);
 
-        case DecisionTypes.COLLECT_REQUIREMENT:
+        case "requirements":
           return this.buildRequirementDecision(product, item);
 
-        case DecisionTypes.COLLECT_QUANTITY:
-          return this.buildQuantityDecision(product, item);
+        case "addons":
+          return this.buildAddonDecision(product, item);
 
-        case DecisionTypes.COLLECT_ARTWORK:
-          return this.buildArtworkDecision(product);
-
-        case DecisionTypes.SELECT_DELIVERY_METHOD:
-          return this.buildDeliveryMethodDecision();
-
-        case DecisionTypes.ASK_DELIVERY_ADDRESS:
-          return this.buildDeliveryAddressDecision();
-
-        case DecisionTypes.ASK_DELIVERY_DATE:
-          return this.buildDeliveryDateDecision();
+        case "selection":
+          return this.buildSelection(product);
 
         default:
-          return this.buildEditDecision(requirement);
+          return this.buildFieldDecision(product, item);
       }
     }
 
-    /*
-     * =====================================================
-     * Quantity
-     * =====================================================
-     */
+    const deliveryMethod = this.getDeliveryMethod(item);
 
-    if (!catalogService.getWorkflowValue(item, "quantity")) {
-      return this.buildQuantityDecision(product, item);
+    if (!deliveryMethod) {
+      return this.buildDeliveryDecision(product, item);
     }
 
     /*
-     * =====================================================
-     * Artwork
-     * =====================================================
+     * DELIVERY:
+     * Address is required only when delivery is selected.
      */
-
-    const artwork = catalogService.getWorkflowValue(item, "artwork");
-
-    if (!artwork?.status) {
-      return this.buildArtworkDecision(product);
-    }
-
-    /*
-     * =====================================================
-     * Delivery Method
-     * =====================================================
-     */
-
-    if (!deliveryService.isMethodSelected(requirement)) {
-      return this.buildDeliveryMethodDecision();
-    }
-
-    /*
-     * =====================================================
-     * Delivery Address
-     * =====================================================
-     */
-
     if (
-      deliveryService.isDelivery(requirement) &&
-      !deliveryService.hasAddress(requirement)
+      deliveryMethod === DELIVERY_METHODS.DELIVERY &&
+      !this.hasCompleteDeliveryAddress(item)
     ) {
-      return this.buildDeliveryAddressDecision();
+      return this.buildDeliveryAddressDecision(product, item);
     }
 
     /*
-     * =====================================================
-     * Delivery Date
-     * =====================================================
+     * PICKUP:
+     * Never request or require delivery address.
      */
-
-    if (!deliveryService.hasRequiredDate(requirement)) {
-      return this.buildDeliveryDateDecision();
+    if (!this.hasDeliveryDate(item)) {
+      return this.buildDeliveryDateDecision(product, item);
     }
 
-    /*
-     * =====================================================
-     * Review
-     * =====================================================
-     */
-
-    if (!requirement.confirmed) {
-      return this.buildReviewDecision(requirement);
+    if (item.confirmed || item.orderConfirmed) {
+      return this.decision(DecisionTypes.ORDER_COMPLETED, {
+        message:
+          "Your order details have been submitted successfully. Our sales team will contact you regarding the quotation.",
+      });
     }
-
-    /*
-     * =====================================================
-     * Completed
-     * =====================================================
-     */
-
-    return this.buildCompletedDecision(requirement);
+    return this.buildReviewDecision(product, item);
   }
 
-  /*
-   * =====================================================
-   * Workflow Decision
-   * =====================================================
-   */
+  getDeliveryMethod(item = {}) {
+    const method =
+      item.delivery?.method ??
+      item.workflow?.deliveryMethod ??
+      item.productData?.deliveryMethod ??
+      null;
 
-  buildWorkflowDecision(step = {}, product = {}, item = {}, requirement = {}) {
-    switch (catalogService.getWorkflowStepType(step)) {
-      case "selection":
-        return this.buildSelectionRecommendation(requirement, product);
+    if (!method) return null;
 
-      case "fields":
-        return this.buildFieldDecision(product, item);
+    const normalized = String(method).trim().toLowerCase();
 
-      case "requirements":
-        return this.buildRequirementDecision(product, item);
-
-      case "addons":
-        return this.buildAddonDecision(product, item);
-
-      default:
-        throw new Error(
-          `Unsupported workflow step: ${catalogService.getWorkflowStepType(step)}`,
-        );
+    if (normalized === DELIVERY_METHODS.DELIVERY || normalized === "deliver") {
+      return DELIVERY_METHODS.DELIVERY;
     }
+
+    if (normalized === DELIVERY_METHODS.PICKUP || normalized === "pick up") {
+      return DELIVERY_METHODS.PICKUP;
+    }
+
+    return normalized;
   }
 
-  /*
-   * =====================================================
-   * Product Field
-   * =====================================================
-   */
+  getDeliveryAddress(item = {}) {
+    return (
+      item.delivery?.address ??
+      item.productData?.deliveryAddress ??
+      item.productData?.address ??
+      item.workflow?.deliveryAddress ??
+      item.workflow?.address ??
+      ""
+    );
+  }
 
-  buildFieldDecision(product = {}, item = {}) {
+  getDeliveryDate(item = {}) {
+    return (
+      item.delivery?.requiredDate ??
+      item.productData?.deliveryDate ??
+      item.productData?.requiredDate ??
+      item.workflow?.deliveryDate ??
+      item.workflow?.requiredDate ??
+      ""
+    );
+  }
+
+  hasCompleteDeliveryAddress(item = {}) {
+    const address = this.getDeliveryAddress(item);
+
+    if (typeof address === "object" && address) {
+      const parts = [
+        address.building,
+        address.buildingNumber,
+        address.villa,
+        address.street,
+        address.area,
+        address.city,
+        address.addressLine1,
+        address.addressLine2,
+        address.fullAddress,
+      ].filter(
+        (value) =>
+          value !== undefined && value !== null && String(value).trim() !== "",
+      );
+
+      return parts.length >= 2;
+    }
+
+    return typeof address === "string" && address.trim().length >= 10;
+  }
+
+  hasDeliveryDate(item = {}) {
+    const date = this.getDeliveryDate(item);
+
+    return date !== null && date !== undefined && String(date).trim() !== "";
+  }
+
+  buildFieldDecision(product, item) {
     const field = catalogService.getCurrentField(product, item);
 
     if (!field) {
-      return null;
+      return this.nextCatalogStep(product, item);
     }
 
-    return this.createDecision({
-      type: DecisionTypes.COLLECT_PRODUCT_FIELD,
+    const currentQty = Number(
+      item.workflow?.quantity ?? item.productData?.quantity ?? 0,
+    );
 
-      context: {
-        action: DecisionTypes.COLLECT_PRODUCT_FIELD,
+    let options = Array.isArray(field.options) ? field.options : [];
 
-        ...this.buildProductContext(product, item),
+    if (currentQty > 0) {
+      options = options.filter(
+        (opt) => !opt.minQuantity || currentQty >= opt.minQuantity,
+      );
+    }
 
+    const question =
+      field.question ??
+      field.label ??
+      `Please select ${field.name ?? field.id}:`;
+
+    return this.decision(
+      DecisionTypes.COLLECT_PRODUCT_FIELD,
+      {
+        product: this.productSummary(product),
         field: {
           id: field.id,
-
-          label: field.label ?? field.name,
-
-          question: field.question,
-
+          label: field.label ?? field.name ?? field.id,
+          question,
           description: field.description ?? null,
-
-          type: field.type,
-
-          options: field.options ?? [],
+          type: field.type ?? "text",
+          required: field.required !== false,
+          options,
+          validation: field.validation ?? {},
         },
       },
-
-      actions: (field.options ?? []).map((option) => ({
-        id: DecisionTypes.COLLECT_PRODUCT_FIELD,
-
-        label: option.label ?? option.name,
-
+      options.map((option) => ({
+        id: "SET_FIELD",
+        label: option.label ?? option.name ?? String(option.value ?? option.id),
         payload: {
           fieldId: field.id,
-          value: option.id ?? option.value ?? option.name ?? option.label,
+          value: option.value ?? option.id ?? option.name ?? option.label,
         },
       })),
-    });
+    );
   }
 
-  /*
-   * =====================================================
-   * Requirement
-   * =====================================================
-   */
-
-  buildRequirementDecision(product = {}, item = {}) {
+  buildRequirementDecision(product, item) {
     const requirement = catalogService.getCurrentRequirement(product, item);
 
     if (!requirement) {
-      return null;
+      return this.nextCatalogStep(product, item);
     }
 
-    return this.createDecision({
-      type: DecisionTypes.COLLECT_REQUIREMENT,
+    const question =
+      requirement.instruction ??
+      requirement.description ??
+      requirement.question ??
+      `Please provide details for ${
+        requirement.name ?? requirement.label ?? requirement.id
+      }:`;
 
-      context: {
-        action: DecisionTypes.COLLECT_REQUIREMENT,
+    const options = Array.isArray(requirement.options)
+      ? requirement.options
+      : [];
 
-        ...this.buildProductContext(product, item),
-
-        requirement: {
-          id: requirement.id,
-
-          name: requirement.name,
-
-          description: requirement.description,
-
-          instruction: requirement.instruction,
-
-          required: requirement.required,
-        },
+    const actions = options.map((option) => ({
+      id: "SET_REQUIREMENT",
+      label: option.label ?? option.name ?? String(option.value ?? option.id),
+      payload: {
+        requirementId: requirement.id,
+        value: option.value ?? option.id ?? option.name,
       },
+    }));
 
-      actions: (requirement.options ?? []).map((option) => ({
-        id: DecisionTypes.COLLECT_REQUIREMENT,
-
-        label: option.label ?? option.name,
-
+    if (requirement.required === false) {
+      actions.push({
+        id: "SET_REQUIREMENT",
+        label: "Skip",
         payload: {
           requirementId: requirement.id,
-
-          value: option.value ?? option.name,
+          value: "skipped",
         },
-      })),
-    });
+      });
+    }
+
+    return this.decision(
+      DecisionTypes.COLLECT_REQUIREMENT,
+      {
+        product: this.productSummary(product),
+        requirement: {
+          id: requirement.id,
+          name: requirement.name ?? requirement.label ?? requirement.id,
+          description: requirement.description ?? null,
+          instruction: question,
+          required: requirement.required !== false,
+          options,
+        },
+      },
+      actions,
+    );
   }
 
-  /*
-   * =====================================================
-   * Addons
-   * =====================================================
-   */
-
-  buildAddonDecision(product = {}, item = {}) {
+  buildAddonDecision(product, item) {
     const addons = catalogService.getAddons(product);
 
-    return this.createDecision({
-      type: DecisionTypes.SELECT_ADDONS,
+    if (
+      !addons?.enabled ||
+      !Array.isArray(addons.options) ||
+      addons.options.length === 0
+    ) {
+      return this.nextCatalogStep(product, item);
+    }
 
-      context: {
-        action: DecisionTypes.SELECT_ADDONS,
+    const selectedAddons = item.addons?.selected ?? [];
 
-        ...this.buildProductContext(product, item),
+    const actions = addons.options.map((addon) => {
+      const isSelected = selectedAddons.includes(addon.id);
 
-        addons,
-      },
-
-      actions: (addons.options ?? []).map((addon) => ({
-        id: DecisionTypes.SELECT_ADDONS,
-
-        label: addon.name,
-
+      return {
+        id: "TOGGLE_ADDON",
+        label: `${isSelected ? "✓ " : ""}${
+          addon.name ?? addon.label ?? addon.id
+        }`,
         payload: {
           addonId: addon.id,
         },
-      })),
+      };
     });
-  }
 
-  /*
-   * =====================================================
-   * Quantity
-   * =====================================================
-   */
-
-  buildQuantityDecision(product = {}, item = {}) {
-    return this.createDecision({
-      type: DecisionTypes.COLLECT_QUANTITY,
-
-      context: {
-        action: DecisionTypes.COLLECT_QUANTITY,
-
-        ...this.buildProductContext(product, item),
+    actions.push({
+      id: "NEXT_STEP",
+      label: "Continue",
+      payload: {
+        step: "addons",
       },
     });
+
+    const addonLabel = addons.label || "Finishing Options";
+
+    return this.decision(
+      DecisionTypes.SELECT_ADDONS,
+      {
+        product: this.productSummary(product),
+        message: addonLabel,
+        addons,
+        selectedAddons,
+      },
+      actions,
+    );
   }
 
-  /*
-   * =====================================================
-   * Artwork
-   * =====================================================
-   */
-
-  buildArtworkDecision(product = {}) {
-    return this.createDecision({
-      type: DecisionTypes.COLLECT_ARTWORK,
-
-      context: {
-        action: DecisionTypes.COLLECT_ARTWORK,
-
-        ...this.buildProductContext(product),
+  buildDeliveryDecision(product, item) {
+    return this.decision(
+      DecisionTypes.SELECT_DELIVERY_METHOD,
+      {
+        product: this.productSummary(product),
+        message: "Please select your preferred delivery method:",
       },
-
-      actions: [
+      [
         {
-          id: DecisionTypes.COLLECT_ARTWORK,
-
-          label: "I Have Artwork",
-
+          id: "SET_DELIVERY",
+          label: "Delivery (AED 25)",
           payload: {
-            status: "CUSTOMER_ARTWORK",
+            method: DELIVERY_METHODS.DELIVERY,
           },
         },
-
         {
-          id: DecisionTypes.COLLECT_ARTWORK,
-
-          label: "Need Design",
-
+          id: "SET_DELIVERY",
+          label: "Store Pickup (Free)",
           payload: {
-            status: "NEED_DESIGN",
+            method: DELIVERY_METHODS.PICKUP,
           },
         },
       ],
-    });
+    );
   }
 
-  /*
-   * =====================================================
-   * Delivery Method
-   * =====================================================
-   */
-
-  buildDeliveryMethodDecision() {
-    return this.createDecision({
-      type: DecisionTypes.SELECT_DELIVERY_METHOD,
-
-      context: {
-        action: DecisionTypes.SELECT_DELIVERY_METHOD,
+  buildDeliveryAddressDecision(product, item) {
+    return this.decision(
+      DecisionTypes.ASK_DELIVERY_ADDRESS,
+      {
+        product: this.productSummary(product),
+        message:
+          "Please enter your complete delivery address, including building/villa number, street, area, city, and any important delivery instructions.",
+        required: true,
       },
+      [],
+    );
+  }
 
-      actions: [
-        {
-          id: DecisionTypes.SELECT_DELIVERY_METHOD,
+  buildDeliveryDateDecision(product, item) {
+    const deliveryMethod = this.getDeliveryMethod(item);
 
-          label: "Delivery",
+    return this.decision(
+      DecisionTypes.ASK_DELIVERY_DATE,
+      {
+        product: this.productSummary(product),
+        message:
+          deliveryMethod === DELIVERY_METHODS.PICKUP
+            ? "When would you like to pick up your order?"
+            : "When do you need the order delivered?",
+        required: true,
+        deliveryMethod,
+      },
+      [],
+    );
+  }
 
-          payload: {
-            value: "delivery",
-          },
+  buildReviewDecision(product, item) {
+    const calculated = pricingService.calculateItem(item);
+
+    const unitPrice = calculated.pricing?.unitPrice ?? 0;
+
+    const quantity =
+      calculated.pricing?.quantity ||
+      Number(item.workflow?.quantity || item.productData?.quantity || 1);
+
+    const subtotal = calculated.pricing?.subtotal ?? unitPrice * quantity;
+
+    const deliveryMethod =
+      this.getDeliveryMethod(item) ?? DELIVERY_METHODS.PICKUP;
+
+    const deliveryCharge =
+      deliveryMethod === DELIVERY_METHODS.DELIVERY
+        ? (DELIVERY_CHARGES[DELIVERY_METHODS.DELIVERY] ?? 25)
+        : 0;
+
+    const isQuoteRequired = calculated.pricing?.quotationRequired === true;
+
+    const totalBeforeVAT = isQuoteRequired ? null : subtotal + deliveryCharge;
+
+    const productName =
+      product.name ?? product.productName ?? product.title ?? "Product";
+
+    const lines = [
+      "*Order Summary*",
+      `• *Product:* ${productName}`,
+      `• *Quantity:* ${quantity}`,
+    ];
+
+    const workflow = item.workflow ?? {};
+
+    for (const [key, value] of Object.entries(workflow)) {
+      if (
+        key === "quantity" ||
+        key === "deliveryMethod" ||
+        key === "deliveryAddress" ||
+        key === "address" ||
+        key === "deliveryDate" ||
+        key === "artwork" ||
+        value == null ||
+        value === "" ||
+        typeof value === "object"
+      ) {
+        continue;
+      }
+
+      const label = key
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (s) => s.toUpperCase())
+        .trim();
+
+      lines.push(`• *${label}:* ${value}`);
+    }
+
+    const selectedAddons = item.addons?.selected ?? [];
+
+    if (selectedAddons.length > 0) {
+      lines.push(`• *Addons:* ${selectedAddons.join(", ")}`);
+    }
+
+    lines.push(
+      `• *Delivery:* ${
+        deliveryMethod === DELIVERY_METHODS.DELIVERY
+          ? "Delivery (AED 25)"
+          : "Store Pickup (Free)"
+      }`,
+    );
+
+    if (deliveryMethod === DELIVERY_METHODS.DELIVERY) {
+      const address = this.getDeliveryAddress(item);
+
+      if (address && typeof address === "string") {
+        lines.push(`• *Delivery Address:* ${address}`);
+      } else if (address && typeof address === "object") {
+        const formattedAddress = [
+          address.building,
+          address.buildingNumber,
+          address.villa,
+          address.street,
+          address.area,
+          address.city,
+          address.addressLine1,
+          address.addressLine2,
+          address.fullAddress,
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        if (formattedAddress) {
+          lines.push(`• *Delivery Address:* ${formattedAddress}`);
+        }
+      }
+    }
+
+    const deliveryDate = this.getDeliveryDate(item);
+
+    if (deliveryDate) {
+      lines.push(`• *Date:* ${deliveryDate}`);
+    }
+
+    lines.push("\n*Price Details:*");
+
+    if (isQuoteRequired || (unitPrice === 0 && subtotal === 0)) {
+      lines.push("• *Price:* Quotation required");
+    } else {
+      lines.push(`• *Unit Price:* AED ${unitPrice}`);
+      lines.push(`• *Subtotal:* AED ${subtotal}`);
+      lines.push(`• *Delivery Charge:* AED ${deliveryCharge}`);
+      lines.push(`• *Total before VAT:* AED ${totalBeforeVAT}`);
+    }
+
+    lines.push(
+      "\nPlease review your order summary above. Would you like to confirm?",
+    );
+
+    const summaryText = lines.join("\n");
+
+    return this.decision(
+      DecisionTypes.REVIEW_ORDER,
+      {
+        product: this.productSummary(product),
+        message: summaryText,
+        summary: summaryText,
+        pricing: {
+          unitPrice,
+          quantity,
+          subtotal,
+          deliveryCharge,
+          totalBeforeVAT,
         },
-
+        deliveryMethod,
+        deliveryAddress:
+          deliveryMethod === DELIVERY_METHODS.DELIVERY
+            ? this.getDeliveryAddress(item)
+            : null,
+        deliveryDate: deliveryDate || null,
+      },
+      [
         {
-          id: DecisionTypes.SELECT_DELIVERY_METHOD,
-
-          label: "Pickup",
-
-          payload: {
-            value: "pickup",
-          },
-        },
-      ],
-    });
-  }
-
-  /*
-   * =====================================================
-   * Delivery Address
-   * =====================================================
-   */
-
-  buildDeliveryAddressDecision() {
-    return this.createDecision({
-      type: DecisionTypes.ASK_DELIVERY_ADDRESS,
-
-      context: {
-        action: DecisionTypes.ASK_DELIVERY_ADDRESS,
-      },
-    });
-  }
-  /*
-   * =====================================================
-   * Delivery Date
-   * =====================================================
-   */
-
-  buildDeliveryDateDecision() {
-    return this.createDecision({
-      type: DecisionTypes.ASK_DELIVERY_DATE,
-
-      context: {
-        action: DecisionTypes.ASK_DELIVERY_DATE,
-      },
-    });
-  }
-
-  /*
-   * =====================================================
-   * Review
-   * =====================================================
-   */
-  buildReviewDecision(requirement = {}) {
-    return this.createDecision({
-      type: DecisionTypes.REVIEW_ORDER,
-
-      context: {
-        action: DecisionTypes.REVIEW_ORDER,
-        order: requirement,
-      },
-    });
-  }
-
-  /*
-   * =====================================================
-   * Confirmation
-   * =====================================================
-   */
-
-  buildConfirmationDecision() {
-    return this.createDecision({
-      type: DecisionTypes.COMPLETE_ORDER,
-
-      context: {
-        action: DecisionTypes.COMPLETE_ORDER,
-      },
-
-      actions: [
-        {
-          id: DecisionTypes.CONFIRM_ORDER,
-
-          label: "Submit Request",
-
+          id: "CONFIRM_ORDER",
+          label: "Confirm Order",
           payload: {
             confirmed: true,
           },
         },
-
         {
-          id: DecisionTypes.CANCEL_ORDER,
-
-          label: "Cancel",
-
+          id: "EDIT_ORDER",
+          label: "Edit Order",
           payload: {
-            confirmed: false,
+            edit: true,
+          },
+        },
+        {
+          id: "CANCEL_ORDER",
+          label: "Cancel Order",
+          payload: {
+            cancel: true,
           },
         },
       ],
-    });
+    );
   }
 
-  /*
-   *======================================================
-   *Edit Order
-   *======================================================
-   */
-
-  buildEditDecision(requirement = {}) {
-    const item = requirement.items?.[requirement.currentItem] ?? {};
-
-    return this.createDecision({
-      type: DecisionTypes.EDIT_ORDER,
-
-      context: {
-        action: DecisionTypes.EDIT_ORDER,
-        item,
-      },
-
-      actions: [
-        {
-          id: DecisionTypes.SELECT_SELECTION,
-          label: "Business Card Type",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.COLLECT_PRODUCT_FIELD,
-          label: "Product Details",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.COLLECT_REQUIREMENT,
-          label: "Requirements",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.COLLECT_QUANTITY,
-          label: "Quantity",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.COLLECT_ARTWORK,
-          label: "Artwork",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.SELECT_DELIVERY_METHOD,
-          label: "Delivery Method",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.ASK_DELIVERY_ADDRESS,
-          label: "Delivery Address",
-          payload: {
-            edit: true,
-          },
-        },
-        {
-          id: DecisionTypes.ASK_DELIVERY_DATE,
-          label: "Delivery Date",
-          payload: {
-            edit: true,
-          },
-        },
-      ],
-    });
-  }
-
-  /*
-   * =====================================================
-   * Completed
-   * =====================================================
-   */
-
-  buildCompletedDecision(requirement = {}) {
+  decision(type, context, actions = []) {
     return {
-      type: DecisionTypes.ORDER_COMPLETED,
-
+      type,
       stage: "SALES",
-
-      context: {
-        action: DecisionTypes.ORDER_COMPLETED,
-        order: requirement,
-      },
-
-      actions: [],
-
+      context,
+      actions,
       sections: [],
     };
   }
 
-  buildProductContext(product = {}, item = {}) {
-    const selection = item.selection?.id
-      ? catalogService.getSelectionOption(product, item.selection.id)
-      : null;
+  productSummary(product = {}) {
+    const image = resolveCatalogImage(product);
 
     return {
-      product: {
-        id: product.id,
-        name: product.name,
-        image: selection?.image ?? product.image ?? null,
-        images: selection?.images ?? product.images ?? [],
-      },
-
-      selection,
+      id: product.id ?? null,
+      name:
+        product.name ??
+        product.productName ??
+        product.title ??
+        product.label ??
+        product.id ??
+        null,
+      slug: product.slug ?? null,
+      image,
+      images: Array.isArray(product.images)
+        ? product.images
+        : image
+          ? [image]
+          : [],
+      description: product.description ?? product.shortDescription ?? null,
+      badge: product.badge ?? null,
+      pricing: catalogService.getPricing(product),
     };
-  }
-
-  hasCustomerInformation(requirement = {}) {
-    const customer = requirement.customer ?? {};
-
-    return Boolean(customer.name && customer.phone && customer.email);
-  }
-
-  buildCustomerDecision(requirement = {}) {
-    const customer = requirement.customer ?? {};
-
-    if (!customer.name) {
-      return this.createDecision({
-        type: DecisionTypes.COLLECT_CUSTOMER,
-        context: {
-          action: DecisionTypes.COLLECT_CUSTOMER,
-          field: {
-            id: "name",
-            label: "Name",
-            question: "What's your name?",
-            required: true,
-          },
-        },
-      });
-    }
-
-    if (!customer.phone) {
-      return this.createDecision({
-        type: DecisionTypes.COLLECT_CUSTOMER,
-        context: {
-          action: DecisionTypes.COLLECT_CUSTOMER,
-          field: {
-            id: "phone",
-            label: "Phone Number",
-            question: "What's the best phone number to reach you on?",
-            required: true,
-          },
-        },
-      });
-    }
-
-    if (!customer.email) {
-      return this.createDecision({
-        type: DecisionTypes.COLLECT_CUSTOMER,
-        context: {
-          action: DecisionTypes.COLLECT_CUSTOMER,
-          field: {
-            id: "email",
-            label: "Email",
-            question: "What's your email address?",
-            required: true,
-          },
-        },
-      });
-    }
-
-    return null;
   }
 }

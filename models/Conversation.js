@@ -25,6 +25,51 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // WhatsApp metadata
+    whatsappMessageId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    direction: {
+      type: String,
+      enum: ["inbound", "outbound", null],
+      default: null,
+    },
+
+    senderType: {
+      type: String,
+      enum: ["customer", "ai", "agent", "system", null],
+      default: null,
+    },
+
+    messageType: {
+      type: String,
+      default: "text",
+    },
+
+    status: {
+      type: String,
+      enum: ["received", "sent", "delivered", "read", "failed", null],
+      default: null,
+    },
+
+    mediaId: {
+      type: String,
+      default: null,
+    },
+
+    interactiveData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    flowData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     _id: false,
@@ -67,6 +112,29 @@ const conversationSchema = new mongoose.Schema(
       required: true,
       unique: true,
       index: true,
+    },
+
+    channel: {
+      type: String,
+      enum: ["WEB", "WHATSAPP"],
+      default: "WEB",
+      index: true,
+    },
+
+    customerWaId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    lastUserMessageAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastInboundMessageId: {
+      type: String,
+      default: null,
     },
 
     customer: {

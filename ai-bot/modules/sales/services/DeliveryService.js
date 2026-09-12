@@ -3,6 +3,11 @@ export const DELIVERY_METHODS = Object.freeze({
   DELIVERY: "delivery",
 });
 
+export const DELIVERY_CHARGES = Object.freeze({
+  [DELIVERY_METHODS.DELIVERY]: 25,
+  [DELIVERY_METHODS.PICKUP]: 0,
+});
+
 const DEFAULT_DELIVERY = Object.freeze({
   method: null,
   address: null,
@@ -10,7 +15,6 @@ const DEFAULT_DELIVERY = Object.freeze({
   instructions: null,
 });
 
-const DELIVERY_CHARGE = 25;
 
 export default class DeliveryService {
   /*
@@ -78,16 +82,22 @@ export default class DeliveryService {
 
     return {
       ...delivery,
-      charge: this.calculateCharge(delivery),
+      charge: this.calculateCharge(requirement),
     };
   }
 
-  calculateCharge(delivery = {}) {
-    if (delivery.method !== DELIVERY_METHODS.DELIVERY) {
-      return 0;
+  calculateCharge(requirement = {}) {
+    const method =
+      requirement?.delivery?.method ??
+      requirement?.deliveryMethod ??
+      requirement?.method ??
+      null;
+
+    if (method === DELIVERY_METHODS.DELIVERY) {
+      return DELIVERY_CHARGES[DELIVERY_METHODS.DELIVERY];
     }
 
-    return DELIVERY_CHARGE;
+    return DELIVERY_CHARGES[DELIVERY_METHODS.PICKUP];
   }
 
   /*

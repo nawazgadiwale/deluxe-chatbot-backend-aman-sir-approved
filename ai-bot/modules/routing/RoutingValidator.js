@@ -5,12 +5,7 @@ const VALID_CAPABILITIES = new Set([
   "faq",
   "support",
   "out_of_scope",
-
-  // "recommendation",
   "discovery",
-
-  // "comparison",
-
   "lead",
   "resume_workflow",
   "cancel_workflow",
@@ -40,36 +35,15 @@ export default class RoutingValidator {
 
     const routing = {
       capability,
-
       capabilities:
         Array.isArray(result.capabilities) && result.capabilities.length > 0
           ? result.capabilities
           : [capability],
-
       confidence: this.validateConfidence(result.confidence),
-
       source: this.validateSource(result.source),
     };
 
-    /*
-     * =====================================================
-     * REQUEST TYPE
-     * =====================================================
-     *
-     * IMPORTANT:
-     *
-     * Routing can determine the lead request type:
-     *
-     * QUOTATION
-     * EXPERT
-     * CONTACT_SALES
-     * ORDER
-     *
-     * Do NOT discard it during validation.
-     */
-
     const requestType = this.validateRequestType(result.requestType);
-
     if (requestType) {
       routing.requestType = requestType;
     }
@@ -77,55 +51,27 @@ export default class RoutingValidator {
     return routing;
   }
 
-  /*
-   * =====================================================
-   * CAPABILITY
-   * =====================================================
-   */
-
   validateCapability(capability) {
     if (typeof capability === "string" && VALID_CAPABILITIES.has(capability)) {
       return capability;
     }
-
     return "out_of_scope";
   }
 
-  /*
-   * =====================================================
-   * CONFIDENCE
-   * =====================================================
-   */
-
   validateConfidence(confidence) {
     const value = Number(confidence);
-
     if (Number.isNaN(value)) {
       return 0;
     }
-
     return Math.max(0, Math.min(1, value));
   }
-
-  /*
-   * =====================================================
-   * SOURCE
-   * =====================================================
-   */
 
   validateSource(source) {
     if (VALID_SOURCES.has(source)) {
       return source;
     }
-
     return "RULE";
   }
-
-  /*
-   * =====================================================
-   * REQUEST TYPE
-   * =====================================================
-   */
 
   validateRequestType(requestType) {
     if (
@@ -134,7 +80,6 @@ export default class RoutingValidator {
     ) {
       return requestType;
     }
-
     return null;
   }
 }

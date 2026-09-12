@@ -11,13 +11,25 @@ export default class PricingService {
     const calculatedItems = items.map((item) => this.calculateItem(item));
 
     const subtotal = calculatedItems.reduce(
-      (total, item) => total + (item.pricing?.total ?? 0),
+      (total, item) => total + (item.pricing?.total ?? item.pricing?.subtotal ?? 0),
       0,
     );
 
     const delivery = deliveryService.calculate(requirement);
 
     const deliveryCharge = delivery.charge ?? 0;
+
+    const quotationRequired =
+      requirement.quotationRequired === true ||
+      (calculatedItems.length > 0 &&
+        calculatedItems.every((item) => item.pricing?.quotationRequired === true)) ||
+      (calculatedItems.length === 0 &&
+        Boolean(
+          requirement.product &&
+          catalogService.isQuotationRequired(requirement.product),
+        ));
+
+    const totalBeforeVAT = quotationRequired ? null : subtotal + deliveryCharge;
 
     return {
       items: calculatedItems,
@@ -26,36 +38,62 @@ export default class PricingService {
 
       deliveryCharge,
 
-      total: subtotal + deliveryCharge,
+      totalBeforeVAT,
 
-      currency: "AED",
+      total: totalBeforeVAT,
+
+      quotationRequired,
+
+      currency: calculatedItems[0]?.pricing?.currency ?? "AED",
     };
   }
 
-  /*
-   * =====================================================
-   * Item Pricing
-   * =====================================================
-   */
+
+  // Item Pricing
 
   calculateItem(item = {}) {
-    const quantity = Number(item.workflow?.quantity ?? 0);
+    const rawQuantity =
+      item.workflow?.quantity ??
+      item.quantity ??
+      item.formData?.quantity ??
+      item.productData?.quantity ??
+      item.selections?.quantity ??
+      0;
 
-    const pricingInfo = this.getPricingInfo(item);
+    const quantity = Number(rawQuantity) || 0;
 
-    const unitPrice = this.getUnitPrice(item, quantity, pricingInfo);
+    const product = this.getProduct(item);
+    const selection = this.getSelection(item, product);
 
-    const subtotal = unitPrice * quantity;
+    const pricingInfo = this.getPricingInfo(item, product, selection);
+
+    const isQuoteRequired =
+      product?.pricing?.quotationRequired === true ||
+      selection?.quotationRequired === true;
+
+    const basePrice = this.getBasePrice(product, selection);
+    const unitPrice = this.getUnitPrice(
+      item,
+      quantity,
+      pricingInfo,
+      product,
+      selection,
+    );
+
+    const subtotal =
+      !isQuoteRequired && basePrice > 0
+        ? unitPrice * (quantity > 0 ? quantity : 0)
+        : 0;
 
     return {
       ...item,
 
       pricing: {
-        currency: pricingInfo.currency,
+        currency: pricingInfo.currency || "AED",
 
         unitPrice,
 
-        quantity,
+        quantity: quantity > 0 ? quantity : 1,
 
         pricingUnit: pricingInfo.unit,
 
@@ -66,20 +104,18 @@ export default class PricingService {
         discount: 0,
 
         total: subtotal,
+
+        quotationRequired: isQuoteRequired || basePrice <= 0,
       },
     };
   }
 
-  /*
-   * =====================================================
-   * Pricing Configuration
-   * =====================================================
-   */
+  // Pricing Configuration
 
-  getPricingInfo(item = {}) {
-    const product = this.getProduct(item);
+  getPricingInfo(item = {}, product = null, selection = null) {
+    const prod = product || this.getProduct(item);
 
-    if (!product) {
+    if (!prod) {
       return {
         currency: "AED",
         unit: "piece",
@@ -87,56 +123,134 @@ export default class PricingService {
       };
     }
 
-    const productPricing = product.pricing ?? {};
+    const sel = selection || this.getSelection(item, prod);
+    const productPricing = prod.pricing ?? {};
+
+    const currency = sel?.currency ?? productPricing.currency ?? "AED";
+    const unit = sel?.unit ?? productPricing.unit ?? "piece";
+
+    const pricingQuantity = Number(
+      sel?.pricingQuantity ??
+      sel?.quantityStep ??
+      productPricing.quantityStep ??
+      this.getSelectionPricingQuantity(prod) ??
+      1,
+    );
 
     return {
-      currency: productPricing.currency ?? "AED",
-
-      unit: productPricing.unit ?? "piece",
-
-      pricingQuantity: Number(
-        productPricing.quantityStep ??
-          this.getSelectionPricingQuantity(product) ??
-          1,
-      ),
+      currency,
+      unit,
+      pricingQuantity: pricingQuantity > 0 ? pricingQuantity : 1,
     };
   }
 
-  /*
-   * =====================================================
-   * Product
-   * =====================================================
-   */
+  // Product Resolution
 
   getProduct(item = {}) {
-    if (!item.product?.id) {
+    if (
+      item.product &&
+      typeof item.product === "object" &&
+      (item.product.pricing || item.product.selection)
+    ) {
+      return item.product;
+    }
+
+    const candidateId =
+      item.selectedProduct?.id ??
+      item.selectedProduct?.productId ??
+      item.selectedProduct?.slug ??
+      item.product?.id ??
+      item.product?.productId ??
+      item.product?.slug ??
+      item.productId ??
+      item.slug ??
+      item.id ??
+      null;
+
+    if (!candidateId) {
       return null;
     }
 
-    return catalogService.getProduct(item.product.id);
+    return (
+      catalogService.getProduct(candidateId) ??
+      catalogService.resolveProduct({
+        productId: candidateId,
+        slug: candidateId,
+      }) ??
+      (item.product && typeof item.product === "object" ? item.product : null)
+    );
   }
 
-  /*
-   * =====================================================
-   * Selection
-   * =====================================================
-   */
+  // Selection / Variant Resolution
 
-  getSelection(item = {}) {
-    const product = this.getProduct(item);
-
-    if (!product || !item.selection?.id) {
+  getSelection(item = {}, product = null) {
+    const prod = product || this.getProduct(item);
+    if (!prod) {
       return null;
     }
 
-    return catalogService.getSelectionOption(product, item.selection.id);
+    if (
+      item.selection &&
+      typeof item.selection === "object" &&
+      (item.selection.price != null ||
+        item.selection.startingPrice != null ||
+        item.selection.id)
+    ) {
+      if (item.selection.id) {
+        const opt = catalogService.getSelectionOption(prod, item.selection.id);
+        if (opt) return opt;
+      }
+      return item.selection;
+    }
+
+    if (
+      item.variant &&
+      typeof item.variant === "object" &&
+      (item.variant.price != null ||
+        item.variant.startingPrice != null ||
+        item.variant.id)
+    ) {
+      if (item.variant.id) {
+        const opt = catalogService.getSelectionOption(prod, item.variant.id);
+        if (opt) return opt;
+      }
+      return item.variant;
+    }
+
+    const optionId =
+      (typeof item.selection === "string" ? item.selection : null) ??
+      (typeof item.variant === "string" ? item.variant : null) ??
+      item.selections?.[prod.selection?.id] ??
+      item.formData?.[prod.selection?.id] ??
+      item.productData?.[prod.selection?.id] ??
+      item.formData?.size ??
+      item.formData?.bannerType ??
+      item.formData?.stampShape ??
+      item.formData?.variant ??
+      item.selections?.size ??
+      item.selections?.bannerType ??
+      item.selections?.stampShape ??
+      item.selections?.variant ??
+      item.selectionId ??
+      null;
+
+    if (optionId) {
+      const opt = catalogService.getSelectionOption(prod, optionId);
+      if (opt) return opt;
+    }
+
+    if (prod.parentSelectionId && prod.parentProduct) {
+      const opt = catalogService.getSelectionOption(
+        prod.parentProduct,
+        prod.parentSelectionId,
+      );
+      if (opt) return opt;
+    }
+
+    return null;
   }
 
-  /*
-   * =====================================================
-   * Selection Pricing Quantity
-   * =====================================================
-   */
+  // Selection Pricing Quantity
 
   getSelectionPricingQuantity(product = {}) {
     const selection = product.selection;
@@ -150,93 +264,71 @@ export default class PricingService {
     return Number(option?.pricingQuantity ?? option?.quantityStep ?? 1);
   }
 
-  /*
-   * =====================================================
-   * Unit Price
-   * =====================================================
-   */
+  // Unit Price
 
-  getUnitPrice(item = {}, quantity = 0, pricingInfo = {}) {
-    if (quantity <= 0) {
+  getUnitPrice(
+    item = {},
+    quantity = 0,
+    pricingInfo = {},
+    product = null,
+    selection = null,
+  ) {
+    const prod = product || this.getProduct(item);
+    if (!prod) {
       return 0;
     }
 
-    const product = this.getProduct(item);
-
-    if (!product) {
-      return 0;
-    }
-
-    const selection = this.getSelection(item);
-
-    /*
-     * -----------------------------------------------------
-     * Determine Base Price
-     * -----------------------------------------------------
-     */
-
-    const basePrice = this.getBasePrice(product, selection);
-
+    const sel = selection || this.getSelection(item, prod);
+    const basePrice = this.getBasePrice(prod, sel);
     if (basePrice <= 0) {
       return 0;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Price Per Piece
-     * -----------------------------------------------------
-     *
-     * Example:
-     *
-     * Business Cards:
-     * AED 60 / 100
-     *
-     * Roll-Up Banner:
-     * AED 130 / 1
-     *
-     * Stamp:
-     * AED 95 / 1
-     */
+    const info = pricingInfo?.pricingQuantity
+      ? pricingInfo
+      : this.getPricingInfo(item, prod, sel);
 
-    return basePrice / pricingInfo.pricingQuantity;
+    const pq = Number(info?.pricingQuantity) || 1;
+    return basePrice / pq;
   }
 
-  /*
-   * =====================================================
-   * Base Price
-   * =====================================================
-   */
+  // Base Price
 
   getBasePrice(product = {}, selection = null) {
-    /*
-     * Selection price has priority.
-     *
-     * Example:
-     *
-     * Roll-Up Banner:
-     * selection.price = 130
-     */
-
     if (selection?.price != null) {
       return Number(selection.price);
     }
-
-    /*
-     * Business Cards / other products:
-     *
-     * selection.startingPrice = 60
-     */
 
     if (selection?.startingPrice != null) {
       return Number(selection.startingPrice);
     }
 
-    /*
-     * Product-level pricing
-     */
+    if (product?.pricing?.price != null) {
+      return Number(product.pricing.price);
+    }
 
-    if (product.pricing?.startingPrice != null) {
+    if (product?.pricing?.startingPrice != null) {
       return Number(product.pricing.startingPrice);
+    }
+
+    if (product?.price != null) {
+      return Number(product.price);
+    }
+
+    if (product?.startingPrice != null) {
+      return Number(product.startingPrice);
+    }
+
+    if (product?.selection?.options?.length > 0) {
+      const defaultOpt =
+        (product.selection.recommended
+          ? product.selection.options.find(
+            (o) => o.id === product.selection.recommended,
+          )
+          : null) ?? product.selection.options[0];
+      if (defaultOpt?.price != null) return Number(defaultOpt.price);
+      if (defaultOpt?.startingPrice != null)
+        return Number(defaultOpt.startingPrice);
     }
 
     return 0;

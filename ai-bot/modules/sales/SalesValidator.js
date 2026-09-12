@@ -1,31 +1,107 @@
-import SalesResponseBuilder from "./builders/SalesResponseBuilder.js";
+export default class SalesResponseBuilder {
+  validate(result = {}) {
+    return this.build(result);
+  }
 
-const responseBuilder = new SalesResponseBuilder();
+  build({
+    interaction = "MESSAGE",
+    message = "",
+    actions = [],
+    sections = [],
+    liveRequirement = null,
+    completed = false,
+    workflow = "SALES",
+    metadata = {},
+    currentStep = null,
+    nextStep = null,
+    context = null,
 
-export default class SalesValidator {
-  validate(response = {}) {
-    return responseBuilder.build({
-      workflow: response.workflow ?? "SALES",
+    sessionId = null,
+    visitorId = null,
+    whatsapp = null,
+  } = {}) {
+    return {
+      success: true,
 
-      interaction: response.interaction ?? "MESSAGE",
+      type: "sales",
 
-      message: response.message ?? "",
+      workflow,
 
-      actions: response.actions ?? [],
+      interaction,
 
-      sections: response.sections ?? [],
+      message,
 
-      liveRequirement: response.liveRequirement ?? {},
+      actions,
 
-      completed: response.completed ?? false,
+      sections,
 
-      metadata: response.metadata ?? {},
+      liveRequirement,
 
-      currentStep: response.currentStep ?? null,
+      completed,
 
-      nextStep: response.nextStep ?? null,
+      metadata,
 
-      context: response.context ?? null,
-    });
+      currentStep,
+
+      nextStep,
+
+      context,
+
+      sessionId,
+
+      visitorId,
+
+      whatsapp,
+    };
+  }
+
+  error(
+    message = "Something went wrong.",
+    {
+      interaction = "MESSAGE",
+      sections = [],
+      metadata = {},
+      currentStep = null,
+      nextStep = null,
+      context = null,
+
+      sessionId = null,
+      visitorId = null,
+      whatsapp = null,
+    } = {},
+  ) {
+    return {
+      success: false,
+
+      type: "error",
+
+      workflow: "SALES",
+
+      interaction,
+
+      message,
+
+      actions: [],
+
+      sections,
+
+      liveRequirement: null,
+
+      completed: false,
+
+      metadata,
+
+      currentStep,
+
+      nextStep,
+
+      context,
+
+      sessionId,
+
+      visitorId,
+
+      whatsapp,
+    };
   }
 }

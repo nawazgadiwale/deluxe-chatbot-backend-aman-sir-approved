@@ -10,11 +10,10 @@ export default class SalesResponseBuilder {
     metadata = {},
     currentStep = null,
     nextStep = null,
-
-    // =====================================================
-    // Decision Context
-    // =====================================================
     context = null,
+    sessionId = null,
+    visitorId = null,
+    whatsapp = null,
   } = {}) {
     return {
       success: true,
@@ -27,9 +26,9 @@ export default class SalesResponseBuilder {
 
       message,
 
-      actions,
+      actions: Array.isArray(actions) ? actions : [],
 
-      sections,
+      sections: Array.isArray(sections) ? sections : [],
 
       liveRequirement,
 
@@ -41,40 +40,62 @@ export default class SalesResponseBuilder {
 
       nextStep,
 
-      // IMPORTANT:
-      // Keeps COLLECT_CUSTOMER field information available
-      // to the frontend.
       context,
+
+      sessionId,
+
+      visitorId,
+
+      whatsapp,
     };
   }
 
-  error(message = "Something went wrong.") {
+  error(
+    message = "Something went wrong.",
+    {
+      interaction = "MESSAGE",
+      sections = [],
+      metadata = {},
+      currentStep = null,
+      nextStep = null,
+      context = null,
+      sessionId = null,
+      visitorId = null,
+      whatsapp = null,
+    } = {},
+  ) {
     return {
       success: false,
 
       type: "error",
 
-      message,
-
       workflow: "SALES",
 
-      interaction: "MESSAGE",
+      interaction,
+
+      message,
 
       actions: [],
 
-      sections: [],
+      sections,
 
       liveRequirement: null,
 
       completed: false,
 
-      metadata: {},
+      metadata,
 
-      currentStep: null,
+      currentStep,
 
-      nextStep: null,
+      nextStep,
 
-      context: null,
+      context,
+
+      sessionId,
+
+      visitorId,
+
+      whatsapp,
     };
   }
 }

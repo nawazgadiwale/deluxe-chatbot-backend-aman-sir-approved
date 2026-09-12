@@ -9,37 +9,147 @@ import WorkflowNode from "./nodes/WorkflowNode.js";
 import FAQNode from "./nodes/FAQNode.js";
 import ResponseNode from "./nodes/ResponseNode.js";
 import SaveSessionNode from "./nodes/SaveSessionNode.js";
+
 import ConversationRouter from "./edges/ConversationRouter.js";
+
 import LeadNode from "./nodes/LeadNode.js";
 import GreetingNode from "./nodes/GreetingNode.js";
-
 import ProductDetailsNode from "./nodes/ProductDetailsNode.js";
 import DiscoveryNode from "./nodes/DiscoveryNode.js";
 import OutOfScopeNode from "./nodes/OutOfScopeNode.js";
 import SalesNode from "./nodes/SalesNode.js";
 
-const loadSessionNode = new LoadSessionNode();
-const routingNode = new RoutingNode();
-const workflowNode = new WorkflowNode();
-const faqNode = new FAQNode();
-const responseNode = new ResponseNode();
-const saveSessionNode = new SaveSessionNode();
-const conversationRouter = new ConversationRouter();
-const leadNode = new LeadNode();
-const greetingNode = new GreetingNode();
-const productDetailsNode = new ProductDetailsNode();
-const salesNode = new SalesNode();
+import DecisionTypes from "../../modules/sales/helpers/DecisionTypes.js";
 
+// ============================================================
+// NODE INSTANCES
+// ============================================================
+
+const loadSessionNode = new LoadSessionNode();
+
+const routingNode = new RoutingNode();
+
+const workflowNode = new WorkflowNode();
+
+const faqNode = new FAQNode();
+
+const responseNode = new ResponseNode();
+
+const saveSessionNode = new SaveSessionNode();
+
+const conversationRouter = new ConversationRouter();
+
+const leadNode = new LeadNode();
+
+const greetingNode = new GreetingNode();
+
+const productDetailsNode = new ProductDetailsNode();
 
 const discoveryNode = new DiscoveryNode();
+
+const salesNode = new SalesNode();
+
 const outofscopeNode = new OutOfScopeNode();
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const SUBMIT_LEAD = DecisionTypes.SUBMIT_LEAD ?? "SUBMIT_LEAD";
+
+const SUBMIT_ORDER_FORM =
+  DecisionTypes.SUBMIT_ORDER_FORM ?? "SUBMIT_ORDER_FORM";
+
+// ============================================================
+// DIRECT ACTION ROUTER
+// ============================================================
+//
+// Priority:
+// 1. Generic SUBMIT_LEAD action
+// 2. Generic SUBMIT_ORDER_FORM action
+// 3. Normal ConversationRouter
+//
+// ============================================================
+
+function routeAfterWorkflow(state = {}) {
+  // ----------------------------------------------------------
+  // GENERIC LEAD SUBMISSION
+  // ----------------------------------------------------------
+
+  if (state.action?.id === SUBMIT_LEAD) {
+    console.log("[ConversationGraph] Routing SUBMIT_LEAD → LeadNode");
+
+    return "LeadNode";
+  }
+
+  // ----------------------------------------------------------
+  // GENERIC ORDER FORM SUBMISSION
+  // ----------------------------------------------------------
+
+  if (state.action?.id === SUBMIT_ORDER_FORM) {
+    console.log("[ConversationGraph] Routing SUBMIT_ORDER_FORM → SalesNode");
+
+    return "SalesNode";
+  }
+
+  // ----------------------------------------------------------
+  // NORMAL ROUTING
+  // ----------------------------------------------------------
+
+  return conversationRouter.route(state);
+}
+
+// ============================================================
+// CONTINUE ROUTER
+// ============================================================
+//
+// After capability processing:
+//
+// LeadNode
+// SalesNode
+// FAQNode
+// etc.
+//
+// continue() decides whether we:
+//
+//   → another capability
+//   → ResponseNode
+//
+// ============================================================
+
+function continueAfterCapability(state = {}) {
+  // ----------------------------------------------------------
+  // LEAD SUBMISSION COMPLETED
+  // ----------------------------------------------------------
+
+  if (
+    state.leadSubmission === true ||
+    (state.workflow === "LEAD" &&
+      state.currentStep === "SUBMIT_LEAD" &&
+      state.completed === true)
+  ) {
+    console.log("[ConversationGraph] Lead completed → ResponseNode");
+
+    return "ResponseNode";
+  }
+
+  // ----------------------------------------------------------
+  // NORMAL ROUTING
+  // ----------------------------------------------------------
+
+  return conversationRouter.continue(state);
+}
+
+// ============================================================
+// GRAPH
+// ============================================================
 
 export default function createConversationGraph() {
   const builder = new GraphBuilder(ConversationState);
 
-  // -------------------------
-  // Register Nodes
-  // -------------------------
+  // ==========================================================
+  // REGISTER NODES
+  // ==========================================================
 
   builder
     .addNode("LoadSessionNode", loadSessionNode.execute.bind(loadSessionNode))
@@ -48,14 +158,23 @@ export default function createConversationGraph() {
 
     .addNode("WorkflowNode", workflowNode.execute.bind(workflowNode))
 
+    // --------------------------------------------------------
+    // LEAD
+    // --------------------------------------------------------
 
     .addNode("LeadNode", leadNode.execute.bind(leadNode))
 
+    // --------------------------------------------------------
+    // SALES
+    // --------------------------------------------------------
+
+    .addNode("SalesNode", salesNode.execute.bind(salesNode))
+
+    // --------------------------------------------------------
+    // OTHER CAPABILITIES
+    // --------------------------------------------------------
+
     .addNode("FAQNode", faqNode.execute.bind(faqNode))
-
-    .addNode("ResponseNode", responseNode.execute.bind(responseNode))
-
-    .addNode("SaveSessionNode", saveSessionNode.execute.bind(saveSessionNode))
 
     .addNode("GreetingNode", greetingNode.execute.bind(greetingNode))
 
@@ -66,13 +185,23 @@ export default function createConversationGraph() {
 
     .addNode("DiscoveryNode", discoveryNode.execute.bind(discoveryNode))
 
-    .addNode("SalesNode", salesNode.execute.bind(salesNode))
+    .addNode("OutOfScopeNode", outofscopeNode.execute.bind(outofscopeNode))
 
-    .addNode("OutOfScopeNode", outofscopeNode.execute.bind(outofscopeNode));
+    // --------------------------------------------------------
+    // RESPONSE
+    // --------------------------------------------------------
 
-  // -------------------------
-  // Static Edges
-  // -------------------------
+    .addNode("ResponseNode", responseNode.execute.bind(responseNode))
+
+    // --------------------------------------------------------
+    // PERSISTENCE
+    // --------------------------------------------------------
+
+    .addNode("SaveSessionNode", saveSessionNode.execute.bind(saveSessionNode));
+
+  // ==========================================================
+  // STATIC EDGES
+  // ==========================================================
 
   builder
     .addEdge(START, "LoadSessionNode")
@@ -81,18 +210,27 @@ export default function createConversationGraph() {
 
     .addEdge("RoutingNode", "WorkflowNode");
 
-  // -------------------------
-  // Workflow Router
-  // -------------------------
+  // ==========================================================
+  // WORKFLOW ROUTING
+  // ==========================================================
+  //
+  // IMPORTANT:
+  //
+  // We DO NOT directly use:
+  //
+  // conversationRouter.route
+  //
+  // anymore.
+  //
+  // We first check for WhatsApp Flow submissions.
+  //
+  // ==========================================================
 
-  builder.addConditionalEdges(
-    "WorkflowNode",
-    conversationRouter.route.bind(conversationRouter),
-  );
+  builder.addConditionalEdges("WorkflowNode", routeAfterWorkflow);
 
-  // -------------------------
-  // Capability Nodes
-  // -------------------------
+  // ==========================================================
+  // CAPABILITY NODES
+  // ==========================================================
 
   const capabilityNodes = [
     "ProductDetailsNode",
@@ -105,20 +243,24 @@ export default function createConversationGraph() {
   ];
 
   capabilityNodes.forEach((node) => {
-    builder.addConditionalEdges(
-      node,
-      conversationRouter.continue.bind(conversationRouter),
-    );
+    builder.addConditionalEdges(node, continueAfterCapability);
   });
 
-  // -------------------------
-  // Finish Workflow
-  // -------------------------
+  // ==========================================================
+  // RESPONSE → SAVE
+  // ==========================================================
 
-  builder
-    .addEdge("ResponseNode", "SaveSessionNode")
+  builder.addEdge("ResponseNode", "SaveSessionNode");
 
-    .addEdge("SaveSessionNode", END);
+  // ==========================================================
+  // SAVE → END
+  // ==========================================================
+
+  builder.addEdge("SaveSessionNode", END);
+
+  // ==========================================================
+  // COMPILE
+  // ==========================================================
 
   return builder.compile();
 }

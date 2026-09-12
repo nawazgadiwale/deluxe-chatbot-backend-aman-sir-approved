@@ -1,13 +1,10 @@
 import ConversationRepository from "../../../repositories/ConversationRepository.js";
-
-import MemoryService from "../../../modules/memory/MemoryService.js";
-
 import OrderRepository from "../../../repositories/OrderRequestRepository.js";
+import MemoryService from "../../../modules/memory/MemoryService.js";
+import mongoose from "mongoose";
 
 const conversationRepository = new ConversationRepository();
-
 const orderRepository = new OrderRepository();
-
 const memoryService = new MemoryService();
 
 export default class SaveSessionNode {
@@ -16,22 +13,63 @@ export default class SaveSessionNode {
 
     /*
      * =====================================================
-     * SYNCHRONIZE CUSTOMER
+     * VALIDATION
      * =====================================================
      */
 
-    if (state.lead) {
-      state.customer = {
-        ...(state.customer ?? {}),
+    if (!state.sessionId) {
+      throw new Error("Session ID is required.");
+    }
 
-        name: state.lead.name ?? state.customer?.name ?? null,
+    if (!state.visitorId) {
+      state.visitorId = state.sessionId;
+    }
 
-        phone: state.lead.phoneNumber ?? state.customer?.phone ?? null,
+    /*
+     * =====================================================
+    const toPlain = (obj) =>
+      obj && typeof obj.toObject === "function" ? obj.toObject() : (obj ?? {});
 
-        email: state.lead.emailId ?? state.customer?.email ?? null,
+    const orderCust = toPlain(state.order?.customer);
+    const liveReqCust = toPlain(state.liveRequirement?.customer);
+    const leadCust = state.lead
+      ? {
+          name: state.lead.name ?? null,
+          phone: state.lead.phoneNumber ?? null,
+          email: state.lead.emailId ?? null,
+          company: state.lead.companyName ?? null,
+        }
+      : {};
 
-        company: state.lead.companyName ?? state.customer?.company ?? null,
-      };
+    const mergedCustomer = {
+      ...(state.customer ?? {}),
+      ...Object.fromEntries(
+        Object.entries(orderCust).filter(([_, v]) => v != null && v !== ""),
+      ),
+      ...Object.fromEntries(
+        Object.entries(liveReqCust).filter(([_, v]) => v != null && v !== ""),
+      ),
+      ...Object.fromEntries(
+        Object.entries(leadCust).filter(([_, v]) => v != null && v !== ""),
+      ),
+    };
+
+    state.customer = mergedCustomer;
+
+    /*
+     * =====================================================
+     * RESTORE PERSISTENT STATE IF TRANSIENT EXECUTION
+     * =====================================================
+     */
+
+    if (state.transientExecution?.active) {
+      state.workflow = state.transientExecution.persistentWorkflow;
+      state.currentStep = state.transientExecution.persistentStep;
+      state.order = state.transientExecution.persistentOrder;
+      state.selectedProduct = state.transientExecution.persistentSelectedProduct;
+      state.liveRequirement = state.transientExecution.persistentLiveRequirement;
+      state.productSales = state.transientExecution.persistentProductSales;
+      state.awaitingDecision = state.transientExecution.persistentAwaitingDecision;
     }
 
     /*
@@ -48,43 +86,17 @@ export default class SaveSessionNode {
 
     /*
      * =====================================================
-     * CLEAN + DEDUPLICATE CONVERSATION HISTORY
+     * CLEAN + DEDUPLICATE CURRENT SESSION HISTORY
      * =====================================================
-     *
-     * IMPORTANT:
-     *
-     * The same user message can currently be appended
-     * multiple times before reaching this node.
-     *
-     * We therefore deduplicate messages before persistence.
-     *
-     * Primary identity:
-     *
-     *     messageId
-     *
-     * Fallback identity:
-     *
-     *     role + content + timestamp
-     *
-     * This preserves legitimate repeated messages when
-     * they occur at different timestamps.
      */
 
     const history = Array.isArray(state.history) ? state.history : [];
 
     const seenMessageIds = new Set();
-
     const seenFallbackKeys = new Set();
-
     const cleanedHistory = [];
 
     for (const message of history) {
-      /*
-       * ---------------------------------------------
-       * BASIC VALIDATION
-       * ---------------------------------------------
-       */
-
       if (!message || !message.role || typeof message.content !== "string") {
         continue;
       }
@@ -94,12 +106,6 @@ export default class SaveSessionNode {
       if (!content) {
         continue;
       }
-
-      /*
-       * ---------------------------------------------
-       * MESSAGE ID
-       * ---------------------------------------------
-       */
 
       if (message.messageId) {
         if (seenMessageIds.has(message.messageId)) {
@@ -115,15 +121,6 @@ export default class SaveSessionNode {
 
         continue;
       }
-
-      /*
-       * ---------------------------------------------
-       * FALLBACK DEDUPLICATION
-       * ---------------------------------------------
-       *
-       * This handles your CURRENT messages because
-       * they don't have messageId yet.
-       */
 
       const timestamp = message.timestamp
         ? new Date(message.timestamp).getTime()
@@ -143,21 +140,11 @@ export default class SaveSessionNode {
       });
     }
 
-    /*
-     * Keep latest 50 messages.
-     */
-
     state.history = cleanedHistory.slice(-50);
-
-    console.log("========== HISTORY ==========");
-
-    console.log("Original:", history.length);
-
-    console.log("After cleanup:", state.history.length);
 
     /*
      * =====================================================
-     * PERSIST CONVERSATION
+     * DETERMINE CURRENT SESSION WORKFLOW
      * =====================================================
      */
 
@@ -165,52 +152,226 @@ export default class SaveSessionNode {
       state.order &&
       !["CONFIRMED", "CANCELLED", "DELETED"].includes(state.order.status);
 
-    const workflow = active ? "SALES" : (state.workflow ?? null);
+    const isExplicitCancelled =
+      state.workflow === "NONE" ||
+      state.order?.status === "CANCELLED" ||
+      state.order?.status === "DELETED";
+
+    const workflow = isExplicitCancelled
+      ? "NONE"
+      : (active ? "SALES" : (state.workflow ?? "NONE"));
 
     /*
-     * Order workflow is form-based.
+     * =====================================================
+     * CURRENT STEP PERSISTENCE
+     * =====================================================
      */
 
-    const currentStep = state.order?.active
+    const currentStep = isExplicitCancelled
       ? null
-      : (state.currentStep ?? null);
+      : (state.currentStep ?? (active ? "ORDER_FORM" : null));
+
+    console.log("========== PERSISTING STATE ==========");
+    console.log("Workflow:", workflow);
+    console.log("Current Step:", currentStep);
+    console.log("Active Form:", currentStep === "ORDER_FORM");
+    console.log(
+      "Order:",
+      state.order?._id
+        ? String(state.order._id)
+        : (state.order ? "draft" : null),
+    );
+    console.log(
+      "Selected Product:",
+      state.selectedProduct?.name ?? state.selectedProduct?.title ?? null,
+    );
+
+    /*
+     * =====================================================
+     * CURRENT SESSION ENGAGEMENT
+     * =====================================================
+     */
+
+    const previousEngagement = state.conversation?.engagement ?? {};
+
+    const currentEngagement = state.engagement ?? {};
+
+    const hasSubmittedLead =
+      currentEngagement.hasSubmittedLead === true ||
+      previousEngagement.hasSubmittedLead === true ||
+      !!state.lead;
+
+    const hasOrdered =
+      currentEngagement.hasOrdered === true ||
+      previousEngagement.hasOrdered === true ||
+      state.order?.status === "CONFIRMED" ||
+      state.order?.confirmed === true;
+
+    const hasRequestedQuote =
+      currentEngagement.hasRequestedQuote === true ||
+      previousEngagement.hasRequestedQuote === true ||
+      state.requestType === "QUOTATION" ||
+      state.leadContext?.requestType === "QUOTATION" ||
+      state.conversation?.requestType === "QUOTATION";
+
+    const engagement = {
+      ...previousEngagement,
+      ...currentEngagement,
+
+      hasSearched:
+        currentEngagement.hasSearched === true ||
+        previousEngagement.hasSearched === true,
+
+      hasViewedProduct:
+        currentEngagement.hasViewedProduct === true ||
+        previousEngagement.hasViewedProduct === true,
+
+      hasStartedOrder:
+        currentEngagement.hasStartedOrder === true ||
+        previousEngagement.hasStartedOrder === true ||
+        !!state.order,
+
+      hasSubmittedLead,
+
+      hasOrdered,
+
+      hasRequestedQuote,
+
+      abandoned:
+        currentEngagement.abandoned === true ||
+        previousEngagement.abandoned === true,
+
+      lastActivityAt: new Date(),
+    };
+
+    /*
+     * =====================================================
+     * VISITOR CLASSIFICATION
+     * =====================================================
+     */
+
+    const requestType =
+      state.requestType ??
+      state.leadContext?.requestType ??
+      state.conversation?.requestType ??
+      null;
+
+    const visitorType = hasOrdered
+      ? "CUSTOMER"
+      : hasRequestedQuote || requestType === "QUOTATION"
+        ? "QOUTATION"
+        : hasSubmittedLead
+          ? "LEAD"
+          : (state.visitorType ?? state.conversation?.visitorType ?? "VISITOR");
+
+    const isReturningVisitor =
+      (state.totalSessions ?? state.conversation?.totalSessions ?? 1) > 1 ||
+      !!state.previousSessionId ||
+      !!state.conversation?.previousSessionId;
+
+    const isKnownCustomer = visitorType === "CUSTOMER" || hasOrdered;
+
+    const isQuotationCustomer =
+      visitorType === "QOUTATION" ||
+      requestType === "QUOTATION" ||
+      hasRequestedQuote;
+
+    const isLead = visitorType === "LEAD" || hasSubmittedLead;
+
+    const isPureVisitor = !isKnownCustomer && !isQuotationCustomer && !isLead;
+
+    /*
+     * =====================================================
+     * PERSIST CURRENT SESSION
+     * =====================================================
+     */
 
     const conversationUpdate = {
-      customer: state.customer,
+      visitorId: state.visitorId,
 
-      /*
-       * requestType belongs to Conversation.
-       */
+      site: state.site ?? "exprintmart",
 
-      requestType:
-        state.conversation?.requestType ??
-        state.leadContext?.requestType ??
-        state.requestType ??
-        null,
+      ipAddress: state.ipAddress ?? state.conversation?.ipAddress ?? null,
+
+      customer: {
+        ...(state.conversation?.customer ?? {}),
+        ...(state.customer ?? {}),
+      },
+
+      requestType,
 
       workflow,
 
       currentStep,
 
+      memory: {
+        ...(state.memory ?? {}),
+        recommendation: state.recommendation ?? null,
+        recommendationContext: state.recommendationContext ?? null,
+      },
+
+      visitorContext: state.visitorContext ?? {},
+
+      visitorType,
+
+      previousSessionId:
+        state.previousSessionId ??
+        state.conversation?.previousSessionId ??
+        null,
+
+      totalSessions:
+        state.totalSessions ?? state.conversation?.totalSessions ?? 1,
+
+      isReturningVisitor,
+
+      isPureVisitor,
+
+      isKnownCustomer,
+
+      isLead,
+
+      isQuotationCustomer,
+
+      engagement,
+
       metadata: {
         ...(state.metadata ?? {}),
-
+        ...(state.currentStep
+          ? {
+              routing: {
+                ...(state.metadata?.routing ?? {}),
+                step: state.currentStep,
+              },
+            }
+          : {}),
+        ...(state.whatsapp?.phoneNumberId
+          ? { phoneNumberId: state.whatsapp.phoneNumberId }
+          : {}),
         workflowStack: state.workflowStack ?? [],
-
         lastRecommendationAt: state.recommendationContext?.completedAt ?? null,
       },
 
-      memory: {
-        ...(state.memory ?? {}),
+      channel: state.channel ?? state.conversation?.channel ?? "WEB",
 
-        recommendation: state.recommendation,
+      customerWaId:
+        state.customerWaId ??
+        state.whatsapp?.phoneNumber ??
+        state.conversation?.customerWaId ??
+        null,
 
-        recommendationContext: state.recommendationContext,
-      },
+      lastUserMessageAt:
+        state.lastUserMessageAt ??
+        state.conversation?.lastUserMessageAt ??
+        null,
+
+      lastInboundMessageId:
+        state.lastInboundMessageId ??
+        state.conversation?.lastInboundMessageId ??
+        null,
 
       messages: state.history,
 
-      status: state.status ?? "ACTIVE",
+      status: state.status ?? state.conversation?.status ?? "ACTIVE",
 
       updatedAt: new Date(),
     };
@@ -219,60 +380,129 @@ export default class SaveSessionNode {
 
     console.log({
       sessionId: state.sessionId,
-
+      visitorId: state.visitorId,
       workflow,
-
       currentStep,
-
       requestType: conversationUpdate.requestType,
-
+      visitorType: conversationUpdate.visitorType,
+      isReturningVisitor,
+      isPureVisitor,
+      isKnownCustomer,
+      isLead,
+      isQuotationCustomer,
+      hasSubmittedLead: engagement.hasSubmittedLead,
+      hasRequestedQuote: engagement.hasRequestedQuote,
+      hasOrdered: engagement.hasOrdered,
       historyLength: state.history.length,
     });
 
-    state.conversation = await conversationRepository.update(
-      {
-        sessionId: state.sessionId,
-      },
-      {
-        $set: conversationUpdate,
-      },
-      {
-        upsert: true,
-      },
-    );
-
     /*
      * =====================================================
-     * RELOAD CONVERSATION SNAPSHOT
+     * UPDATE CURRENT SESSION ONLY
      * =====================================================
      */
 
-    state.conversation = await conversationRepository.findBySessionId(
-      state.sessionId,
-    );
+    try {
+      state.conversation = await conversationRepository.update(
+        {
+          sessionId: state.sessionId,
+        },
+        {
+          $set: conversationUpdate,
 
-    /*
-     * =====================================================
-     * SYNCHRONIZE MEMORY SNAPSHOT
-     * =====================================================
-     */
+          $setOnInsert: {
+            sessionId: state.sessionId,
+          },
+        },
+        {
+          upsert: true,
+        },
+      );
 
-    state.memory = memoryService.build(state.conversation);
+      /*
+       * =====================================================
+       * RELOAD CURRENT SESSION
+       * =====================================================
+       */
 
-    if (state.persistence?.conversation) {
-      state.persistence.conversation.dirty = false;
+      state.conversation = await conversationRepository.findBySessionId(
+        state.sessionId,
+      );
+
+      /*
+       * =====================================================
+       * KEEP STATE IDENTIFIERS SYNCHRONIZED
+       * =====================================================
+       */
+
+      if (state.conversation) {
+        state.sessionId = state.conversation.sessionId || state.sessionId;
+        state.visitorId = state.conversation.visitorId || state.visitorId;
+        state.conversationId =
+          state.conversation._id?.toString() || state.conversationId;
+        state.memory = memoryService.build(state.conversation);
+      }
+
+      if (state.persistence?.conversation) {
+        state.persistence.conversation.dirty = false;
+      }
+    } catch (dbError) {
+      console.error("[SaveSessionNode] Database conversation persistence warning:", dbError?.message);
     }
 
     /*
      * =====================================================
      * LINK ORDER -> LEAD
      * =====================================================
+     *
+     * IMPORTANT:
+     *
+     * Mongo/Mongoose ObjectIds must never be passed as
+     * serialized BSON objects such as:
+     *
+     * {
+     *   buffer: Uint8Array(...)
+     * }
+     *
+     * Normalize the ID before updating the order.
      */
 
-    const pendingLeadId =
-      state.order && state.lead?._id && state.order.leadId !== state.lead._id
-        ? state.lead._id
-        : null;
+    let pendingLeadId = null;
+
+    if (state.order && state.lead?._id) {
+      const rawLeadId = state.lead._id;
+
+      /*
+       * Convert all supported representations to
+       * a real Mongoose ObjectId.
+       */
+      try {
+        if (rawLeadId instanceof mongoose.Types.ObjectId) {
+          pendingLeadId = rawLeadId;
+        } else if (
+          typeof rawLeadId === "string" &&
+          mongoose.Types.ObjectId.isValid(rawLeadId)
+        ) {
+          pendingLeadId = new mongoose.Types.ObjectId(rawLeadId);
+        } else if (
+          rawLeadId?._id &&
+          mongoose.Types.ObjectId.isValid(String(rawLeadId._id))
+        ) {
+          pendingLeadId = new mongoose.Types.ObjectId(String(rawLeadId._id));
+        } else if (
+          rawLeadId?.buffer &&
+          rawLeadId.buffer instanceof Uint8Array
+        ) {
+          pendingLeadId = new mongoose.Types.ObjectId(rawLeadId.buffer);
+        } else if (Buffer.isBuffer(rawLeadId?.buffer)) {
+          pendingLeadId = new mongoose.Types.ObjectId(rawLeadId.buffer);
+        }
+      } catch (error) {
+        console.error("Failed to normalize leadId:", error);
+
+        pendingLeadId = null;
+      }
+    }
 
     /*
      * =====================================================
@@ -281,30 +511,68 @@ export default class SaveSessionNode {
      */
 
     if (state.persistence?.order?.dirty && state.order) {
-      state.order.updatedAt = new Date();
+      try {
+        state.order.updatedAt = new Date();
 
-      state.order = await orderRepository.saveDraft(
-        state.sessionId,
-        state.conversationId,
-        state.order,
-      );
+        state.order = await orderRepository.saveDraft(
+          state.sessionId,
+          state.conversationId,
+          state.order,
+        );
 
-      /*
-       * ---------------------------------------------
-       * LINK ORDER -> LEAD
-       * ---------------------------------------------
-       */
+        /*
+         * Only update leadId when a valid ObjectId exists.
+         */
+        if (pendingLeadId) {
+          const existingLeadId = state.order.leadId
+            ? String(state.order.leadId)
+            : null;
 
-      if (pendingLeadId) {
-        state.order = await orderRepository.update(state.order._id, {
-          leadId: pendingLeadId,
-        });
+          const normalizedLeadId = String(pendingLeadId);
+
+          /*
+           * Compare IDs by value, not object reference.
+           */
+          if (existingLeadId !== normalizedLeadId) {
+            state.order = await orderRepository.update(state.order._id, {
+              leadId: pendingLeadId,
+            });
+          }
+        }
+
+        state.orderContext = state.order;
+        state.persistence.order.dirty = false;
+      } catch (orderDbError) {
+        console.error("[SaveSessionNode] Database order persistence warning:", orderDbError?.message);
       }
-
-      state.orderContext = state.order;
-
-      state.persistence.order.dirty = false;
     }
+
+    /*
+     * =====================================================
+     * FINAL DEBUG
+     * =====================================================
+     */
+
+    console.log("========== SESSION SAVED ==========");
+
+    console.log({
+      sessionId: state.sessionId,
+      visitorId: state.visitorId,
+      conversationId: state.conversationId,
+      workflow: state.conversation?.workflow,
+      currentStep: state.conversation?.currentStep,
+      requestType: state.conversation?.requestType,
+      visitorType: state.conversation?.visitorType,
+      isReturningVisitor: state.conversation?.isReturningVisitor,
+      isPureVisitor: state.conversation?.isPureVisitor,
+      isKnownCustomer: state.conversation?.isKnownCustomer,
+      isLead: state.conversation?.isLead,
+      isQuotationCustomer: state.conversation?.isQuotationCustomer,
+      hasSubmittedLead: state.conversation?.engagement?.hasSubmittedLead,
+      hasRequestedQuote: state.conversation?.engagement?.hasRequestedQuote,
+      hasOrdered: state.conversation?.engagement?.hasOrdered,
+      leadId: state.order?.leadId ? String(state.order.leadId) : null,
+    });
 
     return state;
   }

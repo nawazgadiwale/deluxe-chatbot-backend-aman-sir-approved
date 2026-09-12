@@ -3,7 +3,7 @@
   "subCategory": "Stationery & Corporate Identity",
   "products": [
     {
-      "id": 1,
+      "id": "business-cards",
       "name": "Business Cards",
       "image": "https://www.dlxprint.com/images/digital-business-cards/standard_business_cards_printing_dubai.webp",
       "slug": "business-cards",
@@ -48,188 +48,252 @@
         "quotationRequired": true
       },
       "selection": {
-        "id": "material",
-        "label": "Business Card Type",
-        "description": "Choose the business card style that best matches your brand.",
+        "id": "category",
+        "label": "Business Card Category",
+        "description": "Choose the business card category that best matches your budget, style and branding needs.",
         "required": true,
-        "recommended": "Executive",
+        "recommended": "premium",
         "options": [
           {
-            "id": "standard",
-            "name": "Standard Business Cards",
-            "image": "https://www.dlxprint.com/images/products/standard_business_cards.webp",
-            "badge": "Budget Friendly",
-            "startingPrice": 60,
-            "description": "Affordable professional business cards for everyday networking.",
-            "recommendationReason": "Our best-selling business card offering the best balance of quality, appearance and affordability for most businesses.",
-            "idealFor": [
-              "Startups",
-              "Small businesses",
-              "Corporate professionals",
-              "Daily networking"
-            ],
-            "sellingPoints": [
-              "Most popular choice",
-              "Excellent value for money",
-              "Professional appearance",
-              "Fast production"
-            ],
-            "features": [
-              "400 gsm Smooth White Card",
-              "Matt, Gloss or Silk Touch Finish",
-              "Premium look and feel",
-              "Same-day printing available"
+            "id": "budget-friendly",
+            "name": "Budget-Friendly Business Cards",
+            "description": "Professional business cards at an affordable price for everyday business needs.",
+            "products": [
+              {
+                "id": "affordable",
+                "name": "Affordable Business Cards",
+                "slug": "affordable-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/affordable-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/business-cards-printing-in-dubai.8477bbdb.webphttps://www.exprintmart.com/_next/static/media/business-cards-printing-in-dubai.8477bbdb.webp",
+                "description": "Affordable professional business cards for everyday networking.",
+                "badge": "Budget Friendly"
+              },
+              {
+                "id": "laminated",
+                "name": "Laminated Business Cards",
+                "slug": "laminated-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/laminated-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/business-cards-printing-dubai.9d8279df.webp",
+                "description": "Professional business cards with a durable laminated finish.",
+                "badge": "Popular"
+              },
+              {
+                "id": "pvc-plastic",
+                "name": "PVC-Plastic Business Cards",
+                "slug": "pvc-plastic-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/pvc-plastic-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/custom-business-cards-dubai.26a21e03.webp",
+                "description": "Durable PVC plastic business cards with a modern appearance.",
+                "badge": "Durable"
+              }
             ]
           },
           {
-            "id": "executive",
-            "name": "Executive Business Cards",
-            "image": "https://www.dlxprint.com/images/print&marketing/laminated_business_cards_printing_dubai.webp",
-            "badge": "Best Seller",
-            "startingPrice": 100,
-            "description": "Premium executive cards with elegant finish.",
-            "recommendationReason": "Recommended for professionals who want a more premium corporate image.",
-            "idealFor": [
-              "Managers",
-              "Executives",
-              "Corporate meetings"
-            ],
-            "sellingPoints": [
-              "Premium finish",
-              "Elegant appearance",
-              "Professional branding"
-            ],
-            "features": [
-              "400 gsm Pristine White Card",
-              "Matt coating on both sides",
-              "Smooth touch",
-              "Executive premium appearance"
+            "id": "premium",
+            "name": "Premium Business Cards",
+            "description": "Stand out with sleek, durable, and professionally crafted premium business cards.",
+            "products": [
+              {
+                "id": "eco-friendly",
+                "name": "Eco-Friendly Business Cards",
+                "slug": "eco-friendly-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/eco-friendly-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/same-day-business-cards-printing-dubai.27b5aa05.webp",
+                "description": "Professionally crafted business cards using eco-friendly materials.",
+                "badge": "Eco-Friendly"
+              },
+              {
+                "id": "textured",
+                "name": "Textured Business Cards",
+                "slug": "textured-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/textured-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/business-cards-near-me-dubai.7122f656.webp",
+                "description": "Premium textured business cards with a distinctive tactile finish.",
+                "badge": "Premium"
+              },
+              {
+                "id": "velvet",
+                "name": "Velvet Business Cards",
+                "slug": "velvet-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/velvet-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/visiting-card-printing-dubai.4b07e5b2.webp",
+                "description": "Luxury soft-touch velvet laminated business cards.",
+                "badge": "Premium"
+              }
             ]
           },
           {
-            "id": "velvet",
-            "name": "Velvet Business Cards",
-            "image": "https://www.dlxprint.com/images/print&marketing/velvet_business_cards_printing_dubai.webp",
-            "badge": "Premium",
-            "startingPrice": 180,
-            "description": "Luxury soft-touch velvet laminated business cards.",
-            "recommendationReason": "Perfect for businesses looking for a luxury soft-touch finish.",
-            "idealFor": [
-              "Luxury brands",
-              "Real estate",
-              "Fashion",
-              "High-end businesses"
-            ],
-            "sellingPoints": [
-              "Soft-touch finish",
-              "Premium feel",
-              "Memorable first impression"
-            ],
-            "features": [
-              "Velvet Lamination",
-              "Soft Touch Finish",
-              "Premium Card Stock"
-            ]
-          },
-          {
-            "id": "spot-uv",
-            "name": "3D Spot UV Business Cards",
-            "image": "https://www.dlxprint.com/images/print&marketing/spot_uv_business_cards_printing_dubai.webp",
-            "startingPrice": 320,
-            "badge": "Luxury",
-            "recommendationReason": "Ideal when you want important elements like your logo to stand out.",
-            "idealFor": [
-              "Luxury brands",
-              "Creative agencies",
-              "Architects"
-            ],
-            "sellingPoints": [
-              "Raised Spot UV",
-              "Premium visual impact",
-              "Excellent brand recognition"
-            ],
-            "description": "Raised Spot UV with premium finish.",
-            "features": [
-              "400 gsm White Card",
-              "Matt laminated",
-              "3D embossed Spot UV"
-            ]
-          },
-          {
-            "id": "foil",
-            "name": "3D Foil Business Cards",
-            "image": "https://www.dlxprint.com/images/print&marketing/3d_gold_foil_business_cards_dubai.webp",
-            "startingPrice": 395,
-            "badge": "Luxury",
-            "description": "Premium metallic foil finish."
-          },
-          {
-            "id": "royal",
-            "name": "3D Spot UV & 3D Foil",
-            "image": "https://www.dlxprint.com/images/print&marketing/royal_business_card_printing_dubai.webp",
-            "startingPrice": 570,
-            "badge": "Signature",
-            "recommendationReason": "Our most premium business card combining Spot UV, Foiling and Velvet finish for maximum impact.",
-            "idealFor": [
-              "CEOs",
-              "Luxury brands",
-              "High-end corporate identity"
-            ],
-            "sellingPoints": [
-              "Highest quality",
-              "Luxury presentation",
-              "Signature finish"
-            ],
-            "description": "Our highest-end luxury business card.",
-            "features": [
-              "3D Spot UV",
-              "3D Foiling",
-              "Soft Touch Velvet",
-              "3-4 Working Days"
-            ]
-          },
-          {
-            "id": "translucent-pack",
-            "name": "Translucent Business Cards",
-            "image": "https://www.dlxprint.com/images/print&marketing/translucent_business_card_printing_10.webp",
-            "startingPrice": 250,
-            "badge": "Unique",
-            "description": "Semi-transparent waterproof PVC business cards that create a modern and memorable first impression.",
-            "recommendationReason": "Ideal for businesses that want a distinctive, modern business card that stands out from traditional paper cards.",
-            "idealFor": [
-              "Creative agencies",
-              "Interior designers",
-              "Architects",
-              "Luxury brands",
-              "Technology companies",
-              "Premium businesses"
-            ],
-            "sellingPoints": [
-              "Unique transparent appearance",
-              "Waterproof and durable",
-              "Long-lasting PVC material",
-              "Leaves a memorable first impression"
-            ],
-            "features": [
-              "400 Micron PVC",
-              "Semi-transparent finish",
-              "Water Resistant",
-              "Premium Appearance",
-              "Tear Resistant",
-              "Long-lasting durability"
+            "id": "luxury",
+            "name": "Luxury Business Cards",
+            "description": "Make every introduction unforgettable with elegantly crafted luxury business cards.",
+            "products": [
+              {
+                "id": "spot-uv",
+                "name": "Spot UV Business Cards",
+                "slug": "spot-uv-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/spot-uv-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/business-cards-dubai.0b973715.webp",
+                "description": "Premium business cards featuring a raised Spot UV finish.",
+                "badge": "Luxury"
+              },
+              {
+                "id": "foil",
+                "name": "Foil Business Cards",
+                "slug": "foil-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/foil-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/business-cards-printing-uae.9d8ccc94.webp",
+                "description": "Premium business cards with a metallic foil finish.",
+                "badge": "Luxury"
+              },
+              {
+                "id": "translucent",
+                "name": "Translucent Business Cards",
+                "slug": "translucent-business-cards-dubai",
+                "url": "https://www.exprintmart.com/business-cards-printing-in-dubai/translucent-business-cards-dubai",
+                "image": "https://www.exprintmart.com/_next/static/media/next-day-business-cards-printing-dubai.d579b68e.webp",
+                "description": "Semi-transparent waterproof PVC business cards with a distinctive modern appearance.",
+                "badge": "Unique"
+              }
             ]
           }
         ]
       },
       "fields": [
         {
-          "id": "numberOfNames",
+          "id": "quantity",
+          "mapsTo": "workflow.quantity",
           "order": 1,
-          "label": "Number of Names",
-          "type": "number",
+          "label": "Quantity",
+          "type": "select",
+          "required": true,
+          "question": "How many business cards do you need?",
+          "options": [
+            {
+              "id": "100",
+              "label": "100",
+              "value": 100
+            },
+            {
+              "id": "200",
+              "label": "200",
+              "value": 200
+            },
+            {
+              "id": "300",
+              "label": "300",
+              "value": 300
+            },
+            {
+              "id": "500",
+              "label": "500",
+              "value": 500
+            },
+            {
+              "id": "1000",
+              "label": "1000",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "id": "numberOfNames",
+          "order": 2,
+          "label": "Names",
+          "type": "select",
           "required": true,
           "question": "How many different names should be printed?",
-          "description": "Specify how many unique names will appear on the cards."
+          "description": "Specify how many unique names will appear on the cards.",
+          "options": [
+            { "id": "1", "label": "1", "value": 1 },
+            { "id": "2", "label": "2", "value": 2 },
+            { "id": "3", "label": "3", "value": 3 },
+            { "id": "4", "label": "4", "value": 4 },
+            { "id": "5", "label": "5", "value": 5 },
+            { "id": "6", "label": "6", "value": 6 },
+            { "id": "7", "label": "7", "value": 7 },
+            { "id": "8", "label": "8", "value": 8 },
+            { "id": "9", "label": "9", "value": 9 },
+            { "id": "10", "label": "10", "value": 10 }
+          ]
+        },
+        {
+          "id": "material",
+          "order": 3,
+          "label": "Material",
+          "type": "select",
+          "required": true,
+          "question": "Which material would you like?",
+          "options": [
+            {
+              "id": "350gsm-art-matt",
+              "label": "350gsm Art Matt",
+              "value": "350gsm Art Matt"
+            },
+            {
+              "id": "400gsm-art-matt",
+              "label": "400gsm Art Matt",
+              "value": "400gsm Art Matt"
+            }
+          ]
+        },
+        {
+          "id": "lamination",
+          "order": 4,
+          "label": "Lamination",
+          "type": "select",
+          "required": true,
+          "question": "Which lamination would you like?",
+          "description": "Premium laminations are available for orders of 100 cards or more.",
+          "options": [
+            {
+              "id": "none",
+              "label": "NO LAMINATION",
+              "value": "none"
+            },
+            {
+              "id": "matt",
+              "label": "MATT",
+              "value": "matt",
+              "minQuantity": 100
+            },
+            {
+              "id": "gloss",
+              "label": "GLOSS",
+              "value": "gloss",
+              "minQuantity": 100
+            },
+            {
+              "id": "velvet-soft-touch",
+              "label": "VELVET - SOFT TOUCH",
+              "value": "velvet-soft-touch",
+              "minQuantity": 100
+            }
+          ]
+        },
+        {
+          "id": "deliveryMethod",
+          "mapsTo": "delivery.method",
+          "order": 5,
+          "label": "Delivery Method",
+          "type": "select",
+          "required": true,
+          "question": "How would you like to receive your order?",
+          "options": [
+            {
+              "id": "self-pickup",
+              "label": "Self Pick Up",
+              "value": "pickup",
+              "price": {
+                "amount": 0,
+                "currency": "AED"
+              }
+            },
+            {
+              "id": "delivery",
+              "label": "Delivery",
+              "value": "delivery"
+            }
+          ]
         }
       ],
       "requirements": [

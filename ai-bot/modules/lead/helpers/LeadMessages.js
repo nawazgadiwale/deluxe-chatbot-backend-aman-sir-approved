@@ -1,10 +1,4 @@
 const LeadMessages = {
-  /*
-   * =====================================================
-   * VALIDATION
-   * =====================================================
-   */
-
   NAME_REQUIRED: "Please enter your name.",
 
   PHONE_REQUIRED: "Please enter your phone number.",
@@ -15,13 +9,10 @@ const LeadMessages = {
 
   INVALID_EMAIL: "Please enter a valid email address.",
 
-  /*
-   * =====================================================
-   * SUCCESS
-   * =====================================================
-   */
-
   LEAD_CREATED: "Thank you! Our sales team will contact you shortly.",
+
+  WHATSAPP_FORM_ERROR:
+    "I couldn't process the form submission. Please try again.",
 };
 
 export default LeadMessages;

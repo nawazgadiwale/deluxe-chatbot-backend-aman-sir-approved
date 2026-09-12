@@ -2,39 +2,7 @@ import crypto from "crypto";
 import LeadConstants from "../helpers/LeadConstants.js";
 
 export default class LeadBuilder {
-  /*
-   * =====================================================
-   * RESOLVE BILLING ADDRESS
-   * =====================================================
-   *
-   * Rules:
-   *
-   * 1. Delivery + delivery address
-   *      -> use delivery address
-   *
-   * 2. Pickup
-   *      -> Dubai
-   *
-   * 3. Delivery without address
-   *      -> Dubai
-   *
-   * 4. Anything without an address
-   *      -> Dubai
-   *
-   * The order/requirement is treated as the
-   * authoritative source for delivery information.
-   */
-
   resolveBillingAddress(order = {}, lead = {}) {
-    /*
-     * =====================================================
-     * DELIVERY METHOD
-     * =====================================================
-     *
-     * Support the common structures used by the
-     * existing order state.
-     */
-
     const deliveryMethod =
       order.delivery?.method ??
       order.delivery?.type ??
@@ -43,12 +11,6 @@ export default class LeadBuilder {
       order.fulfillmentMethod ??
       order.fulfillmentType ??
       "";
-
-    /*
-     * =====================================================
-     * DELIVERY ADDRESS
-     * =====================================================
-     */
 
     const deliveryAddress =
       order.delivery?.address ??
@@ -64,121 +26,48 @@ export default class LeadBuilder {
 
     const normalizedAddress = String(deliveryAddress ?? "").trim();
 
-    /*
-     * =====================================================
-     * DELIVERY + ADDRESS
-     * =====================================================
-     */
-
     if (normalizedMethod === "delivery" && normalizedAddress) {
       return normalizedAddress;
     }
 
-    /*
-     * =====================================================
-     * DEFAULT
-     * =====================================================
-     *
-     * Pickup:
-     *     Dubai
-     *
-     * Delivery without address:
-     *     Dubai
-     *
-     * Missing method:
-     *     Dubai
-     */
-
     return "Dubai";
   }
 
-  build(lead = {}, refNo, order = {}) {
-    /*
-     * =====================================================
-     * PRODUCTS
-     * =====================================================
-     */
-
-    let products = [];
-
-    if (Array.isArray(lead.products) && lead.products.length > 0) {
-      products = lead.products.map((product) => ({
-        productName: String(product.productName ?? "").trim(),
-
-        productId: product.productId ?? null,
-      }));
-    } else if (lead.required_item) {
-      products = [
-        {
-          productName: String(lead.required_item).trim(),
-
-          productId: LeadConstants.PRODUCT_ID ?? null,
-        },
-      ];
-    }
-
-    /*
-     * =====================================================
-     * BILLING ADDRESS
-     * =====================================================
-     */
+  build(
+    lead = {},
+    refNo,
+    order = {},
+    channel = LeadConstants.CHANNELS.WEBCHAT,
+  ) {
+    const products = this.extractProducts(order, lead);
 
     const billingAddress = this.resolveBillingAddress(order, lead);
 
-    /*
-     * =====================================================
-     * BUILD LEAD
-     * =====================================================
-     */
+    const source =
+      channel === LeadConstants.CHANNELS.WHATSAPP
+        ? LeadConstants.SOURCES.WHATSAPP
+        : LeadConstants.SOURCES.WEBCHAT;
 
     return {
-      /*
-       * =================================================
-       * IDENTITY
-       * =================================================
-       */
-
       refNo,
 
       uid: crypto.randomUUID(),
 
-      /*
-       * =================================================
-       * CUSTOMER
-       * =================================================
-       */
+      name: String(lead.name ?? "").trim(),
 
-      name: lead.name,
+      phoneNumber: String(lead.phoneNumber ?? "").trim(),
 
-      phoneNumber: lead.phoneNumber,
+      emailId: String(lead.emailId ?? "").trim(),
 
-      emailId: lead.emailId ?? "",
-
-      companyName: lead.companyName ?? "",
+      companyName: String(lead.companyName ?? "").trim(),
 
       billingAddress,
 
-      /*
-       * =================================================
-       * LEAD SOURCE
-       * =================================================
-       */
-
-      source: LeadConstants.SOURCE,
-
-      /*
-       * =================================================
-       * PRODUCTS
-       * =================================================
-       */
+      source,
 
       products,
 
-      /*
-       * =================================================
-       * CRM
-       * =================================================
-       */
+      requestType: lead.requestType ?? LeadConstants.REQUEST_TYPES.ORDER,
 
       division: lead.division ?? "N/A",
 
@@ -204,5 +93,85 @@ export default class LeadBuilder {
 
       followUps: [],
     };
+  }
+
+  extractProducts(order = {}, lead = {}) {
+    const items = Array.isArray(order.items) ? order.items : [];
+
+    const products = [];
+
+    for (const item of items) {
+      const parent = item.product ?? {};
+
+      const selected = item.selectedProduct ?? {};
+
+      const product = selected.id ? selected : parent;
+
+      const productName =
+        product.name ??
+        product.productName ??
+        product.title ??
+        product.slug ??
+        "";
+
+      if (!productName) {
+        continue;
+      }
+
+      products.push({
+        productName: String(productName).trim(),
+
+        productId: product.id ?? product.productId ?? product.slug ?? null,
+      });
+    }
+
+    /*
+     * For non-order leads there may be contextual
+     * products selected during discovery.
+     */
+    if (products.length === 0 && Array.isArray(lead.products)) {
+      for (const product of lead.products) {
+        if (!product) {
+          continue;
+        }
+
+        const productName =
+          product.productName ??
+          product.name ??
+          product.title ??
+          product.slug ??
+          "";
+
+        if (!productName) {
+          continue;
+        }
+
+        products.push({
+          productName: String(productName).trim(),
+
+          productId: product.productId ?? product.id ?? product.slug ?? null,
+        });
+      }
+    }
+
+    return this.uniqueProducts(products);
+  }
+
+  uniqueProducts(products = []) {
+    const seen = new Set();
+
+    return products.filter((product) => {
+      const key = product.productId
+        ? `id:${product.productId}`
+        : `name:${product.productName.toLowerCase()}`;
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+
+      return true;
+    });
   }
 }

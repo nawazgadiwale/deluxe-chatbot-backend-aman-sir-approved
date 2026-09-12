@@ -2,13 +2,7 @@ import LeadConstants from "../helpers/LeadConstants.js";
 
 export default class LeadIntentResolver {
   resolve(message = "") {
-    const text = message.toLowerCase().trim();
-
-    /*
-     * =====================================================
-     * QUOTATION
-     * =====================================================
-     */
+    const text = String(message).toLowerCase().trim();
 
     if (
       text.includes("request quotation") ||
@@ -33,12 +27,6 @@ export default class LeadIntentResolver {
       };
     }
 
-    /*
-     * =====================================================
-     * EXPERT
-     * =====================================================
-     */
-
     if (
       text.includes("talk to an expert") ||
       text.includes("talk to expert") ||
@@ -58,12 +46,6 @@ export default class LeadIntentResolver {
         source: "RULE",
       };
     }
-
-    /*
-     * =====================================================
-     * CONTACT SALES
-     * =====================================================
-     */
 
     if (
       text.includes("contact sales") ||

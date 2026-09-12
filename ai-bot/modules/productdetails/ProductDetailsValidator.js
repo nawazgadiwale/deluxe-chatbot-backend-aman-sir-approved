@@ -2,7 +2,6 @@ export default class ProductDetailsValidator {
   validate(result) {
     if (!result) {
       return {
-        type: "product_details",
         summary: "Sorry, I couldn't find that product.",
         context: null,
         actions: [],
@@ -10,12 +9,11 @@ export default class ProductDetailsValidator {
     }
 
     const { context } = result;
+
     console.log(context);
 
     return {
-      type: "product_details",
-
-      summary: context.product.shortDescription ?? "",
+      summary: context?.product?.shortDescription ?? "",
 
       context,
 

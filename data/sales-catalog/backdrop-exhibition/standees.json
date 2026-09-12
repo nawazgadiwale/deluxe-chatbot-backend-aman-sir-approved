@@ -3,10 +3,10 @@
     "subCategory": "Standees",
     "products": [
         {
-            "id": 4,
+            "id": "roll-up-banner",
             "name": "Roll-Up Banner",
+            "image": "https://www.dlxprint.com/images/backdrops&exhibition/roll_up_banner_dubai.webp",
             "slug": "roll-up-banner",
-            "image": "https://www.dlxprint.com/images/products/roll_up_banner.webp",
             "description": "Premium indoor roll-up banner supplied with aluminium stand and carry bag.",
             "aliases": [
                 "roll up banner",

@@ -1,21 +1,19 @@
-import { Ollama } from "@langchain/ollama";
 import GroqProvider from "./providers/GroqProvider.js";
-import OllamaProvider from "./providers/OllamaProvider.js";
-// import OpenAIProvider from "./providers/OpenAIProvider.js";
+import GeminiProvider from "./providers/GeminiProvider.js";
 
 let provider;
 
-switch (process.env.LLM_PROVIDER || "Ollama") {
+switch ((process.env.LLM_PROVIDER || "gemini").toLowerCase()) {
+  case "gemini":
+    provider = new GeminiProvider();
+    break;
+
   case "groq":
     provider = new GroqProvider();
     break;
 
-  case "ollama":
-    provider = new OllamaProvider();
-    break;
-
   default:
-    throw new Error("Unsupported provider");
+    throw new Error(`Unsupported LLM provider: ${process.env.LLM_PROVIDER}`);
 }
 
 export default class LLMService {

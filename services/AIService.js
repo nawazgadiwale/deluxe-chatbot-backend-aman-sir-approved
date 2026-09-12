@@ -9,13 +9,37 @@ const ConversationMapper =
 
 const createConversationGraph =
   createConversationGraphModule.default || createConversationGraphModule;
+
 class AIService {
   constructor() {
     this.conversationRepository = new ConversationRepository();
-
     this.conversationMapper = new ConversationMapper();
-
     this.graph = null;
+    this.sessionQueues = new Map();
+  }
+
+  // =====================================================
+  // SESSION CONCURRENCY QUEUE
+  // =====================================================
+
+  enqueueSessionTask(sessionId, fn) {
+    if (!sessionId || typeof fn !== "function") {
+      return typeof fn === "function" ? fn() : Promise.resolve();
+    }
+    const previousPromise = this.sessionQueues.get(sessionId) || Promise.resolve();
+    const nextPromise = previousPromise
+      .catch((err) => {
+        console.error(`[AIService] Prior queued session task failed for ${sessionId}:`, err?.message);
+      })
+      .then(() => fn())
+      .finally(() => {
+        if (this.sessionQueues.get(sessionId) === nextPromise) {
+          this.sessionQueues.delete(sessionId);
+        }
+      });
+
+    this.sessionQueues.set(sessionId, nextPromise);
+    return nextPromise;
   }
 
   // =====================================================
@@ -34,13 +58,25 @@ class AIService {
   // CHAT
   // =====================================================
 
-  async chat({
+  async chat(params = {}) {
+    const sessionId = params?.sessionId;
+    return this.enqueueSessionTask(sessionId, () => this._executeChat(params));
+  }
+
+  async _executeChat({
     sessionId,
+    visitorId = null,
     site = "exprintmart",
     message = "",
     visitor = {},
     action = null,
     attachments = [],
+
+    // IMPORTANT
+    channel = "WEB",
+
+    // WhatsApp-specific context
+    whatsapp = null,
   }) {
     this.validateRequest({
       sessionId,
@@ -56,6 +92,8 @@ class AIService {
     const conversation = await this.loadConversation({
       sessionId,
       visitor,
+      channel,
+      whatsapp,
     });
 
     // ---------------------------------------------------
@@ -68,8 +106,15 @@ class AIService {
       ...baseState,
 
       sessionId,
-
+      visitorId:
+        visitorId ||
+        baseState.visitorId ||
+        visitor?.visitorId ||
+        sessionId,
       site,
+
+      // Explicit channel
+      channel,
 
       userMessage: message ? message.trim() : "",
 
@@ -81,6 +126,14 @@ class AIService {
         ...(baseState.visitor || {}),
         ...(visitor || {}),
       },
+
+      // Only present for WhatsApp requests
+      whatsapp: whatsapp
+        ? {
+            ...(baseState.whatsapp || {}),
+            ...whatsapp,
+          }
+        : baseState.whatsapp || null,
 
       // Runtime input only
       history: message
@@ -103,19 +156,29 @@ class AIService {
     console.log({
       sessionId: graphState.sessionId,
       site: graphState.site,
+      channel: graphState.channel,
       workflow: graphState.workflow,
       currentStep: graphState.currentStep,
       selectedProduct: graphState.selectedProduct,
       action: graphState.action,
+
+      whatsapp: graphState.whatsapp
+        ? {
+            phoneNumber: graphState.whatsapp.phoneNumber,
+            phoneNumberId: graphState.whatsapp.phoneNumberId,
+          }
+        : null,
     });
 
     // ---------------------------------------------------
     // GRAPH
     // ---------------------------------------------------
 
+    console.log(`[WhatsApp][Graph] START sessionId=${graphState.sessionId}`);
     const graph = this.getGraph();
 
     const result = await graph.invoke(graphState);
+    console.log(`[WhatsApp][Graph] END sessionId=${graphState.sessionId}`);
 
     // ---------------------------------------------------
     // RESULT
@@ -125,6 +188,7 @@ class AIService {
 
     console.log({
       sessionId: result?.sessionId,
+      channel: result?.channel,
       workflow: result?.workflow,
       currentStep: result?.currentStep,
       selectedProduct: result?.selectedProduct,
@@ -165,18 +229,36 @@ class AIService {
   // LOAD / CREATE
   // =====================================================
 
-  async loadConversation({ sessionId, visitor = {} }) {
+  async loadConversation({
+    sessionId,
+    visitor = {},
+    channel = "WEB",
+    whatsapp = null,
+  }) {
     let conversation =
       await this.conversationRepository.findBySessionId(sessionId);
 
     if (!conversation) {
       conversation = await this.conversationRepository.createConversation({
         sessionId,
+        visitorId: visitor?.visitorId || sessionId,
+        channel,
+        customerWaId: whatsapp?.phoneNumber ?? null,
+        metadata: whatsapp?.phoneNumberId
+          ? { phoneNumberId: whatsapp.phoneNumberId }
+          : {},
 
         customer: {
           name: visitor?.name ?? null,
-          phone: visitor?.phone ?? visitor?.phoneNumber ?? null,
+
+          phone:
+            visitor?.phone ??
+            visitor?.phoneNumber ??
+            whatsapp?.phoneNumber ??
+            null,
+
           email: visitor?.email ?? visitor?.emailId ?? null,
+
           company: visitor?.company ?? visitor?.companyName ?? null,
         },
       });
@@ -189,16 +271,16 @@ class AIService {
   // GET CONVERSATION
   // =====================================================
 
-  async getConversation({ sessionId }) {
-    return this.conversationRepository.findBySessionId(sessionId);
+  async getConversation({ sessionId, site = "exprintmart" }) {
+    return this.conversationRepository.findBySessionId(sessionId, site);
   }
 
   // =====================================================
   // COMPLETE CONVERSATION
   // =====================================================
 
-  async completeConversation({ sessionId }) {
-    return this.conversationRepository.closeConversation(sessionId);
+  async completeConversation({ sessionId, site = "exprintmart" }) {
+    return this.conversationRepository.closeConversation(sessionId, site);
   }
 
   // =====================================================
@@ -206,6 +288,18 @@ class AIService {
   // =====================================================
 
   buildResponse(state) {
+    const item =
+      state?.liveRequirement?.items?.[state?.liveRequirement?.currentItem ?? 0] ??
+      state?.order?.items?.[state?.order?.currentItem ?? 0] ??
+      null;
+
+    const selectedProduct =
+      state?.selectedProduct ??
+      item?.selectedProduct ??
+      item?.selection ??
+      item?.product ??
+      null;
+
     return {
       success: true,
 
@@ -215,6 +309,8 @@ class AIService {
 
       site: state?.site ?? "exprintmart",
 
+      channel: state?.channel ?? "WEB",
+
       workflow: state?.workflow ?? null,
 
       currentStep: state?.currentStep ?? null,
@@ -223,7 +319,7 @@ class AIService {
 
       capability: state?.capability ?? null,
 
-      selectedProduct: state?.selectedProduct ?? null,
+      selectedProduct,
 
       response: state?.response ?? null,
 

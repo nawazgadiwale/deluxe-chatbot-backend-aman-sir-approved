@@ -17,12 +17,14 @@ export default class FieldResolver {
 
     // Product / Variant
     const extracted = {};
+    let currentMessage = message;
 
     for (const field of target.fields ?? []) {
-      const value = this.resolveField(field, message);
+      const value = this.resolveField(field, currentMessage);
 
       if (value != null) {
         extracted[field.id] = value;
+        currentMessage = this.consumeMatch(field, currentMessage, value);
       }
     }
 
@@ -44,7 +46,7 @@ export default class FieldResolver {
   resolveSelect(field = {}, message = "", payload = null) {
     if (
       payload?.fieldId === field.id &&
-      field.options?.some((o) => o.id === payload.value)
+      field.options?.some((o) => (o.value ?? o.id) === payload.value)
     ) {
       return payload.value;
     }
@@ -64,7 +66,7 @@ export default class FieldResolver {
       }
     }
 
-    return best?.id ?? null;
+    return best ? (best.value ?? best.id ?? best.name ?? best.label ?? null) : null;
   }
 
   /* ---------------- MULTI SELECT ---------------- */
@@ -233,7 +235,7 @@ export default class FieldResolver {
   }
 
   score(message, option = {}) {
-    const candidates = [
+    const rawList = [
       option.id,
       option.value,
       option.label,
@@ -241,9 +243,18 @@ export default class FieldResolver {
       ...(option.aliases ?? []),
       ...(option.keywords ?? []),
       ...(option.synonyms ?? []),
-    ]
-      .filter(Boolean)
-      .map((v) => this.normalize(v));
+    ].filter(Boolean);
+
+    const candidates = rawList.map((v) => this.normalize(v));
+    const tokenCandidates = [];
+    for (const item of rawList) {
+      const parts = String(item).split(/[\s-_/]+/);
+      for (const p of parts) {
+        if (p.length >= 3) {
+          tokenCandidates.push(this.normalize(p));
+        }
+      }
+    }
 
     let score = 0;
 
@@ -257,7 +268,58 @@ export default class FieldResolver {
       }
     }
 
+    for (const token of tokenCandidates) {
+      if (message === token) {
+        score = Math.max(score, 90);
+      } else if (message.includes(token)) {
+        score = Math.max(score, 70);
+      }
+    }
+
     return score;
+  }
+
+  consumeMatch(field = {}, message = "", value = null) {
+    if (!message || value == null) return message;
+
+    if (
+      field.type === "quantity" ||
+      field.type === "number" ||
+      field.id === "quantity" ||
+      field.id === "numberOfNames"
+    ) {
+      return message.replace(
+        new RegExp(`\\b${value}\\s*([a-z]+)?\\b`, "i"),
+        " ",
+      );
+    }
+
+    if (field.type === "select" || !field.type) {
+      const option = (field.options ?? []).find(
+        (o) => (o.value ?? o.id ?? o.name ?? o.label) === value,
+      );
+      if (option) {
+        const words = [
+          option.id,
+          option.value,
+          option.label,
+          option.name,
+          ...(option.aliases ?? []),
+          ...(option.keywords ?? []),
+        ]
+          .filter(Boolean)
+          .flatMap((s) => String(s).split(/[\s-_/]+/))
+          .filter((w) => w.length >= 3);
+
+        let result = message;
+        for (const w of words) {
+          result = result.replace(new RegExp(`\\b${w}\\b`, "gi"), " ");
+        }
+        return result;
+      }
+    }
+
+    return message.replace(new RegExp(`\\b${String(value)}\\b`, "gi"), " ");
   }
 
   normalize(value = "") {

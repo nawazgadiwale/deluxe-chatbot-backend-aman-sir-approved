@@ -94,7 +94,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import CatalogLoader from "./CatalogLoader.js";
+
 import PDFDocumentLoader from "./PDFLoader.js";
 import TextDocumentLoader from "./TextDocumentLoader.js";
 import MarkdownDocumentLoader from "./MarkdownDocumentLoader.js";
@@ -122,9 +122,6 @@ export default class DocumentLoader {
       let loader = null;
 
       switch (extension) {
-        case ".json":
-          loader = new CatalogLoader(fullPath);
-          break;
 
         case ".pdf":
           loader = new PDFDocumentLoader(fullPath);

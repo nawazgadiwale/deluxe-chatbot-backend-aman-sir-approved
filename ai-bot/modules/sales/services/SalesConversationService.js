@@ -1,273 +1,360 @@
 import LLMService from "../../../ai/llm/LLMService.js";
 import { SalesConversationPrompt } from "../prompts/SalesConversationPrompt.js";
 
-import DecisionTypes from "../helpers/DecisionTypes.js";
-
 export default class SalesConversationService {
   constructor() {
     this.llm = new LLMService();
   }
 
-  /*
-   * =====================================================
-   * LLM Conversation
-   * =====================================================
-   */
-
   async generate(context = {}, decision = {}) {
+    const safeContext = this.sanitizeContext(context);
+    const safeDecision = this.sanitizeDecision(decision);
+
     try {
-      const promptContext = {
-        a: decision.type,
-        ...context,
-      };
+      const hasLLMKey = Boolean(
+        process.env.GOOGLE_API_KEY ||
+        process.env.OPENAI_API_KEY ||
+        process.env.GROQ_API_KEY ||
+        process.env.OLLAMA_BASE_URL,
+      );
+
+      if (!hasLLMKey) {
+        return this.generateDeterministic(safeContext, safeDecision);
+      }
 
       const systemPrompt = SalesConversationPrompt({
-        context: promptContext,
+        context: {
+          channel: "WHATSAPP",
+
+          catalog: safeContext.catalog,
+
+          state: safeContext.state,
+
+          workflow: safeContext.workflow,
+
+          customer: safeContext.customer,
+
+          order: safeContext.order,
+
+          decision: safeDecision,
+
+          rules: {
+            catalogDriven: true,
+
+            catalogIsSourceOfTruth: true,
+
+            onlyUseProvidedCatalogData: true,
+
+            neverInventProducts: true,
+            neverInventSelections: true,
+            neverInventOptions: true,
+            neverInventPrices: true,
+            neverInventFields: true,
+            neverInventRequirements: true,
+            neverInventAddons: true,
+            neverInventWorkflow: true,
+
+            neverCollectOrderFieldsConversationally: true,
+
+            neverCollectCustomerDetailsConversationally:
+              safeDecision.type !== "COLLECT_CUSTOMER",
+          },
+        },
       });
 
       const response = await this.llm.invokeStructured({
         systemPrompt,
-        userMessage: "Generate the next response.",
+
+        userMessage:
+          safeContext.message || "Generate the next WhatsApp response.",
+
         schema: {
           type: "object",
+
+          additionalProperties: false,
+
           properties: {
             message: {
               type: "string",
             },
           },
+
           required: ["message"],
         },
       });
 
+      const message =
+        typeof response?.message === "string" ? response.message.trim() : "";
+
+      if (!message) {
+        return this.generateDeterministic(safeContext, safeDecision);
+      }
+
       return {
-        message: response?.message?.trim() ?? "",
-        interaction: decision.actions?.length ? "BUTTONS" : "MESSAGE",
-        actions: decision.actions ?? [],
-        sections: decision.sections ?? [],
+        message,
+
+        interaction: this.getInteraction(safeDecision),
+
+        actions: safeDecision.actions,
+
+        sections: safeDecision.sections,
       };
     } catch (error) {
-      console.error("SalesConversationService:", error);
-      return this.generateDeterministic(context, decision);
+      console.warn(
+        "[SalesConversationService] Fallback to deterministic:",
+        error.message,
+      );
+      return this.generateDeterministic(safeContext, safeDecision);
     }
   }
-  /*
-   * =====================================================
-   * Deterministic Conversation
-   * =====================================================
-   */
 
-  generateDeterministic(context = {}, decision = {}) {
-    let message =
-      "Hello! 👋 Welcome to Deluxe Printing. What would you like to print today?";
+  sanitizeContext(context = {}) {
+    const safe = context || {};
+    return {
+      channel: "WHATSAPP",
 
-    switch (decision.type) {
-      /*
-       * ===============================================
-       * Product
-       * ===============================================
-       */
+      message: typeof safe.message === "string" ? safe.message : "",
 
-      case DecisionTypes.SELECT_PRODUCT:
-        message =
-          "I'd be happy to help. Which printing product are you looking for today?";
-        break;
+      catalog:
+        safe.catalog && typeof safe.catalog === "object" ? safe.catalog : {},
 
-      /*
-       * ===============================================
-       * Recommend Selection
-       * ===============================================
-       */
+      state: safe.state && typeof safe.state === "object" ? safe.state : {},
 
-      case DecisionTypes.RECOMMEND_SELECTION: {
-        const recommendation = context.recommendation;
+      workflow:
+        safe.workflow && typeof safe.workflow === "object" ? safe.workflow : {},
 
-        if (!recommendation) {
-          message =
-            "Based on your requirements, I have a recommendation for you.";
-          break;
-        }
+      customer: safe.customer ?? null,
 
-        message = `Based on your requirements, I recommend "${recommendation.name}". Would you like to continue with this option?`;
+      order: safe.order ?? null,
+    };
+  }
 
-        break;
-      }
+  sanitizeDecision(decision = {}) {
+    const safe = decision || {};
+    return {
+      type: safe.type ?? null,
 
-      /*
-       * ===============================================
-       * Select Selection
-       * ===============================================
-       */
+      nextStep: safe.nextStep ?? null,
 
-      case DecisionTypes.SELECT_SELECTION: {
-        const options = context.options ?? [];
+      actions: this.sanitizeActions(safe.actions),
 
-        if (!options.length) {
-          message = "Let's continue with your selected product.";
-          break;
-        }
+      sections: this.sanitizeSections(safe.sections),
 
-        if (options.length === 1) {
-          message = `The available option is "${options[0].name}". Would you like to continue?`;
-          break;
-        }
+      context:
+        safe.context && typeof safe.context === "object" ? safe.context : {},
+    };
+  }
 
-        const label = context.selection?.label ?? "option";
-
-        message = `Please choose a ${label.toLowerCase()}.`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Product Field
-       * ===============================================
-       */
-
-      case DecisionTypes.COLLECT_PRODUCT_FIELD: {
-        const field = context.field;
-
-        message =
-          field?.question ??
-          `Please provide ${field?.label ?? "the required information"}.`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Requirement
-       * ===============================================
-       */
-
-      case DecisionTypes.COLLECT_REQUIREMENT: {
-        const requirement = context.requirement;
-
-        message =
-          requirement?.description ??
-          `Please provide ${requirement?.name ?? "the required information"}.`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Quantity
-       * ===============================================
-       */
-
-      case DecisionTypes.COLLECT_QUANTITY: {
-        const product =
-          context.selection?.name ?? context.product?.name ?? "this product";
-
-        message = `How many units of ${product} would you like to order?`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Artwork
-       * ===============================================
-       */
-
-      case DecisionTypes.COLLECT_ARTWORK: {
-        const product = context.product?.name ?? "your product";
-
-        message = `Do you already have artwork for your ${product}, or would you like our design team to create it for you?`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Delivery Method
-       * ===============================================
-       */
-
-      case DecisionTypes.SELECT_DELIVERY_METHOD:
-        message =
-          "Would you like your order to be delivered, or would you prefer to collect it from our store?";
-        break;
-
-      /*
-       * ===============================================
-       * Delivery Address
-       * ===============================================
-       */
-
-      case DecisionTypes.ASK_DELIVERY_ADDRESS:
-        message = "Please share your complete delivery address.";
-        break;
-
-      /*
-       * ===============================================
-       * Delivery Date
-       * ===============================================
-       */
-
-      case DecisionTypes.ASK_DELIVERY_DATE:
-        message = "When do you need your order?";
-        break;
-
-      /*
-       * ===============================================
-       * Addons
-       * ===============================================
-       */
-
-      case DecisionTypes.SELECT_ADDONS:
-        message = "Would you like to add any addons, finishing options??";
-        break;
-
-      /*
-       * ===============================================
-       * Review
-       * ===============================================
-       */
-
-      case DecisionTypes.REVIEW_ORDER: {
-        const product =
-          context.order?.items?.[0]?.product?.name ??
-          context.order?.items?.[0]?.product ??
-          "order";
-
-        message = `Please review your ${product} before we continue.`;
-
-        break;
-      }
-
-      /*
-       * ===============================================
-       * Complete
-       * ===============================================
-       */
-
-      case DecisionTypes.COMPLETE_ORDER:
-        message =
-          "Everything looks good. Once you confirm, our sales team will prepare your quotation and contact you shortly.";
-        break;
-
-      /*
-       * ===============================================
-       * Completed
-       * ===============================================
-       */
-
-      case DecisionTypes.ORDER_COMPLETED:
-        message =
-          "Thank you for choosing Deluxe Printing. We've received your request successfully. Our sales team will contact you shortly with your quotation.";
-        break;
+  sanitizeActions(actions = []) {
+    if (!Array.isArray(actions)) {
+      return [];
     }
 
+    return actions
+      .slice(0, 10)
+      .map((action) => {
+        if (!action || typeof action !== "object") {
+          return null;
+        }
+
+        return {
+          id: action.id ?? null,
+
+          label: action.label ?? action.title ?? null,
+
+          payload:
+            action.payload && typeof action.payload === "object"
+              ? action.payload
+              : {},
+        };
+      })
+      .filter((action) => action?.id && action?.label);
+  }
+
+  sanitizeSections(sections = []) {
+    if (!Array.isArray(sections)) {
+      return [];
+    }
+
+    return sections
+      .slice(0, 10)
+      .map((section) => {
+        if (!section || typeof section !== "object") {
+          return null;
+        }
+
+        return {
+          id: section.id ?? null,
+
+          title: section.title ?? null,
+
+          type: section.type ?? null,
+
+          description: section.description ?? null,
+
+          rows: Array.isArray(section.rows)
+            ? section.rows
+              .slice(0, 10)
+              .map((row) => ({
+                id: row?.id ?? row?.payload?.id ?? null,
+
+                title: row?.title ?? row?.label ?? null,
+
+                description: row?.description ?? null,
+
+                payload: row?.payload ?? {},
+              }))
+              .filter((row) => row.id && row.title)
+            : [],
+
+          form: section.form ?? null,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  getInteraction(decision = {}) {
+    const safeDecision = decision || {};
+    if (safeDecision.type === "COLLECT_CUSTOMER") {
+      return "FORM";
+    }
+
+    const actions = Array.isArray(safeDecision.actions)
+      ? safeDecision.actions
+      : [];
+
+    const sections = Array.isArray(safeDecision.sections)
+      ? safeDecision.sections
+      : [];
+
+    if (actions.length > 0) {
+      return actions.length <= 3 ? "BUTTONS" : "LIST";
+    }
+
+    if (sections.length > 0) {
+      const hasForm = sections.some(
+        (section) => section.type === "FORM" || section.form,
+      );
+
+      return hasForm ? "FORM" : "LIST";
+    }
+
+    return "MESSAGE";
+  }
+
+  generateDeterministic(context = {}, decision = {}) {
     return {
-      message,
+      message: this.buildDeterministicMessage(context, decision),
 
-      interaction: decision.actions?.length ? "BUTTONS" : "MESSAGE",
+      interaction: this.getInteraction(decision),
 
-      actions: decision.actions ?? [],
+      actions: decision?.actions ?? [],
 
-      sections: decision.sections ?? [],
+      sections: decision?.sections ?? [],
     };
+  }
+
+  buildDeterministicMessage(context = {}, decision = {}) {
+    const safeDecision = decision || {};
+    const safeContext = context || {};
+    const type = safeDecision.type;
+    const productName =
+      safeDecision.context?.product?.name ||
+      safeContext.order?.items?.[0]?.product?.name ||
+      "";
+
+    switch (type) {
+      case "START_ORDER":
+        return "Welcome to Deluxe Printing! How can we assist with your order today?";
+
+      case "SELECT_PRODUCT":
+        return "Please choose a product from the available options:";
+
+      case "BROWSE_PRODUCTS":
+        return "Browse our catalog categories or select a product below:";
+
+      case "UNKNOWN_PRODUCT":
+        return "I couldn't find an exact match for that product. Please choose from our catalog or speak with an expert:";
+
+      case "SELECT_SELECTION":
+      case "SHOW_SELECTIONS":
+      case "RECOMMEND_SELECTION":
+        return productName
+          ? `Please select the style/category for ${productName}:`
+          : "Please choose from the available options:";
+
+      case "SELECT_NESTED_PRODUCT":
+        return productName
+          ? `Please choose the specific option for ${productName}:`
+          : "Please choose the option that best matches your requirement:";
+
+      case "PRODUCT_DETAILS":
+        return productName
+          ? `Here are the details for ${productName}:`
+          : "Here are the product details:";
+
+      case "COLLECT_PRODUCT_FIELD":
+        return (
+          decision.context?.field?.question ??
+          decision.context?.field?.label ??
+          "Please provide the requested information."
+        );
+
+      case "COLLECT_REQUIREMENT":
+        return (
+          decision.context?.requirement?.instruction ??
+          decision.context?.requirement?.description ??
+          "Please provide the requested requirement."
+        );
+
+      case "SELECT_ADDONS":
+        return (
+          decision.context?.message ||
+          decision.context?.addons?.label ||
+          "Finishing Options"
+        );
+
+      case "SELECT_DELIVERY_METHOD":
+        return "Please select your preferred delivery method:";
+
+      case "ORDER_FORM":
+      case "COLLECT_QUANTITY":
+      case "COLLECT_ARTWORK":
+      case "ASK_DELIVERY_ADDRESS":
+      case "ASK_DELIVERY_DATE":
+        return productName
+          ? `Please provide the specifications for your ${productName} order:`
+          : "Please provide your order specifications to continue:";
+
+      case "ORDER_REVIEW":
+      case "REVIEW_ORDER":
+      case "COMPLETE_ORDER":
+        return (
+          decision.context?.message ||
+          decision.context?.summary ||
+          "Please review your order summary below:"
+        );
+
+      case "CONFIRM_ORDER":
+        return "Great! To complete your order, please enter your full name.";
+
+      case "CANCEL_ORDER":
+        return "Your order has been cancelled. Please let us know if you need anything else.";
+
+      case "COLLECT_CUSTOMER":
+        return (
+          decision.context?.message ||
+          "Great! To complete your order, please enter your full name."
+        );
+
+      case "ORDER_COMPLETED":
+        return (
+          decision.context?.message ||
+          "Thank you! Your order details have been submitted successfully. Our sales team will contact you regarding the quotation."
+        );
+
+      default:
+        return "Please choose from the available options.";
+    }
   }
 }

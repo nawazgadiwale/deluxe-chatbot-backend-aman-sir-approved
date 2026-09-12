@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import ChatController from "../controllers/ChatController.js";
+
 import validateRequest from "../validators/validateRequest.js";
 import { ChatSchema } from "../validators/ChatValidator.js";
 
@@ -12,6 +13,16 @@ const chatController = new ChatController();
  * POST /api/chat
  */
 router.post("/", validateRequest(ChatSchema), chatController.chat);
+
+/**
+ * GET /api/chat/catalog
+ */
+router.get("/catalog", chatController.getCatalog);
+
+/**
+ * GET /api/chat/catalog/:productId
+ */
+router.get("/catalog/:productId", chatController.getCatalogProduct);
 
 /**
  * GET /api/chat/:sessionId

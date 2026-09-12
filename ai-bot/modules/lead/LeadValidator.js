@@ -1,30 +1,20 @@
 import LeadMessages from "./helpers/LeadMessages.js";
 
 export default class LeadValidator {
-  validate(lead = {}) {
-    /*
-     * =====================================================
-     * NAME
-     * =====================================================
-     */
+  validate(lead = {}, options = {}) {
+    const channel = options.channel ?? "WEBCHAT";
 
-    if (!lead.name?.trim()) {
+    if (!String(lead.name ?? "").trim()) {
       throw new Error(LeadMessages.NAME_REQUIRED);
     }
 
-    lead.name = lead.name.trim();
+    lead.name = String(lead.name).trim();
 
-    /*
-     * =====================================================
-     * PHONE
-     * =====================================================
-     */
-
-    if (!lead.phoneNumber?.trim()) {
+    if (!String(lead.phoneNumber ?? "").trim()) {
       throw new Error(LeadMessages.PHONE_REQUIRED);
     }
 
-    lead.phoneNumber = lead.phoneNumber.replace(/\s+/g, "").trim();
+    lead.phoneNumber = String(lead.phoneNumber).replace(/\s+/g, "").trim();
 
     const phoneRegex = /^\+?[0-9]{7,15}$/;
 
@@ -32,14 +22,8 @@ export default class LeadValidator {
       throw new Error(LeadMessages.INVALID_PHONE);
     }
 
-    /*
-     * =====================================================
-     * EMAIL
-     * =====================================================
-     */
-
     if (lead.emailId) {
-      lead.emailId = lead.emailId.trim();
+      lead.emailId = String(lead.emailId).trim();
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,26 +32,9 @@ export default class LeadValidator {
       }
     }
 
-    /*
-     * =====================================================
-     * PRODUCTS
-     * =====================================================
-     *
-     * productId is intentionally NOT cast.
-     *
-     * It may be:
-     *
-     * "business-cards"
-     * "flyers"
-     * "123"
-     * null
-     */
-
     if (Array.isArray(lead.products)) {
       lead.products = lead.products
-
         .filter((product) => product?.productName)
-
         .map((product) => ({
           productName: String(product.productName).trim(),
 

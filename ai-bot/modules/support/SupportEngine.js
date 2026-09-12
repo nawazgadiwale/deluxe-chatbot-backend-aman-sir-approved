@@ -1,63 +1,110 @@
-import LLMService from "../../ai/llm/LLMService.js";
-import RAGPipeline from "../../ai/rag//retrieval/RagPipeline.js";
-
-import SupportPrompt from "../../ai/llm/prompts/SupportPrompt.js";
-
-const llmService = new LLMService();
-const ragPipeline = new RAGPipeline();
+const DEFAULT_TIMEOUT_MS = 30000;
 
 export default class SupportEngine {
-  async generate(state) {
-    const retrieval = await ragPipeline.retrieve({
-      query: state.userMessage,
-      conversation: state,
-      options: {
-        topK: 2,
-      },
-    });
+  constructor() {
+    this.webhookUrl = process.env.N8N_FAQ_WEBHOOK_URL;
 
-    const schema = {
-      type: "object",
-      properties: {
-        answer: {
-          type: "string",
-        },
+    this.timeoutMs = Number(
+      process.env.N8N_FAQ_TIMEOUT_MS || DEFAULT_TIMEOUT_MS,
+    );
+  }
 
-        references: {
-          type: "array",
-          items: {
-            type: "string",
-          },
-        },
+  async generate(state = {}) {
+    if (!this.webhookUrl) {
+      throw new Error("N8N_FAQ_WEBHOOK_URL is not configured.");
+    }
 
-        followUpQuestion: {
-          type: "string",
-        },
-      },
-      required: ["answer", "references", "followUpQuestion"],
+    const question = state.userMessage?.trim() || state.message?.trim() || "";
+
+    if (!question) {
+      throw new Error("FAQ question is required.");
+    }
+
+    const payload = {
+      type: "faq",
+      sessionId: state.sessionId ?? null,
+      visitorId: state.visitorId ?? null,
+      site: state.site ?? "exprintmart",
+
+      question,
+
+      history: Array.isArray(state.history) ? state.history.slice(-10) : [],
+
+      customer: state.customer ?? null,
+      orderRequest: state.orderRequest ?? null,
+      visitor: state.visitor ?? null,
     };
 
-    const prompt = SupportPrompt({
-      context: retrieval.context,
-      history: state.history,
-      customer: state.customer,
-      orderRequest: state.orderRequest,
-      message: state.userMessage,
-    });
+    const controller = new AbortController();
 
-    const response = await llmService.invokeStructured({
-      schema,
-      systemPrompt: prompt,
-      userMessage: state.userMessage,
-    });
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    console.log("RAW LLM RESPONSE");
-    console.dir(response, { depth: null });
+    try {
+      const response = await fetch(this.webhookUrl, {
+        method: "POST",
 
-    return {
-      context: retrieval.context,
-      documents: retrieval.documents,
-      response,
-    };
+        headers: {
+          "Content-Type": "application/json",
+
+          ...(process.env.N8N_FAQ_WEBHOOK_SECRET
+            ? {
+                "x-faq-webhook-secret": process.env.N8N_FAQ_WEBHOOK_SECRET,
+              }
+            : {}),
+        },
+
+        body: JSON.stringify(payload),
+
+        signal: controller.signal,
+      });
+
+      const raw = await response.text();
+
+      let result;
+
+      try {
+        result = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error("n8n returned invalid JSON.");
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            result?.error ||
+            `n8n returned HTTP ${response.status}`,
+        );
+      }
+
+      if (result?.success === false) {
+        throw new Error(result.message || "n8n FAQ workflow failed.");
+      }
+
+      return {
+        context: result.context ?? "",
+
+        documents: Array.isArray(result.documents) ? result.documents : [],
+
+        response: {
+          answer: result.answer ?? result.response?.answer ?? "",
+
+          references: Array.isArray(result.references)
+            ? result.references
+            : (result.response?.references ?? []),
+        },
+
+        metadata: result.metadata ?? {},
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(
+          `n8n FAQ workflow timed out after ${this.timeoutMs}ms.`,
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

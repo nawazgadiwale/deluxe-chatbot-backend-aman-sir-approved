@@ -8,7 +8,8 @@ export default class SalesProductResolver {
       return null;
     }
 
-    return catalogService.findProduct(message);
+    const matches = catalogService.findProducts(message);
+    return matches.length === 1 ? matches[0] : null;
   }
 
   resolveMany(message = "") {

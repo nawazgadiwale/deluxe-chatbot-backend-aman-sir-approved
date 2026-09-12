@@ -1,81 +1,44 @@
 const DecisionTypes = Object.freeze({
+
   START_ORDER: "START_ORDER",
 
-  /*
-   * =====================================================
-   * Product Selection
-   * =====================================================
-   */
-
+  // Product Selection
   SELECT_PRODUCT: "SELECT_PRODUCT",
-
+  BROWSE_PRODUCTS: "BROWSE_PRODUCTS",
+  UNKNOWN_PRODUCT: "UNKNOWN_PRODUCT",
   RECOMMEND_SELECTION: "RECOMMEND_SELECTION",
-
   SHOW_SELECTIONS: "SHOW_SELECTIONS",
-
   SELECT_SELECTION: "SELECT_SELECTION",
+  SELECT_NESTED_PRODUCT: "SELECT_NESTED_PRODUCT",
+  PRODUCT_DETAILS: "PRODUCT_DETAILS",
+  ORDER_NOW: "ORDER_NOW",
 
-  /*
-   * =====================================================
-   * Product Information
-   * =====================================================
-   */
-
+  // Product Information
   COLLECT_PRODUCT_FIELD: "COLLECT_PRODUCT_FIELD",
-
   COLLECT_REQUIREMENT: "COLLECT_REQUIREMENT",
-
   SELECT_ADDONS: "SELECT_ADDONS",
-
   SKIP_ADDONS: "SKIP_ADDONS",
 
-  /*
-   * =====================================================
-   * Workflow
-   * =====================================================
-   */
-
+  // Sales Workflow
   COLLECT_QUANTITY: "COLLECT_QUANTITY",
-
   COLLECT_ARTWORK: "COLLECT_ARTWORK",
-
   SELECT_DELIVERY_METHOD: "SELECT_DELIVERY_METHOD",
-
   ASK_DELIVERY_ADDRESS: "ASK_DELIVERY_ADDRESS",
-
   ASK_DELIVERY_DATE: "ASK_DELIVERY_DATE",
 
-  /*
-   * =====================================================
-   * Edit Order
-   * =====================================================
-   */
-
+  // Edit Order
   EDIT_ORDER: "EDIT_ORDER",
-  /*
-   * =====================================================
-   * Review & Confirmation
-   * =====================================================
-   *
-   * */
 
+  // Review & Confirmation
   REVIEW_ORDER: "REVIEW_ORDER",
-
+  ORDER_REVIEW: "ORDER_REVIEW",
   COMPLETE_ORDER: "COMPLETE_ORDER",
-
   CONFIRM_ORDER: "CONFIRM_ORDER",
-
   CANCEL_ORDER: "CANCEL_ORDER",
 
-  COLLECT_CUSTOMER: "COLLECT_CUSTOMER",
-
-  /*
-   * =====================================================
-   * Completion
-   * =====================================================
-   */
-
+  // Completion
   ORDER_COMPLETED: "ORDER_COMPLETED",
+
 });
 
 export default DecisionTypes;

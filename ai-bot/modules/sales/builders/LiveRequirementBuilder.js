@@ -1,97 +1,56 @@
 import ConversationModes from "../helpers/ConversationModes.js";
 
+const DEFAULT_CURRENCY = "AED";
+
 export default class LiveRequirementBuilder {
-  /*
-   * =====================================================
-   * Live Order
-   * =====================================================
-   */
+  build(existing = {}) {
+    return this.merge(
+      {
+        mode: ConversationModes.DISCOVERY,
 
-  build() {
-    return {
-      mode: ConversationModes.DISCOVERY,
+        currentItem: 0,
 
-      currentItem: 0,
+        items: [],
 
-      items: [],
+        customer: {
+          name: null,
+          company: null,
+          phone: null,
+          email: null,
+        },
 
-      customer: {
-        name: null,
-        company: null,
-        phone: null,
-        email: null,
+        delivery: {
+          method: null,
+          address: null,
+          requiredDate: null,
+        },
+
+        editing: {
+          active: false,
+          step: null,
+        },
+
+        pricing: {
+          currency: DEFAULT_CURRENCY,
+          subtotal: 0,
+          delivery: 0,
+          tax: 0,
+          total: 0,
+        },
+
+        reviewCompleted: false,
+        confirmed: false,
+
+        status: "COLLECTING",
+
+        notes: [],
       },
-
-      delivery: {
-        method: null,
-        address: null,
-        requiredDate: null,
-      },
-
-      editing: {
-        active: false,
-        step: null,
-      },
-
-      pricing: {
-        currency: "AED",
-        subtotal: 0,
-        delivery: 0,
-        tax: 0,
-        total: 0,
-      },
-
-      reviewCompleted: false,
-
-      confirmed: false,
-
-      status: "COLLECTING",
-
-      notes: [],
-    };
+      existing,
+    );
   }
 
-  /*
-   * =====================================================
-   * Order Item
-   * =====================================================
-   */
-
   createItem(product = {}) {
-    /*
-     * -----------------------------------------------------
-     * Product Identity
-     * -----------------------------------------------------
-     *
-     * ID can be:
-     *
-     * number
-     * string
-     *
-     * Never force it to a specific type.
-     */
-
-    const productId =
-      product.id ??
-      product.productId ??
-      product.slug ??
-      product.name ??
-      product.title ??
-      null;
-
-    /*
-     * -----------------------------------------------------
-     * Product Name
-     * -----------------------------------------------------
-     *
-     * IMPORTANT:
-     *
-     * Never create:
-     *
-     * name: null
-     *
-     * when another valid product name exists.
-     */
+    const productId = product.id ?? product.productId ?? product.slug ?? null;
 
     const productName =
       product.name ??
@@ -101,56 +60,61 @@ export default class LiveRequirementBuilder {
       product.slug ??
       null;
 
-    /*
-     * -----------------------------------------------------
-     * Product Slug
-     * -----------------------------------------------------
-     */
-
     const productSlug = product.slug ?? product.id ?? product.productId ?? null;
 
     return {
       product: {
         id: productId,
-
         name: productName,
-
         slug: productSlug,
       },
 
+      // Parent catalog selection/category.
+
       selection: null,
 
-      productData: {},
+      // Final concrete child product when
+      // selection contains nested products.
 
-      requirements: [],
+      selectedProduct: null,
 
-      workflow: {
-        quantity: null,
+      orderStarted: product.orderStarted ?? false,
 
-        artwork: {
-          status: null,
-          reference: null,
-        },
+      // Catalog form state.
+
+      formMode: product.formMode ?? false,
+
+      // Only catalog-defined form values.
+      formData: { ...(product.formData ?? {}) },
+
+      // Normalized alias for compatibility.
+      // Must contain the same catalog values as formData.
+      productData: {
+        ...(product.productData ?? {}),
+        ...(product.formData ?? {}),
       },
 
+      // Catalog requirement values.
+      requirements: [],
+
+      // Catalog workflow state.
+      workflow: { ...(product.workflow ?? {}) },
+
+      delivery: product.delivery ?? null,
+
       pricing: {
-        currency: "AED",
-
+        currency: DEFAULT_CURRENCY,
         unitPrice: null,
-
         subtotal: 0,
-
         discount: 0,
-
         total: 0,
       },
 
       addons: {
         completed: false,
-
         items: [],
-
         notes: null,
+        ...(product.addons ?? {}),
       },
 
       notes: [],
@@ -159,16 +123,9 @@ export default class LiveRequirementBuilder {
     };
   }
 
-  /*
-   * =====================================================
-   * Merge
-   * =====================================================
-   */
-
   merge(order = {}, values = {}) {
     const merged = {
       ...order,
-
       ...values,
 
       customer: {
@@ -192,132 +149,132 @@ export default class LiveRequirementBuilder {
           : [...(order.notes ?? [])],
     };
 
-    /*
-     * ===================================================
-     * IMPORTANT: PRESERVE ORDER ITEMS
-     * ===================================================
-     *
-     * A partial update must NEVER replace the complete
-     * product object with:
-     *
-     * {
-     *   id: "...",
-     *   name: null,
-     *   slug: null
-     * }
-     *
-     * Merge every item independently.
-     */
-
-    if (Array.isArray(values.items)) {
-      merged.items = values.items.map((newItem, index) => {
-        const oldItem = order.items?.[index] ?? {};
-
-        return {
-          ...oldItem,
-
-          ...newItem,
-
-          /*
-           * Product must be merged, not replaced.
-           */
-
-          product: {
-            ...(oldItem.product ?? {}),
-            ...(newItem.product ?? {}),
-
-            id: newItem.product?.id ?? oldItem.product?.id ?? null,
-
-            name:
-              newItem.product?.name ??
-              newItem.product?.productName ??
-              newItem.product?.title ??
-              oldItem.product?.name ??
-              oldItem.product?.productName ??
-              oldItem.product?.title ??
-              oldItem.product?.slug ??
-              null,
-
-            slug:
-              newItem.product?.slug ??
-              oldItem.product?.slug ??
-              newItem.product?.id ??
-              oldItem.product?.id ??
-              null,
-          },
-
-          /*
-           * Selection
-           */
-
-          selection: {
-            ...(oldItem.selection ?? {}),
-            ...(newItem.selection ?? {}),
-          },
-
-          /*
-           * Product data
-           */
-
-          productData: {
-            ...(oldItem.productData ?? {}),
-            ...(newItem.productData ?? {}),
-          },
-
-          /*
-           * Workflow
-           */
-
-          workflow: {
-            ...(oldItem.workflow ?? {}),
-            ...(newItem.workflow ?? {}),
-
-            artwork: {
-              ...(oldItem.workflow?.artwork ?? {}),
-              ...(newItem.workflow?.artwork ?? {}),
-            },
-          },
-
-          /*
-           * Pricing
-           */
-
-          pricing: {
-            ...(oldItem.pricing ?? {}),
-            ...(newItem.pricing ?? {}),
-          },
-
-          /*
-           * Addons
-           */
-
-          addons: {
-            ...(oldItem.addons ?? {}),
-            ...(newItem.addons ?? {}),
-
-            items: newItem.addons?.items ?? oldItem.addons?.items ?? [],
-          },
-
-          /*
-           * Notes
-           */
-
-          notes:
-            newItem.notes !== undefined
-              ? [...newItem.notes]
-              : [...(oldItem.notes ?? [])],
-        };
-      });
+    if (!Array.isArray(values.items)) {
+      return merged;
     }
+
+    merged.items = values.items.map((newItem, index) => {
+      const oldItem = order.items?.[index] ?? {};
+
+      const product = this.mergeProduct(oldItem.product, newItem.product);
+
+      const formData = {
+        ...(oldItem.formData ?? {}),
+        ...(newItem.formData ?? {}),
+      };
+
+      const productData = {
+        ...(oldItem.productData ?? {}),
+        ...(newItem.productData ?? {}),
+        ...formData,
+      };
+
+      return {
+        ...oldItem,
+        ...newItem,
+
+        product,
+
+        selection:
+          newItem.selection !== undefined
+            ? this.mergeNullableObject(oldItem.selection, newItem.selection)
+            : (oldItem.selection ?? null),
+
+        selectedProduct:
+          newItem.selectedProduct !== undefined
+            ? newItem.selectedProduct
+            : (oldItem.selectedProduct ?? null),
+
+        formMode:
+          newItem.formMode !== undefined
+            ? Boolean(newItem.formMode)
+            : Boolean(oldItem.formMode),
+
+        formData,
+
+        productData,
+
+        requirements:
+          newItem.requirements !== undefined
+            ? [...newItem.requirements]
+            : [...(oldItem.requirements ?? [])],
+
+        workflow: {
+          ...(oldItem.workflow ?? {}),
+          ...(newItem.workflow ?? {}),
+        },
+
+        pricing: {
+          ...(oldItem.pricing ?? {}),
+          ...(newItem.pricing ?? {}),
+        },
+
+        addons: {
+          ...(oldItem.addons ?? {}),
+          ...(newItem.addons ?? {}),
+
+          items:
+            newItem.addons?.items !== undefined
+              ? [...newItem.addons.items]
+              : [...(oldItem.addons?.items ?? [])],
+        },
+
+        notes:
+          newItem.notes !== undefined
+            ? [...newItem.notes]
+            : [...(oldItem.notes ?? [])],
+
+        completed: newItem.completed ?? oldItem.completed ?? false,
+      };
+    });
 
     return merged;
   }
 
-  /*
-   * =====================================================
-   * Reset
-   * =====================================================
-   */
+  mergeProduct(oldProduct = {}, newProduct = {}) {
+    return {
+      ...(oldProduct ?? {}),
+      ...(newProduct ?? {}),
+
+      id:
+        newProduct?.id ??
+        newProduct?.productId ??
+        oldProduct?.id ??
+        oldProduct?.productId ??
+        newProduct?.slug ??
+        oldProduct?.slug ??
+        null,
+
+      name:
+        newProduct?.name ??
+        newProduct?.productName ??
+        newProduct?.title ??
+        oldProduct?.name ??
+        oldProduct?.productName ??
+        oldProduct?.title ??
+        newProduct?.slug ??
+        oldProduct?.slug ??
+        null,
+
+      slug:
+        newProduct?.slug ??
+        oldProduct?.slug ??
+        newProduct?.id ??
+        oldProduct?.id ??
+        null,
+    };
+  }
+
+  mergeNullableObject(oldValue, newValue) {
+    if (newValue === null) {
+      return null;
+    }
+
+    return {
+      ...(oldValue ?? {}),
+      ...(newValue ?? {}),
+    };
+  }
 
   reset() {
     return this.build();
