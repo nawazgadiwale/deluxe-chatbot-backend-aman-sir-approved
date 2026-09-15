@@ -1,5 +1,5 @@
-import DiscoveryService from "../../../modules/discovery/DiscoveryService.js";
 
+import DiscoveryService from "../../../modules/discovery/DiscoveryService.js";
 import ResponseBuilder from "../../../core/responses/Apiresponse.js";
 
 const discoveryService = new DiscoveryService();
@@ -7,43 +7,18 @@ const responseBuilder = new ResponseBuilder();
 
 export default class DiscoveryNode {
   async execute(state) {
-    console.log("DiscoveryNode Executed");
-
-    /*
-     * =====================================================
-     * Generate Discovery Results
-     * =====================================================
-     */
+    console.log("========== DISCOVERY NODE ==========");
+    console.log("Query:", state.userMessage ?? "");
 
     const result = await discoveryService.generate(state);
 
-    /*
-     * =====================================================
-     * Store Discovery Context
-     * =====================================================
-     */
-
     state.discovery = {
-      products: result.products,
-      totalProducts: result.products.length,
+      type: result.type,
+      match: result.match ?? null,
+      products: result.products ?? [],
+      totalProducts: result.products?.length ?? 0,
       generatedAt: new Date(),
     };
-
-    /*
-     * =====================================================
-     * Workflow
-     * =====================================================
-     */
-
-    state.workflow = null;
-    state.currentStep = null;
-    state.awaitingDecision = false;
-
-    /*
-     * =====================================================
-     * Persistence
-     * =====================================================
-     */
 
     state.persistence.conversation = {
       ...state.persistence.conversation,
@@ -51,29 +26,15 @@ export default class DiscoveryNode {
       updatedAt: new Date(),
     };
 
-    /*
-     * =====================================================
-     * Response
-     * =====================================================
-     */
-
     state.response = responseBuilder.success({
       type: "discovery",
-
       data: {
-        summary: result.summary,
-        followUpQuestion: result.followUpQuestion,
-        products: result.products,
+        type: result.type,
+        product: result.match ?? null,
       },
     });
-
-    if (state.workflowStack?.length) {
-      responseBuilder.appendResumePrompt(
-        state.response,
-        state.workflowStack[state.workflowStack.length - 1],
-      );
-    }
 
     return state;
   }
 }
+

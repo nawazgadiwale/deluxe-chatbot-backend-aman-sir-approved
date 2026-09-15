@@ -8,6 +8,9 @@ const InteractionTypes = Object.freeze({
   FORM: "FORM",
   SUMMARY: "SUMMARY",
   COMPLETED: "COMPLETED",
+
+  // WhatsApp-specific rendering instruction
+  WHATSAPP_FLOW: "WHATSAPP_FLOW",
 });
 
 export default InteractionTypes;

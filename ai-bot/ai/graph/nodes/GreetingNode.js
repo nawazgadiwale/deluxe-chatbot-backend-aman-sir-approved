@@ -1,18 +1,16 @@
 import ResponseBuilder from "../../../core/responses/Apiresponse.js";
-import SalesCatalogService from "../../../modules/sales/services/SalesCatalogService.js";
 
 const responseBuilder = new ResponseBuilder();
-const catalogService = new SalesCatalogService();
 
 const BRAND_GREETING_LOGO_URL =
-  "https://www.exprintmart.com/_next/static/media/exprint_logo.41b1dc5b.svg";
+  "https://www.dlxprint.com/images/dlxprint.svg";
 
 export default class GreetingNode {
   async execute(state) {
     /**
-     * Greeting is Stateless
+     * Greeting is stateless.
+     * It must not start or modify an order.
      */
-
     state.workflow = null;
     state.currentStep = null;
     state.awaitingDecision = false;
@@ -20,7 +18,6 @@ export default class GreetingNode {
     /**
      * Visitor Context
      */
-
     const visitorType = state.visitorType ?? "VISITOR";
     const customer = state.customer ?? {};
     const name = customer.name?.trim() || null;
@@ -44,24 +41,18 @@ export default class GreetingNode {
       case "VISITOR":
       default:
         message =
-          "Hi! 👋 Welcome to Deluxe Printing.\n\nWhat would you like to order today? Choose from our popular catalog products below or tell me what you need:";
+          "Hi! 👋 Welcome to Deluxe Printing.\n\n" +
+          "What would you like to order today?\n\n" +
+          "Simply type the product you need, for example:\n" +
+          "• Business Cards\n" +
+          "• Flyers\n" +
+          "• Brochures";
         break;
     }
 
     /**
-     * Real catalog products
-     */
-    const products = catalogService.getProducts();
-    const actions = products.slice(0, 10).map((prod) => ({
-      id: "SELECT_PRODUCT",
-      label: String(prod.name ?? prod.title ?? prod.slug).slice(0, 24),
-      payload: { productId: prod.id ?? prod.slug },
-    }));
-
-    /**
      * Persistence
      */
-
     state.persistence.conversation = {
       ...state.persistence.conversation,
       dirty: true,
@@ -71,11 +62,10 @@ export default class GreetingNode {
     /**
      * Response
      */
-
     state.response = responseBuilder.success({
       type: "greeting",
       message,
-      actions,
+      actions: [],
       data: {
         brandAsset: BRAND_GREETING_LOGO_URL,
         image: BRAND_GREETING_LOGO_URL,

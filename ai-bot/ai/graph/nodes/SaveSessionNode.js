@@ -7,6 +7,9 @@ const conversationRepository = new ConversationRepository();
 const orderRepository = new OrderRepository();
 const memoryService = new MemoryService();
 
+const CANCELLATION_REGEX =
+  /^(cancel|cancel order|cancelled|canceling|i want to cancel|please cancel|cancel please|stop|restart|start over|start again|reset|quit|exit|nevermind|i don't want this anymore|i dont want this anymore)$/i;
+
 export default class SaveSessionNode {
   async execute(state) {
     console.log("SAVE NODE currentStep:", state.currentStep);
@@ -27,49 +30,50 @@ export default class SaveSessionNode {
 
     /*
      * =====================================================
-    const toPlain = (obj) =>
-      obj && typeof obj.toObject === "function" ? obj.toObject() : (obj ?? {});
-
-    const orderCust = toPlain(state.order?.customer);
-    const liveReqCust = toPlain(state.liveRequirement?.customer);
-    const leadCust = state.lead
-      ? {
-          name: state.lead.name ?? null,
-          phone: state.lead.phoneNumber ?? null,
-          email: state.lead.emailId ?? null,
-          company: state.lead.companyName ?? null,
-        }
-      : {};
-
-    const mergedCustomer = {
-      ...(state.customer ?? {}),
-      ...Object.fromEntries(
-        Object.entries(orderCust).filter(([_, v]) => v != null && v !== ""),
-      ),
-      ...Object.fromEntries(
-        Object.entries(liveReqCust).filter(([_, v]) => v != null && v !== ""),
-      ),
-      ...Object.fromEntries(
-        Object.entries(leadCust).filter(([_, v]) => v != null && v !== ""),
-      ),
-    };
-
-    state.customer = mergedCustomer;
-
-    /*
-     * =====================================================
      * RESTORE PERSISTENT STATE IF TRANSIENT EXECUTION
      * =====================================================
      */
 
-    if (state.transientExecution?.active) {
-      state.workflow = state.transientExecution.persistentWorkflow;
-      state.currentStep = state.transientExecution.persistentStep;
-      state.order = state.transientExecution.persistentOrder;
-      state.selectedProduct = state.transientExecution.persistentSelectedProduct;
-      state.liveRequirement = state.transientExecution.persistentLiveRequirement;
-      state.productSales = state.transientExecution.persistentProductSales;
-      state.awaitingDecision = state.transientExecution.persistentAwaitingDecision;
+    const isCancellation =
+      state.action?.id === "CANCEL_ORDER" ||
+      state.routing?.action?.id === "CANCEL_ORDER" ||
+      CANCELLATION_REGEX.test(
+        String(state.userMessage ?? state.action?.payload?.text ?? "").trim(),
+      );
+
+    if (isCancellation) {
+      console.log(
+        "[SaveSessionNode] Cancellation detected. Skipping transient state restoration.",
+      );
+
+      state.transientExecution = null;
+      state.customerCollection = {
+        started: false,
+        nameResolved: false,
+        emailResolved: false,
+        companyResolved: false,
+      };
+    } else if (state.transientExecution?.active) {
+      state.workflow =
+        state.transientExecution.persistentWorkflow;
+
+      state.currentStep =
+        state.transientExecution.persistentStep;
+
+      state.order =
+        state.transientExecution.persistentOrder;
+
+      state.selectedProduct =
+        state.transientExecution.persistentSelectedProduct;
+
+      state.liveRequirement =
+        state.transientExecution.persistentLiveRequirement;
+
+      state.productSales =
+        state.transientExecution.persistentProductSales;
+
+      state.awaitingDecision =
+        state.transientExecution.persistentAwaitingDecision;
     }
 
     /*
@@ -143,23 +147,29 @@ export default class SaveSessionNode {
     state.history = cleanedHistory.slice(-50);
 
     /*
-     * =====================================================
-     * DETERMINE CURRENT SESSION WORKFLOW
-     * =====================================================
-     */
+  * =====================================================
+  * DETERMINE CURRENT SESSION WORKFLOW
+  * =====================================================
+  *
+  * state.workflow is authoritative.
+  *
+  * An active order does NOT mean the conversation
+  * is still in SALES.
+  *
+  * After order confirmation:
+  *
+  *   order  = existing order
+  *   workflow = LEAD
+  *   currentStep = COLLECT_NAME
+  *
+  * The order remains attached to the session while
+  * LeadAgent owns the conversation.
+  */
 
-    const active =
-      state.order &&
-      !["CONFIRMED", "CANCELLED", "DELETED"].includes(state.order.status);
-
-    const isExplicitCancelled =
-      state.workflow === "NONE" ||
-      state.order?.status === "CANCELLED" ||
-      state.order?.status === "DELETED";
-
-    const workflow = isExplicitCancelled
-      ? "NONE"
-      : (active ? "SALES" : (state.workflow ?? "NONE"));
+    const workflow =
+      state.workflow ??
+      state.conversation?.workflow ??
+      "NONE";
 
     /*
      * =====================================================
@@ -167,9 +177,8 @@ export default class SaveSessionNode {
      * =====================================================
      */
 
-    const currentStep = isExplicitCancelled
-      ? null
-      : (state.currentStep ?? (active ? "ORDER_FORM" : null));
+    const currentStep =
+      state.currentStep ?? null;
 
     console.log("========== PERSISTING STATE ==========");
     console.log("Workflow:", workflow);
@@ -183,7 +192,13 @@ export default class SaveSessionNode {
     );
     console.log(
       "Selected Product:",
-      state.selectedProduct?.name ?? state.selectedProduct?.title ?? null,
+      state.selectedProduct?.name ??
+      state.selectedProduct?.title ??
+      null,
+    );
+    console.log(
+      "Customer Collection:",
+      state.customerCollection ?? null,
     );
 
     /*
@@ -286,6 +301,23 @@ export default class SaveSessionNode {
      * =====================================================
      */
 
+    const convCustomer =
+      typeof state.conversation?.customer?.toObject === "function"
+        ? state.conversation.customer.toObject()
+        : (state.conversation?.customer ?? {});
+
+    const stateCustomer =
+      typeof state.customer?.toObject === "function"
+        ? state.customer.toObject()
+        : (state.customer ?? {});
+
+    const customerUpdate = {
+      ...convCustomer,
+      ...Object.fromEntries(
+        Object.entries(stateCustomer).filter(([_, v]) => v != null && v !== ""),
+      ),
+    };
+
     const conversationUpdate = {
       visitorId: state.visitorId,
 
@@ -293,10 +325,7 @@ export default class SaveSessionNode {
 
       ipAddress: state.ipAddress ?? state.conversation?.ipAddress ?? null,
 
-      customer: {
-        ...(state.conversation?.customer ?? {}),
-        ...(state.customer ?? {}),
-      },
+      customer: customerUpdate,
 
       requestType,
 
@@ -336,19 +365,51 @@ export default class SaveSessionNode {
 
       metadata: {
         ...(state.metadata ?? {}),
+
         ...(state.currentStep
           ? {
-              routing: {
-                ...(state.metadata?.routing ?? {}),
-                step: state.currentStep,
-              },
-            }
+            routing: {
+              ...(state.metadata?.routing ?? {}),
+              step: state.currentStep,
+            },
+          }
           : {}),
+
         ...(state.whatsapp?.phoneNumberId
-          ? { phoneNumberId: state.whatsapp.phoneNumberId }
+          ? {
+            phoneNumberId: state.whatsapp.phoneNumberId,
+          }
           : {}),
-        workflowStack: state.workflowStack ?? [],
-        lastRecommendationAt: state.recommendationContext?.completedAt ?? null,
+
+        workflowStack:
+          state.workflowStack ?? [],
+
+        lastRecommendationAt:
+          state.recommendationContext?.completedAt ?? null,
+
+        /*
+         * =====================================================
+         * LEAD CUSTOMER COLLECTION STATE
+         * =====================================================
+         *
+         * Persist this across WhatsApp requests so LeadAgent
+         * knows whether the user is answering the current
+         * collection step or starting the collection.
+         */
+
+        customerCollection: {
+          started:
+            state.customerCollection?.started === true,
+
+          nameResolved:
+            state.customerCollection?.nameResolved === true,
+
+          emailResolved:
+            state.customerCollection?.emailResolved === true,
+
+          companyResolved:
+            state.customerCollection?.companyResolved === true,
+        },
       },
 
       channel: state.channel ?? state.conversation?.channel ?? "WEB",
@@ -534,7 +595,20 @@ export default class SaveSessionNode {
            * Compare IDs by value, not object reference.
            */
           if (existingLeadId !== normalizedLeadId) {
-            state.order = await orderRepository.update(state.order._id, {
+            let normalizedOrderId = state.order._id;
+            try {
+              if (normalizedOrderId?.buffer) {
+                normalizedOrderId = new mongoose.Types.ObjectId(normalizedOrderId.buffer);
+              } else if (typeof normalizedOrderId === "string" && mongoose.Types.ObjectId.isValid(normalizedOrderId)) {
+                normalizedOrderId = new mongoose.Types.ObjectId(normalizedOrderId);
+              } else if (normalizedOrderId?._id && mongoose.Types.ObjectId.isValid(String(normalizedOrderId._id))) {
+                normalizedOrderId = new mongoose.Types.ObjectId(String(normalizedOrderId._id));
+              }
+            } catch (e) {
+              // keep fallback
+            }
+
+            state.order = await orderRepository.update(normalizedOrderId, {
               leadId: pendingLeadId,
             });
           }

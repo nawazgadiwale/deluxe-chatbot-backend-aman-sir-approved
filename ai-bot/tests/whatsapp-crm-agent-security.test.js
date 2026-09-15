@@ -8,16 +8,18 @@ import WhatsAppCustomerServiceWindowPolicy, {
   WINDOW_DURATION_MS,
 } from "../modules/whatsapp/policies/WhatsAppCustomerServiceWindowPolicy.js";
 import WhatsAppOutboundPolicy from "../modules/whatsapp/policies/WhatsAppOutboundPolicy.js";
+import WhatsAppFlowTokenService from "../modules/whatsapp/WhatsappFlowTokenService.js";
 
 async function runSecurityTests() {
   console.log("=================================================");
-  console.log("🔒 TESTING MANDATORY WHATSAPP SECURITY CASES");
+  console.log("🔒 TESTING 21 MANDATORY WHATSAPP SECURITY CASES");
   console.log("=================================================\n");
 
   process.env.WHATSAPP_VERIFY_TOKEN = "verify_token_sec_123";
   process.env.WHATSAPP_APP_SECRET = "app_secret_sec_456";
   process.env.WHATSAPP_ACCESS_TOKEN = "mock_access_token";
   process.env.WHATSAPP_PHONE_NUMBER_ID = "phone_id_1001";
+  process.env.WHATSAPP_FLOW_TOKEN_SECRET = "flow_secret_sec_789";
 
   let metaApiCalls = [];
   const mockApiService = {
@@ -530,9 +532,57 @@ async function runSecurityTests() {
   console.log("✅ Test 17 passed: CRM Agent without genuine inbound WAMID blocked\n");
 
   // ============================================================
-  // TEST 18: Server restart durable window state from DB
+  // TEST 18: Flow token missing secret fails closed
   // ============================================================
-  console.log("Test 18: Server restart durable window state from DB");
+  console.log("Test 18: Flow token missing secret fails closed");
+  const flowTokenService = new WhatsAppFlowTokenService();
+  const origFlowSecret = process.env.WHATSAPP_FLOW_TOKEN_SECRET;
+  delete process.env.WHATSAPP_FLOW_TOKEN_SECRET;
+
+  const noSecretToken = flowTokenService.create({
+    sessionId: "test",
+    phoneNumber: "971501111111",
+  });
+  assert.equal(noSecretToken, null);
+  process.env.WHATSAPP_FLOW_TOKEN_SECRET = origFlowSecret;
+  console.log("✅ Test 18 passed: Flow token generation strictly fails closed without secret\n");
+
+  // ============================================================
+  // TEST 19: Expired Flow token is rejected
+  // ============================================================
+  console.log("Test 19: Expired Flow token is rejected");
+  const shortLivedService = new WhatsAppFlowTokenService();
+  shortLivedService.maxAgeMs = -1000; // instant expiry
+
+  const expiredToken = shortLivedService.create({
+    sessionId: "test_session_flow",
+    phoneNumber: "971501111111",
+  });
+
+  const verifyExpired = shortLivedService.verify(expiredToken);
+  assert.equal(verifyExpired, null);
+  console.log("✅ Test 19 passed: Expired Flow token rejected\n");
+
+  // ============================================================
+  // TEST 20: Flow token cross-customer replay protection
+  // ============================================================
+  console.log("Test 20: Flow token cross-customer replay protection");
+  const validTokenForA = flowTokenService.create({
+    sessionId: "session_A",
+    phoneNumber: "971501111111",
+  });
+
+  const verifiedPayload = flowTokenService.verify(validTokenForA);
+  assert.notEqual(verifiedPayload, null);
+  assert.equal(verifiedPayload.phoneNumber, "971501111111");
+  // Customer B (971502222222) cannot claim token created for A
+  assert.notEqual(verifiedPayload.phoneNumber, "971502222222");
+  console.log("✅ Test 20 passed: Flow token bound strictly to customer\n");
+
+  // ============================================================
+  // TEST 21: Server restart durable window state from DB
+  // ============================================================
+  console.log("Test 21: Server restart durable window state from DB");
   metaApiCalls = [];
 
   // Simulate server restart: clean in-memory policy cache
@@ -560,12 +610,12 @@ async function runSecurityTests() {
   assert.equal(res21.sent, true);
   assert.equal(res21.blocked, false);
   assert.equal(metaApiCalls.length, 1);
-  console.log("✅ Test 18 passed: 24h window state survives server restart via MongoDB persistence\n");
+  console.log("✅ Test 21 passed: 24h window state survives server restart via MongoDB persistence\n");
 
   realtimeService.off("*", listener);
 
   console.log("=================================================");
-  console.log("🎉 ALL MANDATORY SECURITY CASES PASSED!");
+  console.log("🎉 ALL 21 MANDATORY SECURITY CASES PASSED!");
   console.log("=================================================");
 }
 

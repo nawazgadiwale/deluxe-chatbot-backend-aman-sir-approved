@@ -4,19 +4,24 @@ const catalogService = new SalesCatalogService();
 
 export default class SalesProductResolver {
   resolve(message = "") {
-    if (!message.trim()) {
+    const text = String(message).trim();
+
+    if (!text) {
       return null;
     }
 
-    const matches = catalogService.findProducts(message);
+    const matches = catalogService.findProducts(text);
+
     return matches.length === 1 ? matches[0] : null;
   }
 
   resolveMany(message = "") {
-    if (!message.trim()) {
+    const text = String(message).trim();
+
+    if (!text) {
       return [];
     }
 
-    return catalogService.findProducts(message);
+    return catalogService.findProducts(text);
   }
 }

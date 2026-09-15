@@ -7,13 +7,16 @@ const validator = new SupportValidator();
 export default class SupportService {
   async generate(state = {}) {
     const result = await engine.generate(state);
+    const validated = validator.validate(result.response);
 
     return {
       context: result.context ?? "",
+      documents: Array.isArray(result.documents)
+        ? result.documents
+        : [],
 
-      documents: result.documents ?? [],
-
-      answer: validator.validate(result.response),
+      answer: validated.answer,
+      references: validated.references,
 
       metadata: result.metadata ?? {},
     };

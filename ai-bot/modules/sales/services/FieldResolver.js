@@ -44,21 +44,73 @@ export default class FieldResolver {
   /* ---------------- SELECT ---------------- */
 
   resolveSelect(field = {}, message = "", payload = null) {
-    if (
-      payload?.fieldId === field.id &&
-      field.options?.some((o) => (o.value ?? o.id) === payload.value)
-    ) {
-      return payload.value;
+    const options = (Array.isArray(field.options) ? field.options : []).filter(Boolean);
+    if (options.length === 0) return null;
+
+    if (payload && payload.value != null && (!field.id || payload.fieldId === field.id)) {
+      const matching = options.find(
+        (o) =>
+          o &&
+          (String(o.value ?? o.id).toLowerCase() ===
+            String(payload.value).toLowerCase() ||
+          String(o.label ?? o.name).toLowerCase() ===
+            String(payload.value).toLowerCase()),
+      );
+      if (matching) {
+        return matching.value !== undefined ? matching.value : matching.id;
+      }
     }
 
     // Fallback for typed text
-    const text = this.normalize(message);
+    const text = this.normalize(message).trim();
+    if (!text) return null;
 
+    // 1. Exact value/label match against current catalog options
+    const exactOpt = options.find(
+      (o) =>
+        o &&
+        (String(o.value ?? o.id).toLowerCase() === text.toLowerCase() ||
+        String(o.label ?? o.name).toLowerCase() === text.toLowerCase()),
+    );
+    if (exactOpt) {
+      return exactOpt.value !== undefined ? exactOpt.value : exactOpt.id;
+    }
+
+    // 2. Check numeric and ordinal selection against current options
+    const ordinalMap = {
+      "1st": 0, "first": 0, "one": 0,
+      "2nd": 1, "second": 1, "two": 1,
+      "3rd": 2, "third": 2, "three": 2,
+      "4th": 3, "fourth": 3, "four": 3,
+      "5th": 4, "fifth": 4, "five": 4,
+      "6th": 5, "sixth": 5, "six": 5,
+      "7th": 6, "seventh": 6, "seven": 6,
+      "8th": 7, "eighth": 7, "eight": 7,
+      "9th": 8, "ninth": 8, "nine": 8,
+      "10th": 9, "tenth": 9, "ten": 9,
+    };
+
+    if (ordinalMap[text] !== undefined && options[ordinalMap[text]]) {
+      const opt = options[ordinalMap[text]];
+      return opt.value !== undefined ? opt.value : (opt.id ?? null);
+    }
+
+    const parsedNum = parseInt(text, 10);
+    if (!isNaN(parsedNum) && String(parsedNum) === text && parsedNum >= 1 && parsedNum <= options.length) {
+      const opt = options[parsedNum - 1];
+      return opt.value !== undefined ? opt.value : (opt.id ?? null);
+    }
+
+    // 3. Exact or fuzzy text match
     let best = null;
     let bestScore = 0;
 
-    for (const option of field.options ?? []) {
-      const score = this.score(text, option);
+    for (const option of options) {
+      if (!option) continue;
+      const score = Math.max(
+        this.score(text, option),
+        this.score(message, option),
+      );
 
       if (score > bestScore) {
         best = option;
@@ -66,7 +118,7 @@ export default class FieldResolver {
       }
     }
 
-    return best ? (best.value ?? best.id ?? best.name ?? best.label ?? null) : null;
+    return best ? (best.value !== undefined ? best.value : (best.id ?? best.name ?? best.label ?? null)) : null;
   }
 
   /* ---------------- MULTI SELECT ---------------- */
@@ -261,9 +313,13 @@ export default class FieldResolver {
     for (const candidate of candidates) {
       if (message === candidate) {
         score += 100;
-      } else if (message.includes(candidate)) {
+      } else if (/^\d+$/.test(candidate)) {
+        if (new RegExp(`\\b${candidate}\\b`, "i").test(message)) {
+          score += 80;
+        }
+      } else if (candidate.length >= 3 && message.includes(candidate)) {
         score += 80;
-      } else if (candidate.includes(message)) {
+      } else if (message.length >= 3 && !/^\d+$/.test(message) && candidate.includes(message)) {
         score += 60;
       }
     }
@@ -271,6 +327,10 @@ export default class FieldResolver {
     for (const token of tokenCandidates) {
       if (message === token) {
         score = Math.max(score, 90);
+      } else if (/^\d+$/.test(token)) {
+        if (new RegExp(`\\b${token}\\b`, "i").test(message)) {
+          score = Math.max(score, 70);
+        }
       } else if (message.includes(token)) {
         score = Math.max(score, 70);
       }

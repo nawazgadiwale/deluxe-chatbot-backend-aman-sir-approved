@@ -6,6 +6,7 @@ import WhatsAppService from "../modules/whatsapp/WhatsAppService.js";
 import WhatsAppRealtimeService from "../modules/whatsapp/services/WhatsAppRealtimeService.js";
 import WhatsAppCustomerServiceWindowPolicy from "../modules/whatsapp/policies/WhatsAppCustomerServiceWindowPolicy.js";
 import WhatsAppOutboundPolicy from "../modules/whatsapp/policies/WhatsAppOutboundPolicy.js";
+import WhatsAppFlowSubmissionService from "../modules/whatsapp/flows/WhatsAppFlowSubmissionService.js";
 import AIService from "../../services/AIService.js";
 import SalesBrain from "../modules/sales/SalesBrain.js";
 import FAQAgent from "../ai/agents/FAQAgent.js";
@@ -15,10 +16,11 @@ const AUTHORIZED_NUMBER = "8310412768";
 const AUTHORIZED_E164 = "+918310412768";
 const AUTHORIZED_DIGITS = "918310412768";
 
-// Ensure test credentials for outbound policy
+// Ensure test credentials for outbound policy and flow token creation
+process.env.WHAPI_TOKEN = "test-whapi-token-valid-12345";
 process.env.WHATSAPP_PHONE_NUMBER_ID = "phone_id_prod_1";
 process.env.WHATSAPP_ACCESS_TOKEN = "test_valid_access_token_12345";
-process.env.WHATSAPP_APP_SECRET = "test_meta_app_secret_12345";
+process.env.WHATSAPP_FLOW_TOKEN_SECRET = "test_flow_secret_12345";
 
 describe("Production Reliability & Concurrency Comprehensive Suite (14 Scenarios)", () => {
   // Helper to build a test WhatsAppService with in-memory persistence
@@ -277,15 +279,46 @@ describe("Production Reliability & Concurrency Comprehensive Suite (14 Scenarios
   });
 
   // =========================================================================
-  // SCENARIO 4: Duplicate Message submission idempotency guard
+  // SCENARIO 4: Duplicate Flow submission
   // =========================================================================
-  it("Scenario 4: Duplicate message submission is caught by idempotency guard and not re-executed", async () => {
-    const service = new WhatsAppService();
-    const duplicateMsgId = `msg_dup_${Date.now()}`;
+  it("Scenario 4: Duplicate Flow submission is caught by idempotency guard and not re-executed", async () => {
+    const flowService = new WhatsAppFlowSubmissionService();
+    const duplicateFlowMsgId = `flow_sub_dup_${Date.now()}`;
 
-    assert.equal(service.isDuplicateMessage(duplicateMsgId), false);
-    service.markMessageProcessed(duplicateMsgId);
-    assert.equal(service.isDuplicateMessage(duplicateMsgId), true);
+    // Create flow token
+    const token = flowService.tokenService.create({
+      type: "order",
+      sessionId: `whatsapp:phone_1:${AUTHORIZED_DIGITS}`,
+      phoneNumber: AUTHORIZED_DIGITS,
+      productId: "roll-up-banner",
+      workflow: "SALES",
+    });
+
+    const flowData = {
+      quantity: 1,
+    };
+
+    // First submission
+    const res1 = await flowService.handleFlowSubmission({
+      flowData,
+      flowToken: token,
+      messageId: duplicateFlowMsgId,
+      customerWaId: AUTHORIZED_DIGITS,
+    });
+
+    assert.equal(res1.handled, true);
+    assert.equal(res1.duplicate, undefined);
+
+    // Second submission with same messageId
+    const res2 = await flowService.handleFlowSubmission({
+      flowData,
+      flowToken: token,
+      messageId: duplicateFlowMsgId,
+      customerWaId: AUTHORIZED_DIGITS,
+    });
+
+    assert.equal(res2.handled, true);
+    assert.equal(res2.duplicate, true);
   });
 
   // =========================================================================
@@ -310,7 +343,7 @@ describe("Production Reliability & Concurrency Comprehensive Suite (14 Scenarios
 
     assert.equal(cancelState.workflow, "NONE");
     assert.equal(cancelState.currentStep, null);
-    assert.ok(!cancelState.liveRequirement || cancelState.liveRequirement.items.length === 0);
+    assert.equal(cancelState.liveRequirement, null);
     assert.equal(cancelState.productSales, null);
 
     // 3. User immediately says "Hi" -> Routes to greeting cleanly

@@ -420,14 +420,14 @@ async function runStrictAllowlistTests() {
               messages: [
                 {
                   from: "919999999999",
-                  id: "wamid.test8_interactive",
+                  id: "wamid.test8_flow",
                   timestamp: String(Math.floor((baseTime + 10000) / 1000)),
                   type: "interactive",
                   interactive: {
-                    type: "button_reply",
-                    button_reply: {
-                      id: "action:ORDER_NOW",
-                      title: "Order Now",
+                    type: "nfm_reply",
+                    nfm_reply: {
+                      response_json: JSON.stringify({ product: "visiting-cards", qty: 100 }),
+                      name: "flow_submission",
                     },
                   },
                 },
@@ -441,7 +441,7 @@ async function runStrictAllowlistTests() {
 
   assert.equal(aiCalls.length, 0);
   assert.equal(outboundMessages.length, 0);
-  console.log("✅ Test 8 passed: Unauthorized interactive button payload rejected without processing\n");
+  console.log("✅ Test 8 passed: Unauthorized Flow payload rejected without processing\n");
 
   // ============================================================
   // Test 9: Unauthorized number attempts to reuse an existing session identifier -> MUST NOT gain access

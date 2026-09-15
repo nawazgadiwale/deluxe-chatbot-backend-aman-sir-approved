@@ -1,14 +1,24 @@
 import DecisionTypes from "../helpers/DecisionTypes.js";
 
+const DISCOVERY_CLARIFICATION =
+  DecisionTypes.DISCOVERY_CLARIFICATION ?? "DISCOVERY_CLARIFICATION";
+
 export default class ConversationContextBuilder {
   build(requirement = {}, decision = {}, customerMessage = "") {
     const c = decision.context ?? {};
+
     const base = {
       a: decision.type,
       m: customerMessage,
     };
 
     switch (decision.type) {
+      /*
+       * LEGACY / EXPLICIT PRODUCT SELECTION
+       *
+       * Kept for compatibility with existing actions.
+       * Natural-language discovery must not generate this decision.
+       */
       case DecisionTypes.SELECT_PRODUCT:
         return {
           ...base,
@@ -16,6 +26,22 @@ export default class ConversationContextBuilder {
             i: p.id,
             n: p.name,
           })),
+        };
+
+      /*
+       * NATURAL-LANGUAGE DISCOVERY
+       *
+       * Used only when the catalog resolver found multiple possible
+       * matches. No selectable product actions are exposed here.
+       */
+      case DISCOVERY_CLARIFICATION:
+        return {
+          ...base,
+          products: (c.products ?? []).map((p) => ({
+            i: p.id,
+            n: p.name,
+          })),
+          message: c.message ?? null,
         };
 
       case DecisionTypes.RECOMMEND_SELECTION:
@@ -88,7 +114,10 @@ export default class ConversationContextBuilder {
         };
 
       case DecisionTypes.ASK_DELIVERY_ADDRESS:
+      case DecisionTypes.DELIVERY_ADDRESS:
       case DecisionTypes.ASK_DELIVERY_DATE:
+      case DecisionTypes.DELIVERY_DATE:
+      case DecisionTypes.ARTWORK:
         return base;
 
       case DecisionTypes.REVIEW_ORDER:
@@ -103,6 +132,7 @@ export default class ConversationContextBuilder {
       default:
         return base;
     }
+
   }
 
   product(product) {
@@ -112,6 +142,7 @@ export default class ConversationContextBuilder {
       i: product.id,
       n: product.name,
     };
+
   }
 
   recommendation(recommendation) {
@@ -125,6 +156,7 @@ export default class ConversationContextBuilder {
       why: recommendation.recommendationReason ?? null,
       f: (recommendation.features ?? []).slice(0, 2),
     };
+
   }
 
   field(field) {
@@ -141,10 +173,12 @@ export default class ConversationContextBuilder {
         n: o.label ?? o.name ?? o.value,
       })),
     };
+
   }
 
   requirement(requirement) {
     if (!requirement) return null;
+
 
     return {
       i: requirement.id,
@@ -153,10 +187,13 @@ export default class ConversationContextBuilder {
       q: requirement.instruction ?? null,
       req: requirement.required ?? false,
     };
+
+
   }
 
   reviewContext(order = {}) {
     if (!order) return null;
+
 
     return {
       customer: order.customer?.name ?? null,
@@ -169,18 +206,20 @@ export default class ConversationContextBuilder {
 
       delivery: order.delivery
         ? {
-            method: order.delivery.method ?? null,
-            address: order.delivery.address ?? null,
-            date: order.delivery.requiredDate ?? null,
-          }
+          method: order.delivery.method ?? null,
+          address: order.delivery.address ?? null,
+          date: order.delivery.requiredDate ?? null,
+        }
         : null,
 
       pricing: order.pricing
         ? {
-            currency: order.pricing.currency ?? "AED",
-            total: order.pricing.total ?? null,
-          }
+          currency: order.pricing.currency ?? "AED",
+          total: order.pricing.total ?? null,
+        }
         : null,
     };
+
+
   }
 }

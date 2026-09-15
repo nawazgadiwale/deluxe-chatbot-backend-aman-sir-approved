@@ -39,7 +39,7 @@ export default class RoutingService {
     // Continue current workflow if condition met
     if (workflow.shouldContinue(state)) {
       console.log("[WhatsApp][Routing] classification=WORKFLOW");
-      console.log("[WhatsApp Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
+      console.log("[Whapi Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
         workflow: state.workflow,
         currentStep: state.currentStep,
         awaitingDecision: state.awaitingDecision,
@@ -49,6 +49,12 @@ export default class RoutingService {
 
     // Check for new intent
     const routing = await this.routeIntent(state);
+
+    // Global cancellation must not be blocked by active workflow
+    if (routing.action?.id === "CANCEL_ORDER") {
+      console.log("[WhatsApp][Routing] classification=ACTION");
+      return routing;
+    }
 
     // Resume same workflow
     if (routing.capability === workflow.currentCapability(state)) {
@@ -74,7 +80,7 @@ export default class RoutingService {
 
     // Otherwise preserve existing workflow
     console.log("[WhatsApp][Routing] classification=WORKFLOW");
-    console.log("[WhatsApp Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
+    console.log("[Whapi Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
       workflow: state.workflow,
       currentStep: state.currentStep,
       awaitingDecision: state.awaitingDecision,

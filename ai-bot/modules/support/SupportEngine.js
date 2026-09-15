@@ -48,8 +48,8 @@ export default class SupportEngine {
 
           ...(process.env.N8N_FAQ_WEBHOOK_SECRET
             ? {
-                "x-faq-webhook-secret": process.env.N8N_FAQ_WEBHOOK_SECRET,
-              }
+              "x-faq-webhook-secret": process.env.N8N_FAQ_WEBHOOK_SECRET,
+            }
             : {}),
         },
 
@@ -71,8 +71,8 @@ export default class SupportEngine {
       if (!response.ok) {
         throw new Error(
           result?.message ||
-            result?.error ||
-            `n8n returned HTTP ${response.status}`,
+          result?.error ||
+          `n8n returned HTTP ${response.status}`,
         );
       }
 
@@ -99,6 +99,14 @@ export default class SupportEngine {
       if (error?.name === "AbortError") {
         throw new Error(
           `n8n FAQ workflow timed out after ${this.timeoutMs}ms.`,
+        );
+      }
+
+      const cause = error?.cause;
+
+      if (cause?.code === "ECONNREFUSED") {
+        throw new Error(
+          `Unable to connect to n8n FAQ webhook: ${this.webhookUrl}`,
         );
       }
 

@@ -268,13 +268,26 @@ export default class SalesConversationService {
         return "Welcome to Deluxe Printing! How can we assist with your order today?";
 
       case "SELECT_PRODUCT":
-        return "Please choose a product from the available options:";
+        return "Please choose a product from the list below:";
 
       case "BROWSE_PRODUCTS":
-        return "Browse our catalog categories or select a product below:";
+        return (
+          decision.context?.message ??
+          "Browse our catalog categories below to find what you need:"
+        );
+
+
+      case "DISCOVERY_CLARIFICATION":
+        return (
+          decision.context?.message ??
+          "I found a few products that could match. Could you describe what you need a little more?"
+        );
 
       case "UNKNOWN_PRODUCT":
-        return "I couldn't find an exact match for that product. Please choose from our catalog or speak with an expert:";
+        return (
+          decision.context?.message ??
+          "I couldn't find an exact match in our catalog. Please describe what you need and I'll try to find the right product."
+        );
 
       case "SELECT_SELECTION":
       case "SHOW_SELECTIONS":
@@ -315,13 +328,34 @@ export default class SalesConversationService {
         );
 
       case "SELECT_DELIVERY_METHOD":
-        return "Please select your preferred delivery method:";
+        return (
+          decision.context?.message ||
+          "How would you like to receive your order?"
+        );
+
+      case "DELIVERY_ADDRESS":
+      case "ASK_DELIVERY_ADDRESS":
+        return (
+          decision.context?.message ||
+          "Please share your delivery address."
+        );
+
+      case "DELIVERY_DATE":
+      case "ASK_DELIVERY_DATE":
+        return (
+          decision.context?.message ||
+          "Which date would you like to receive your order?"
+        );
+
+      case "ARTWORK":
+      case "COLLECT_ARTWORK":
+        return (
+          decision.context?.message ||
+          "Please send your artwork/design file here."
+        );
 
       case "ORDER_FORM":
       case "COLLECT_QUANTITY":
-      case "COLLECT_ARTWORK":
-      case "ASK_DELIVERY_ADDRESS":
-      case "ASK_DELIVERY_DATE":
         return productName
           ? `Please provide the specifications for your ${productName} order:`
           : "Please provide your order specifications to continue:";
@@ -336,7 +370,10 @@ export default class SalesConversationService {
         );
 
       case "CONFIRM_ORDER":
-        return "Great! To complete your order, please enter your full name.";
+        return (
+          decision.context?.message ||
+          "Your order has been confirmed. Our team will get in touch with you shortly."
+        );
 
       case "CANCEL_ORDER":
         return "Your order has been cancelled. Please let us know if you need anything else.";
@@ -344,13 +381,31 @@ export default class SalesConversationService {
       case "COLLECT_CUSTOMER":
         return (
           decision.context?.message ||
-          "Great! To complete your order, please enter your full name."
+          "Please provide your contact details to complete your order."
+        );
+
+      case "QUOTATION":
+        return (
+          decision.context?.message ||
+          "Here is the quotation estimate for your order. Please review and proceed to the next step."
+        );
+
+      case "PRODUCTION":
+        return (
+          decision.context?.message ||
+          "Your order specifications and artwork are ready for production. Please proceed to review production details."
+        );
+
+      case "DISPATCH":
+        return (
+          decision.context?.message ||
+          "Your order has been queued for dispatch and delivery tracking."
         );
 
       case "ORDER_COMPLETED":
         return (
           decision.context?.message ||
-          "Thank you! Your order details have been submitted successfully. Our sales team will contact you regarding the quotation."
+          "Thank you for choosing Deluxe Printing! Your order details have been submitted successfully. Our sales team will contact you regarding the quotation."
         );
 
       default:

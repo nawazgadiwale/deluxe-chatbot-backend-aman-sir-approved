@@ -3,44 +3,61 @@ import ResponseBuilder from "../../core/responses/Apiresponse.js";
 import SupportService from "../../modules/support/SupportService.js";
 
 const responseBuilder = new ResponseBuilder();
-
 const faqService = new SupportService();
 
 export default class FAQAgent extends BaseAgent {
-  async execute(state) {
+  async execute(state = {}) {
     try {
       const result = await faqService.generate(state);
 
       state.rag = {
-        context: result.context,
-        documents: result.documents,
+        context: result.context ?? "",
+        documents: result.documents ?? [],
       };
 
-      state.response = responseBuilder.faq(result.answer, {
-        source: "n8n",
-        ...(result.metadata ?? {}),
-      });
+      state.response = responseBuilder.faq(
+        result.answer,
+        {
+          source: "n8n",
+          references: result.references ?? [],
+          ...(result.metadata ?? {}),
+        },
+      );
 
       return state;
     } catch (error) {
       console.error("FAQ n8n ERROR:", error);
 
       const fallbackAnswer =
-        this.getFallbackAnswer(state) ||
+        this.getFallbackAnswer(state) ??
         "Our customer support team is available Monday to Saturday, 9:00 AM to 7:00 PM (GST). We deliver across Dubai and all other Emirates in the UAE. Please let us know how we can assist you with your printing needs!";
 
-      state.response = responseBuilder.faq(fallbackAnswer, {
-        source: "faq_fallback",
-        serviceUnavailable: true,
-        error: error.message,
-      });
+      state.rag = {
+        context: "",
+        documents: [],
+      };
+
+      state.response = responseBuilder.faq(
+        fallbackAnswer,
+        {
+          source: "faq_fallback",
+          serviceUnavailable: true,
+          error: error.message,
+        },
+      );
 
       return state;
     }
   }
 
   getFallbackAnswer(state = {}) {
-    const q = (state.userMessage ?? state.message ?? "").toLowerCase().trim();
+    const q = String(
+      state.userMessage ??
+      state.message ??
+      "",
+    )
+      .toLowerCase()
+      .trim();
 
     if (!q) return null;
 

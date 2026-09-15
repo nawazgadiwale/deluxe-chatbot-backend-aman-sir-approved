@@ -3,13 +3,13 @@
  *
  * Canonical WhatsApp Gateway Orchestration Layer for ExprintMart AI Backend.
  *
- * Meta WhatsApp Business Cloud API only:
- * 1. Webhook receiving & HMAC SHA-256 / token authentication
- * 2. Meta Cloud API inbound event normalization
+ * Thin provider-neutral transport orchestration:
+ * 1. Webhook receiving & HMAC/token authentication
+ * 2. Provider normalization (Whapi.Cloud & Meta WhatsApp Cloud API)
  * 3. Authoritative inbound single-sender allowlist gate
  * 4. Inbound event deduplication
  * 5. Per-session concurrency serialization
- * 6. Session & 24-hour customer service window policy recording
+ * 6. Session & window policy recording
  * 7. AI conversation graph dispatch
  * 8. Outbound response formatting & delivery
  * 9. Safe, isolated error handling
@@ -21,7 +21,6 @@ import WhatsAppMessageParser from "./WhatsAppMessageParser.js";
 import WhatsAppResponseAdapter from "./WhatsAppResponseAdapter.js";
 import WhatsAppMediaService from "./WhatsappMediaService.js";
 import WhatsAppApiService from "./services/WhatsAppApiService.js";
-import MetaProviderAdapter from "./providers/MetaProviderAdapter.js";
 import WhatsAppCustomerServiceWindowPolicy from "./policies/WhatsAppCustomerServiceWindowPolicy.js";
 import WhatsAppOutboundPolicy from "./policies/WhatsAppOutboundPolicy.js";
 import WhatsappActionCodec from "./WhatsappActionCodec.js";
@@ -30,6 +29,8 @@ import ConversationRepository from "../../repositories/ConversationRepository.js
 import WhatsAppRealtimeService, {
   WhatsAppEvents,
 } from "./services/WhatsAppRealtimeService.js";
+import WhatsAppProviderFactory from "./providers/WhatsAppProviderFactory.js";
+import WhatsAppFlowSubmissionService from "./flows/WhatsAppFlowSubmissionService.js";
 import WhatsAppAllowlistPolicy from "./policies/WhatsAppAllowlistPolicy.js";
 import WhatsAppSessionService from "./WhatsAppSessionService.js";
 
@@ -42,27 +43,16 @@ export default class WhatsAppService {
     conversationRepository = null,
     realtimeService = null,
     aiServiceInstance = null,
-    metaAdapter = null,
+    provider = null,
   ) {
     this.verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
     this.appSecret = process.env.WHATSAPP_APP_SECRET;
+    this.whapiToken = process.env.WHAPI_TOKEN;
+    this.whapiWebhookSecret = process.env.WHAPI_WEBHOOK_SECRET;
 
-    this.metaAdapter =
-      metaAdapter ||
-      new MetaProviderAdapter({
-        appSecret: this.appSecret,
-        verifyToken: this.verifyToken,
-      });
-
-    // Provide provider alias for backward compatibility with existing inspection callers
-    this.provider = this.metaAdapter;
-
+    this.provider = provider || WhatsAppProviderFactory.getProvider();
     this.apiService =
-      apiService ||
-      new WhatsAppApiService({
-        accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
-        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-      });
+      apiService || new WhatsAppApiService({ provider: this.provider });
 
     this.windowPolicy =
       windowPolicy || new WhatsAppCustomerServiceWindowPolicy();
@@ -88,6 +78,10 @@ export default class WhatsAppService {
 
     this.allowlistPolicy = new WhatsAppAllowlistPolicy();
     this.sessionService = new WhatsAppSessionService(this.allowlistPolicy);
+
+    this.flowSubmissionService = new WhatsAppFlowSubmissionService({
+      conversationRepository: this.conversationRepository,
+    });
 
     this.processedMessageIds = new Set();
     this.maxProcessedMessageIds = 5000;
@@ -200,13 +194,23 @@ export default class WhatsAppService {
 
     const correlationId =
       authContext?.correlationId || `req_${Date.now().toString(36)}`;
+    const providerName =
+      authContext?.provider ||
+      (body.object === "whatsapp_business_account"
+        ? "meta"
+        : this.provider?.name || "whapi");
+
+    const activeProvider =
+      this.provider?.name === providerName
+        ? this.provider
+        : WhatsAppProviderFactory.getProvider(providerName);
 
     const payloadKeys = Object.keys(body).join(",");
     console.log(
-      `[WhatsApp][Service] correlationId=${correlationId} handleWebhook start provider=meta payloadKeys=${payloadKeys}`,
+      `[WhatsApp][Service] correlationId=${correlationId} handleWebhook start provider=${activeProvider.name} payloadKeys=${payloadKeys}`,
     );
 
-    const normalizedEvents = this.metaAdapter.normalizeInbound(
+    const normalizedEvents = activeProvider.normalizeInbound(
       body,
       authContext,
       authContext?.headers || {},
@@ -214,7 +218,7 @@ export default class WhatsAppService {
 
     if (Array.isArray(normalizedEvents) && normalizedEvents.length > 0) {
       console.log(
-        `[WhatsApp][Normalize] correlationId=${correlationId} provider=meta count=${normalizedEvents.length} types=${normalizedEvents.map((e) => e.eventType).join(",")}`,
+        `[WhatsApp][Normalize] correlationId=${correlationId} provider=${activeProvider.name} count=${normalizedEvents.length} types=${normalizedEvents.map((e) => e.eventType).join(",")}`,
       );
 
       for (const event of normalizedEvents) {
@@ -224,7 +228,6 @@ export default class WhatsAppService {
           await this.processNormalizedEvent(event, {
             ...authContext,
             correlationId,
-            provider: "meta",
           });
         }
       }
@@ -232,10 +235,10 @@ export default class WhatsAppService {
     }
 
     console.warn(
-      `[WhatsApp][Normalize] correlationId=${correlationId} provider=meta returned 0 normalized events from payload (payloadKeys=${payloadKeys})`,
+      `[WhatsApp][Normalize] correlationId=${correlationId} provider=${activeProvider.name} returned 0 normalized events from payload (payloadKeys=${payloadKeys})`,
     );
 
-    // Direct entry processing fallback for Meta webhook structure
+    // Fallback for raw Meta webhook structure if provider returned empty
     if (body.object === "whatsapp_business_account") {
       const entries = Array.isArray(body.entry) ? body.entry : [];
       for (const entry of entries) {
@@ -279,7 +282,7 @@ export default class WhatsAppService {
 
     const messageId = event.messageId;
     const customerWaId = event.customerWaId;
-    const provider = "meta";
+    const provider = event.provider || this.provider?.name || "whapi";
     const correlationId = authContext?.correlationId || crypto.randomUUID();
     const sanitizedPhone = this.allowlistPolicy.maskPhone(customerWaId);
 
@@ -294,7 +297,10 @@ export default class WhatsAppService {
     );
 
     if (messageId && isDuplicate) {
-      console.log("[WhatsApp] DUPLICATE_EVENT_IGNORED:", { correlationId, messageId });
+      console.log(
+        `[${provider === "whapi" ? "Whapi Interactive" : "WhatsApp"}] DUPLICATE_EVENT_IGNORED:`,
+        { correlationId, messageId },
+      );
       return;
     }
 
@@ -343,7 +349,9 @@ export default class WhatsAppService {
       phoneNumberId,
       inboundReceivedAt: customerTimestamp,
       authenticated: authContext?.authenticated !== false,
-      provider: "meta",
+      provider,
+      isFlowSubmission: event.isFlowSubmission === true,
+      flowValid: event.flow?.valid !== false,
     };
 
     console.log("[WhatsApp] Inbound customer message received:", {
@@ -373,6 +381,7 @@ export default class WhatsAppService {
       status: "received",
       mediaId: event.attachments?.[0]?.mediaId || null,
       interactiveData: event.action || event.interactive || null,
+      flowData: event.flow || null,
     };
 
     let conv = null;
@@ -427,7 +436,49 @@ export default class WhatsAppService {
         await this.mediaService.resolveAttachments(resolvedAttachments);
     }
 
-    // 7. Action extraction and security validation
+    // 7. Fast-Path: Deterministic Flow Submission Handler
+    if (
+      event.isFlowSubmission === true ||
+      event.eventType === "FLOW_SUBMISSION"
+    ) {
+      const flowData =
+        event.flow?.responseJson ||
+        event.interactive?.payload ||
+        event.action?.payload?.responseJson ||
+        {};
+      const flowToken =
+        event.flow?.flowToken || event.action?.payload?.flowToken || null;
+
+      const flowResult = await this.flowSubmissionService.handleFlowSubmission({
+        flowData,
+        flowToken,
+        messageId,
+        customerWaId,
+        correlationId,
+      });
+
+      if (flowResult && flowResult.response) {
+        await this.sendResult(
+          {
+            sessionId,
+            whatsapp: { phoneNumber: customerWaId, phoneNumberId, messageId },
+            inboundTriggerContext,
+          },
+          flowResult.response,
+          { inboundTriggerContext, receivedAt, correlationId },
+        );
+        return;
+      } else if (flowResult && flowResult.userMessage) {
+        await this.sendMessage(
+          customerWaId,
+          { type: "text", text: { body: flowResult.userMessage } },
+          { inboundTriggerContext, conversationKey: customerWaId, sessionId },
+        );
+        return;
+      }
+    }
+
+    // 8. Action extraction and security validation
     const availableActions = this.extractAvailableActions(
       conv,
       sessionId,
@@ -498,7 +549,7 @@ export default class WhatsAppService {
       }
     }
 
-    // 8. Build incoming payload for AI conversation graph
+    // 9. Build incoming payload for AI conversation graph
     console.log(
       `[WhatsApp][Process] messageId=${messageId} sessionId=${sessionId}`,
     );
@@ -521,11 +572,13 @@ export default class WhatsAppService {
       action: finalAction,
       attachments: resolvedAttachments,
       eventType: finalEventType,
+      isFlowSubmission: event.isFlowSubmission === true,
+      flow: event.flow || null,
       inboundTriggerContext,
       originalMessage: event.rawProviderEvent,
     };
 
-    // 9. AI Service conversation processing
+    // 10. AI Service conversation processing
     try {
       const processingStartedAt = Date.now();
       console.log(
@@ -585,9 +638,11 @@ export default class WhatsAppService {
       : Date.now();
     const phoneNumberId =
       metadata?.phone_number_id || this.apiService?.phoneNumberId;
+    const provider =
+      message?.provider || (process.env.WHAPI_TOKEN ? "whapi" : "meta");
 
     const normalizedEvent = {
-      provider: "meta",
+      provider,
       eventType: incoming.eventType || "MESSAGE",
       messageType: message.type || "text",
       messageId,
@@ -599,6 +654,8 @@ export default class WhatsAppService {
       attachments: incoming.attachments || [],
       fromName: incoming.visitor?.name || null,
       rawProviderEvent: message,
+      isFlowSubmission: incoming.isFlowSubmission === true,
+      flow: incoming.flow || null,
     };
 
     return this.processNormalizedEvent(normalizedEvent, authContext);
@@ -632,6 +689,18 @@ export default class WhatsAppService {
     }
   }
 
+  async processWhapiPayload(body = {}, authContext = {}) {
+    const whapiAdapter = WhatsAppProviderFactory.getProvider("whapi");
+    const events = whapiAdapter.normalizeInbound(body, authContext);
+    for (const event of events) {
+      if (event.eventType === "STATUS") {
+        await this.processStatuses([event.rawProviderEvent || event]);
+      } else {
+        await this.processNormalizedEvent(event, authContext);
+      }
+    }
+  }
+
   // =====================================================
   // OUTBOUND DISPATCH & RESULT DELIVERY
   // =====================================================
@@ -639,27 +708,158 @@ export default class WhatsAppService {
   async sendResult(incoming, result, timing = {}) {
     const inboundTriggerContext =
       timing.inboundTriggerContext || incoming?.inboundTriggerContext;
+
     const conversationKey =
       incoming?.whatsapp?.phoneNumber || incoming?.sessionId;
 
-    // Cache outbound actions for subsequent text matching
-    const actions = this.responseAdapter.extractActions(result);
     const targetSessionId =
-      incoming?.sessionId || `whatsapp:${incoming?.whatsapp?.phoneNumber}`;
-    if (actions && actions.length > 0) {
-      this.setAvailableActions(targetSessionId, actions);
+      incoming?.sessionId ||
+      `whatsapp:${incoming?.whatsapp?.phoneNumber}`;
+
+    const isCancelled =
+      result?.metadata?.cancelled === true ||
+      result?.response?.metadata?.cancelled === true ||
+      result?.metadata?.stage === "CANCELLED" ||
+      result?.response?.metadata?.stage === "CANCELLED" ||
+      result?.action?.id === "CANCEL_ORDER" ||
+      result?.response?.action?.id === "CANCEL_ORDER";
+
+    // =====================================================
+    // CANCELLATION = HARD RESET
+    // =====================================================
+    if (isCancelled) {
+      console.log(
+        `[CANCEL][OUTBOUND][RESET] session=${targetSessionId}`,
+      );
+
+      // Remove stale interactive actions from memory.
+      this.lastAvailableActions.delete(targetSessionId);
+
       if (incoming?.whatsapp?.phoneNumber) {
-        this.setAvailableActions(incoming.whatsapp.phoneNumber, actions);
+        this.lastAvailableActions.delete(
+          incoming.whatsapp.phoneNumber,
+        );
+      }
+
+      // Never allow stale result data to reach the normal
+      // product/image/interactive-message pipeline.
+      result = {
+        ...result,
+
+        workflow: "NONE",
+        currentStep: null,
+        nextStep: null,
+
+        action: null,
+        actions: [],
+
+        liveRequirement: null,
+        order: null,
+        orderContext: null,
+        product: null,
+        productId: null,
+        selectedProduct: null,
+        selectedProductId: null,
+        selection: null,
+        selectionId: null,
+
+        attachments: [],
+        mediaContext: null,
+        discoveryMatches: [],
+
+        metadata: {
+          ...(result?.metadata ?? {}),
+          stage: "CANCELLED",
+          cancelled: true,
+          product: null,
+          selectedProduct: null,
+          selection: null,
+          image: null,
+          images: [],
+          attachments: [],
+        },
+
+        response: {
+          ...(result?.response ?? {}),
+          workflow: "NONE",
+          currentStep: null,
+          nextStep: null,
+          action: null,
+          actions: [],
+          liveRequirement: null,
+
+          metadata: {
+            ...(result?.response?.metadata ?? {}),
+            stage: "CANCELLED",
+            cancelled: true,
+            product: null,
+            selectedProduct: null,
+            selection: null,
+            image: null,
+            images: [],
+            attachments: [],
+          },
+        },
+      };
+
+      console.log("[CANCEL][OUTBOUND][MEDIA_BLOCKED]");
+    } else {
+      // =====================================================
+      // NORMAL ACTION CACHE
+      // =====================================================
+      const actions = this.responseAdapter.extractActions(result);
+
+      if (actions?.length > 0) {
+        this.setAvailableActions(targetSessionId, actions);
+
+        if (incoming?.whatsapp?.phoneNumber) {
+          this.setAvailableActions(
+            incoming.whatsapp.phoneNumber,
+            actions,
+          );
+        }
       }
     }
 
-    const outgoingMessages = this.responseAdapter.toWhatsAppMessages({
-      ...result,
-      sessionId: result?.sessionId ?? incoming?.sessionId ?? null,
-      visitorId: result?.visitorId ?? incoming?.visitorId ?? null,
-      whatsapp: result?.whatsapp ?? incoming?.whatsapp ?? null,
-      liveRequirement: result?.liveRequirement ?? null,
-    });
+    // =====================================================
+    // BUILD OUTBOUND WHATSAPP MESSAGES
+    // =====================================================
+    const outboundWorkflow =
+      result?.workflow ??
+      result?.response?.workflow ??
+      incoming?.workflow ??
+      null;
+
+    const outgoingMessages =
+      this.responseAdapter.toWhatsAppMessages({
+        ...result,
+
+        workflow: outboundWorkflow,
+
+        sessionId:
+          result?.sessionId ??
+          incoming?.sessionId ??
+          null,
+
+        visitorId:
+          result?.visitorId ??
+          incoming?.visitorId ??
+          null,
+
+        whatsapp:
+          result?.whatsapp ??
+          incoming?.whatsapp ??
+          null,
+
+        liveRequirement:
+          result?.liveRequirement ?? null,
+      });
+
+    if (isCancelled) {
+      console.log(
+        `[CANCEL][OUTBOUND] messages=${outgoingMessages.length}`,
+      );
+    }
 
     const sendResults = [];
 
@@ -675,13 +875,17 @@ export default class WhatsAppService {
             timing,
           },
         );
+
         sendResults.push(sendRes);
       } catch (err) {
-        console.error("[WhatsApp] Outbound message send failure:", {
-          to: incoming.whatsapp?.phoneNumber,
-          type: outgoing?.type,
-          error: err.message,
-        });
+        console.error(
+          "[WhatsApp] Outbound message send failure:",
+          {
+            to: incoming.whatsapp?.phoneNumber,
+            type: outgoing?.type,
+            error: err.message,
+          },
+        );
       }
     }
 
@@ -703,9 +907,9 @@ export default class WhatsAppService {
       options.lastUserMessageAt !== undefined
         ? options.lastUserMessageAt
         : this.windowPolicy.getLastUserMessageAt(conversationKey) ||
-          inboundTriggerContext.inboundReceivedAt;
+        inboundTriggerContext.inboundReceivedAt;
 
-    // Outbound hard policy authorization guard (Meta 24h Customer Service Window)
+    // Outbound hard policy authorization guard
     const authorization = this.outboundPolicy.authorizeOutbound({
       to,
       message,
@@ -715,6 +919,7 @@ export default class WhatsAppService {
       credentials: {
         accessToken: this.apiService?.accessToken,
         phoneNumberId: this.apiService?.phoneNumberId,
+        whapiToken: this.whapiToken,
       },
     });
 
@@ -742,10 +947,25 @@ export default class WhatsAppService {
     console.log("[WhatsApp] OUTBOUND_DISPATCH:", {
       recipient: to,
       type: message?.type,
-      provider: "meta",
+      provider: inboundTriggerContext?.provider || this.provider?.name,
     });
 
-    const apiResult = await this.apiService.sendMessage(to, message, options);
+    const activeProvider =
+      inboundTriggerContext?.provider &&
+        inboundTriggerContext.provider !== this.provider?.name
+        ? WhatsAppProviderFactory.getProvider(inboundTriggerContext.provider)
+        : this.provider;
+
+    const isFlowMessage =
+      message?.type === "interactive" && message.interactive?.type === "flow";
+
+    const apiResult = isFlowMessage
+      ? this.apiService
+        ? await this.apiService.sendFlow(to, message, options)
+        : await activeProvider.sendFlow(to, message, options)
+      : this.apiService
+        ? await this.apiService.sendMessage(to, message, options)
+        : await activeProvider.sendMessage(to, message, options);
 
     const responseSentAt = Date.now();
     const totalLatencyMs = options.timing?.receivedAt
@@ -783,6 +1003,7 @@ export default class WhatsAppService {
       mediaId: message?.image?.id || message?.document?.id || null,
       mediaUrl: message?.image?.link || message?.image?.url || null,
       interactiveData: message?.interactive || null,
+      flowData: message?.interactive?.action?.parameters || null,
     };
 
     const targetSessionId =
@@ -924,6 +1145,27 @@ export default class WhatsAppService {
     return this.sendMessage(to, payload, options);
   }
 
+  async sendFlowMessage(
+    to,
+    bodyText,
+    flowParams = {},
+    header = null,
+    footer = null,
+    options = {},
+  ) {
+    const payload = {
+      type: "interactive",
+      interactive: {
+        type: "flow",
+        body: { text: bodyText },
+        action: { name: "flow", parameters: flowParams },
+        ...(header ? { header } : {}),
+        ...(footer ? { footer: { text: footer } } : {}),
+      },
+    };
+    return this.sendMessage(to, payload, options);
+  }
+
   // =====================================================
   // CRM HUMAN AGENT MESSAGE DISPATCH
   // =====================================================
@@ -997,7 +1239,7 @@ export default class WhatsAppService {
       authenticated: true,
       senderType: "agent",
       agentId,
-      provider: "meta",
+      provider: this.provider?.name || "whapi",
     };
 
     return this.sendTextMessage(customerWaId, message.trim(), {
@@ -1074,6 +1316,7 @@ export default class WhatsAppService {
         (rawId.includes(":") ||
           rawId.startsWith("Buttons") ||
           rawId.startsWith("quick_reply") ||
+          rawId.startsWith("whapi") ||
           rawId.startsWith("meta"))
       ) {
         const decoded = WhatsappActionCodec.decode(rawId);
@@ -1111,12 +1354,12 @@ export default class WhatsAppService {
             !targetPayload.productId ||
             !availPayload.productId ||
             String(targetPayload.productId).toLowerCase() ===
-              String(availPayload.productId).toLowerCase();
+            String(availPayload.productId).toLowerCase();
           const matchSelection =
             !targetPayload.selectionId ||
             !availPayload.selectionId ||
             String(targetPayload.selectionId).toLowerCase() ===
-              String(availPayload.selectionId).toLowerCase();
+            String(availPayload.selectionId).toLowerCase();
           if (matchProduct && matchSelection)
             return { valid: true, matchedAction: avail };
         } else if (targetId === "SELECT_NESTED_PRODUCT") {
@@ -1124,17 +1367,17 @@ export default class WhatsAppService {
             !targetPayload.productId ||
             !availPayload.productId ||
             String(targetPayload.productId).toLowerCase() ===
-              String(availPayload.productId).toLowerCase();
+            String(availPayload.productId).toLowerCase();
           const matchSelection =
             !targetPayload.selectionId ||
             !availPayload.selectionId ||
             String(targetPayload.selectionId).toLowerCase() ===
-              String(availPayload.selectionId).toLowerCase();
+            String(availPayload.selectionId).toLowerCase();
           const matchNested =
             !targetPayload.nestedProductId ||
             !availPayload.nestedProductId ||
             String(targetPayload.nestedProductId).toLowerCase() ===
-              String(availPayload.nestedProductId).toLowerCase();
+            String(availPayload.nestedProductId).toLowerCase();
           if (matchProduct && matchSelection && matchNested)
             return { valid: true, matchedAction: avail };
         } else if (targetId === "SELECT_PRODUCT") {
@@ -1142,7 +1385,7 @@ export default class WhatsAppService {
             !targetPayload.productId ||
             !availPayload.productId ||
             String(targetPayload.productId).toLowerCase() ===
-              String(availPayload.productId).toLowerCase();
+            String(availPayload.productId).toLowerCase();
           if (matchProduct) return { valid: true, matchedAction: avail };
         } else if (
           targetId === "SET_FORM_FIELD" ||
@@ -1152,12 +1395,12 @@ export default class WhatsAppService {
             !targetPayload.fieldId ||
             !availPayload.fieldId ||
             String(targetPayload.fieldId).toLowerCase() ===
-              String(availPayload.fieldId).toLowerCase();
+            String(availPayload.fieldId).toLowerCase();
           const matchValue =
             targetPayload.value == null ||
             availPayload.value == null ||
             String(targetPayload.value).toLowerCase() ===
-              String(availPayload.value).toLowerCase();
+            String(availPayload.value).toLowerCase();
           if (matchField && matchValue)
             return { valid: true, matchedAction: avail };
         } else if (targetId === "SUBMIT_ORDER_FORM") {
@@ -1165,7 +1408,7 @@ export default class WhatsAppService {
             !targetPayload.formId ||
             !availPayload.formId ||
             String(targetPayload.formId).toLowerCase() ===
-              String(availPayload.formId).toLowerCase();
+            String(availPayload.formId).toLowerCase();
           if (matchForm) return { valid: true, matchedAction: avail };
         } else {
           return { valid: true, matchedAction: avail };
@@ -1203,11 +1446,11 @@ export default class WhatsAppService {
                 const decoded = WhatsappActionCodec.decode(id);
                 return decoded
                   ? {
-                      id: decoded.id || decoded.type,
-                      type: decoded.type || decoded.id,
-                      label: title,
-                      payload: decoded.payload || {},
-                    }
+                    id: decoded.id || decoded.type,
+                    type: decoded.type || decoded.id,
+                    label: title,
+                    payload: decoded.payload || {},
+                  }
                   : null;
               })
               .filter(Boolean);
@@ -1222,12 +1465,12 @@ export default class WhatsAppService {
                 const decoded = WhatsappActionCodec.decode(r.id);
                 return decoded
                   ? {
-                      id: decoded.id || decoded.type,
-                      type: decoded.type || decoded.id,
-                      label: r.title || r.label,
-                      description: r.description,
-                      payload: decoded.payload || {},
-                    }
+                    id: decoded.id || decoded.type,
+                    type: decoded.type || decoded.id,
+                    label: r.title || r.label,
+                    description: r.description,
+                    payload: decoded.payload || {},
+                  }
                   : null;
               })
               .filter(Boolean);

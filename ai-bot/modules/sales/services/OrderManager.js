@@ -177,10 +177,10 @@ export default class OrderManager {
        * catalog-driven order form values.
        */
 
-      formData: {
-        ...(current.formData ?? {}),
-        ...(values.formData ?? {}),
-      },
+      formData:
+        values.formData !== undefined
+          ? { ...(values.formData ?? {}) }
+          : { ...(current.formData ?? {}) },
 
       /*
        * Backwards compatibility with the old code.
@@ -189,11 +189,15 @@ export default class OrderManager {
        * continue reading productData until migrated.
        */
 
-      productData: {
-        ...(current.productData ?? {}),
-        ...(values.productData ?? {}),
-        ...(values.formData ?? {}),
-      },
+      productData:
+        values.productData !== undefined
+          ? { ...(values.productData ?? {}) }
+          : values.formData !== undefined
+            ? { ...(values.formData ?? {}) }
+            : {
+                ...(current.productData ?? {}),
+                ...(current.formData ?? {}),
+              },
 
       /*
        * Legacy requirements are preserved but are NOT used
@@ -211,10 +215,10 @@ export default class OrderManager {
        * Do NOT put quantity/artwork/catalog fields here.
        */
 
-      workflow: {
-        ...(current.workflow ?? {}),
-        ...(values.workflow ?? {}),
-      },
+      workflow:
+        values.workflow !== undefined
+          ? { ...(values.workflow ?? {}) }
+          : { ...(current.workflow ?? {}) },
 
       pricing: {
         ...(current.pricing ?? {}),
@@ -235,6 +239,16 @@ export default class OrderManager {
         values.notes !== undefined
           ? [...values.notes]
           : [...(current.notes ?? [])],
+
+      artwork:
+        values.artwork !== undefined
+          ? values.artwork
+          : (current.artwork ?? null),
+
+      artworkReceived:
+        values.artworkReceived !== undefined
+          ? values.artworkReceived
+          : (current.artworkReceived ?? Boolean(current.artwork?.received)),
 
       completed: values.completed ?? current.completed ?? false,
     };

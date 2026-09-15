@@ -1,20 +1,21 @@
 /**
  * MetaProviderAdapter.js
  *
- * Production Meta WhatsApp Business Cloud API Transport Adapter (Graph API v23.0).
+ * Production Meta WhatsApp Business Cloud API Adapter (Graph API v23.0).
  *
+ * Implements the BaseWhatsAppProvider interface for Meta Cloud API transport.
  * Encapsulates Meta Graph API endpoints, HMAC SHA-256 signature validation,
- * hub.challenge GET verification, Meta inbound event normalization,
- * and 24-hour customer service window enforcement.
+ * hub.challenge GET verification, and Meta's 24-hour customer service window enforcement.
  */
 
 import crypto from "crypto";
+import BaseWhatsAppProvider from "./BaseWhatsAppProvider.js";
 import WhatsappActionCodec from "../WhatsappActionCodec.js";
 import WhatsAppCustomerServiceWindowPolicy from "../policies/WhatsAppCustomerServiceWindowPolicy.js";
 
-export default class MetaProviderAdapter {
+export default class MetaProviderAdapter extends BaseWhatsAppProvider {
   constructor(config = {}) {
-    this.config = config;
+    super(config);
     this.accessToken =
       config.accessToken !== undefined
         ? config.accessToken
@@ -51,7 +52,7 @@ export default class MetaProviderAdapter {
       templates: true,
       media: true,
       customerServiceWindow: true,
-      nativeFlows: false,
+      nativeFlows: true,
     };
   }
 
@@ -320,7 +321,52 @@ export default class MetaProviderAdapter {
             continue;
           }
 
-          // 3. Media (image, document, audio, video, sticker)
+          // 3. Flow Reply (nfm_reply)
+          if (
+            msg.type === "interactive" &&
+            msg.interactive?.type === "nfm_reply"
+          ) {
+            const nfm = msg.interactive.nfm_reply || {};
+            let responseJson = null;
+            try {
+              responseJson =
+                typeof nfm.response_json === "string"
+                  ? JSON.parse(nfm.response_json)
+                  : nfm.response_json;
+            } catch (e) {
+              responseJson = null;
+            }
+
+            events.push({
+              provider: "meta",
+              eventType: "FLOW_SUBMISSION",
+              messageId,
+              customerWaId,
+              phoneNumberId,
+              timestamp,
+              messageType: "interactive",
+              text: "",
+              isFlowSubmission: true,
+              flow: {
+                responseJson,
+                flowToken: nfm.body || null,
+                flowName: nfm.name || null,
+              },
+              interactive: {
+                type: "nfm_reply",
+                id: nfm.name || "flow",
+                title: nfm.name || "",
+                payload: responseJson,
+              },
+              action: null,
+              attachments: [],
+              fromName,
+              rawProviderEvent: msg,
+            });
+            continue;
+          }
+
+          // 4. Media
           const mediaTypes = ["image", "document", "audio", "video", "sticker"];
           const matchedMedia = mediaTypes.find((t) => msg[t] && msg[t].id);
           if (matchedMedia) {
@@ -353,7 +399,7 @@ export default class MetaProviderAdapter {
             continue;
           }
 
-          // 4. Location
+          // 5. Location
           if (msg.location) {
             events.push({
               provider: "meta",
@@ -379,7 +425,7 @@ export default class MetaProviderAdapter {
             continue;
           }
 
-          // 5. Contacts
+          // 6. Contacts
           if (msg.contacts) {
             events.push({
               provider: "meta",
@@ -400,7 +446,7 @@ export default class MetaProviderAdapter {
             continue;
           }
 
-          // 6. Plain Text
+          // 7. Plain Text
           if (msg.text?.body) {
             events.push({
               provider: "meta",
@@ -513,61 +559,20 @@ export default class MetaProviderAdapter {
     return responseBody;
   }
 
-  async sendTextMessage(to, body, options = {}) {
-    return this.sendMessage(
-      to,
-      {
-        type: "text",
-        text: { preview_url: false, body },
-      },
-      options,
+  /**
+   * Dispatches a native WhatsApp Flow message via Meta Cloud API.
+   * @param {string} to - Recipient phone number
+   * @param {Object} flowMessage - Interactive Flow message payload
+   * @param {Object} [options] - Options (correlationId, context)
+   * @returns {Promise<Object>} Meta API response
+   */
+  async sendFlow(to, flowMessage, options = {}) {
+    const cid = options.correlationId || `flow_send_${Date.now().toString(36)}`;
+    const cleanTo = String(to).replace(/\D/g, "");
+    console.log(
+      `[WhatsApp][Flow] SEND provider=meta recipient=${cleanTo} correlationId=${cid}`,
     );
-  }
-
-  async sendButtonMessage(to, bodyText, buttons = [], header = null, footer = null, options = {}) {
-    const payload = {
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: bodyText },
-        action: {
-          buttons: buttons.map((b, index) => ({
-            type: "reply",
-            reply: {
-              id: b.id ?? `btn_${index}`,
-              title: String(b.title ?? b.label ?? `Option ${index + 1}`).trim().slice(0, 20),
-            },
-          })),
-        },
-        ...(header ? { header } : {}),
-        ...(footer ? { footer: { text: footer } } : {}),
-      },
-    };
-    return this.sendMessage(to, payload, options);
-  }
-
-  async sendListMessage(to, bodyText, buttonText, sections = [], header = null, footer = null, options = {}) {
-    const payload = {
-      type: "interactive",
-      interactive: {
-        type: "list",
-        body: { text: bodyText },
-        action: {
-          button: String(buttonText || "Choose Option").trim().slice(0, 20),
-          sections: sections.map((sec) => ({
-            title: String(sec.title || "Options").trim().slice(0, 24),
-            rows: (sec.rows || []).map((row, rIdx) => ({
-              id: row.id ?? `row_${rIdx}`,
-              title: String(row.title ?? row.label ?? `Item ${rIdx + 1}`).trim().slice(0, 24),
-              ...(row.description ? { description: String(row.description).trim().slice(0, 72) } : {}),
-            })),
-          })),
-        },
-        ...(header ? { header } : {}),
-        ...(footer ? { footer: { text: footer } } : {}),
-      },
-    };
-    return this.sendMessage(to, payload, options);
+    return this.sendMessage(cleanTo, flowMessage, options);
   }
 
   // =====================================================

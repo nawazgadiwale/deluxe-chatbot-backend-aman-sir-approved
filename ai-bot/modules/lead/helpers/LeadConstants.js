@@ -1,7 +1,7 @@
 const LeadConstants = {
   SOURCES: {
     WEBCHAT: "Exprintmart-(WebChat)",
-    WHATSAPP: "Exprintmart-(WhatsApp)",
+    WHATSAPP: "Exprintmart-(WA)",
   },
 
   PRODUCT_ID: null,

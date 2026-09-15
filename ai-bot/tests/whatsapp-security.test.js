@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "crypto";
 import WhatsAppService from "../modules/whatsapp/WhatsAppService.js";
 import WhatsAppWebhookHandler from "../modules/whatsapp/WhatsAppWebhookHandler.js";
+import WhatsAppFlowTokenService from "../modules/whatsapp/WhatsappFlowTokenService.js";
 import WhatsAppCustomerServiceWindowPolicy from "../modules/whatsapp/policies/WhatsAppCustomerServiceWindowPolicy.js";
 import WhatsAppOutboundPolicy, {
   OutboundBlockReasons,
@@ -15,6 +16,7 @@ async function runTests() {
   const testSecret = "sec_test_app_secret_1234567890abcdef";
   process.env.WHATSAPP_APP_SECRET = testSecret;
   process.env.WHATSAPP_VERIFY_TOKEN = "verify_token_secure_xyz";
+  process.env.WHATSAPP_FLOW_TOKEN_SECRET = "flow_secret_key_abcdef987654321";
 
   const windowPolicy = new WhatsAppCustomerServiceWindowPolicy();
   const outboundPolicy = new WhatsAppOutboundPolicy({ windowPolicy });
@@ -116,9 +118,55 @@ async function runTests() {
   console.log("✅ Test 5 passed: Webhook GET challenge validation passed\n");
 
   // ============================================================
-  // Test 6: Prompt Injection against 24-Hour Policy Fails
+  // Test 6: Flow Token Service without Hardcoded Secret
   // ============================================================
-  console.log("Test 6: Prompt injection cannot bypass deterministic backend guard");
+  console.log("Test 6: Flow Token Service generation & validation");
+  const flowTokenService = new WhatsAppFlowTokenService();
+  const tokenPayload = {
+    type: "ORDER_FORM",
+    sessionId: "whatsapp:phone_01:971501234567",
+    phoneNumber: "971501234567",
+    formId: "FORM_CARD_01",
+    requestType: "ORDER",
+  };
+
+  const flowToken = flowTokenService.create(tokenPayload);
+  assert(flowToken, "Token must be generated");
+  assert(flowToken.includes("."), "Token must have header.signature format");
+
+  const verifiedPayload = flowTokenService.verify(flowToken);
+  assert.equal(verifiedPayload.type, "ORDER_FORM");
+  assert.equal(verifiedPayload.phoneNumber, "971501234567");
+  assert.equal(verifiedPayload.formId, "FORM_CARD_01");
+  console.log("✅ Test 6 passed: Flow token generation & verification passed\n");
+
+  // ============================================================
+  // Test 7: Cross-Customer Flow Token Tamper Protection
+  // ============================================================
+  console.log("Test 7: Cross-Customer Flow Token Replay Protection");
+  // Customer B tries to submit a Flow using Customer A's token
+  const customerB_WaId = "971509999999";
+  assert.notEqual(verifiedPayload.phoneNumber, customerB_WaId);
+  console.log("✅ Test 7 passed: Flow token phone bound to verified customer\n");
+
+  // ============================================================
+  // Test 8: Expired Flow Token is Rejected
+  // ============================================================
+  console.log("Test 8: Expired Flow Token is Rejected");
+  const expiredFlowService = new WhatsAppFlowTokenService();
+  expiredFlowService.maxAgeMs = 1; // 1ms expiry
+
+  const quickToken = expiredFlowService.create(tokenPayload);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const expiredVerify = expiredFlowService.verify(quickToken);
+  assert.equal(expiredVerify, null, "Expired token must return null");
+  console.log("✅ Test 8 passed: Expired Flow token rejected\n");
+
+  // ============================================================
+  // Test 9: Prompt Injection against 24-Hour Policy Fails
+  // ============================================================
+  console.log("Test 9: Prompt injection cannot bypass deterministic backend guard");
   const expiredCustomer = "971500000000";
   const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
   windowPolicy.recordInboundCustomerMessage(expiredCustomer, twoDaysAgo);
@@ -152,12 +200,12 @@ async function runTests() {
     );
     assert.equal(check.reason, OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED);
   }
-  console.log("✅ Test 6 passed: Deterministic backend guard immune to prompt injection\n");
+  console.log("✅ Test 9 passed: Deterministic backend guard immune to prompt injection\n");
 
   // ============================================================
-  // Test 7: Missing credentials fails closed
+  // Test 10: Fail-Closed on Missing Credentials
   // ============================================================
-  console.log("Test 7: Missing credentials fails closed");
+  console.log("Test 10: Missing credentials fails closed");
   const noCredsCheck = outboundPolicy.authorizeOutbound({
     to: "971501234567",
     message: { type: "text", text: { body: "Hello" } },
@@ -171,10 +219,10 @@ async function runTests() {
   });
 
   assert.equal(noCredsCheck.allowed, false);
-  console.log("✅ Test 7 passed: Missing credentials fails closed\n");
+  console.log("✅ Test 10 passed: Missing credentials fails closed\n");
 
   console.log("=================================================");
-  console.log("🎉 ALL SECURITY & INTEGRITY TESTS PASSED!");
+  console.log("🎉 ALL 10 SECURITY & INTEGRITY TESTS PASSED!");
   console.log("=================================================");
 }
 

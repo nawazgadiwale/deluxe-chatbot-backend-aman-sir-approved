@@ -5,6 +5,42 @@ export default class WhatsappActionCodec {
     const actionId = action.id || action.type;
     const payload = action.payload ?? {};
 
+    // Pipe-delimited compact encoding for conversational ordering
+    if (actionId === "SET_FIELD" && payload.fieldId && payload.value != null) {
+      return `SET_FIELD|${payload.fieldId}|${payload.value}`.slice(0, 256);
+    }
+
+    if (actionId === "SET_REQUIREMENT" && payload.requirementId && payload.value != null) {
+      return `SET_REQUIREMENT|${payload.requirementId}|${payload.value}`.slice(0, 256);
+    }
+
+    if (actionId === "TOGGLE_ADDON" && payload.addonId) {
+      return `TOGGLE_ADDON|${payload.addonId}`.slice(0, 256);
+    }
+
+    if (actionId === "SET_DELIVERY" && payload.method) {
+      return `SET_DELIVERY|${payload.method}`.slice(0, 256);
+    }
+
+    if (actionId === "SET_CUSTOMER_FIELD" && payload.fieldId && payload.value != null) {
+      return `SET_CUSTOMER_FIELD|${payload.fieldId}|${payload.value}`.slice(0, 256);
+    }
+
+    // Control actions without payload (or empty payload)
+    const controlActions = new Set([
+      "ORDER_NOW",
+      "NEXT_STEP",
+      "BACK",
+      "EDIT_ORDER",
+      "CONFIRM_ORDER",
+      "CANCEL_ORDER",
+      "SUBMIT_ORDER_FORM",
+      "START_ORDER",
+    ]);
+    if (controlActions.has(actionId) && (!payload || Object.keys(payload).length === 0)) {
+      return actionId;
+    }
+
     // Compact semantic IDs for common catalog actions
     if (
       (actionId === "SELECT_NESTED_PRODUCT" || action.type === "SELECT_NESTED_PRODUCT") &&
@@ -30,41 +66,12 @@ export default class WhatsappActionCodec {
       return `product:${payload.productId}`.slice(0, 256);
     }
 
-    // Compact order now pattern: order_now:<productId>:<formId>
+    // Compact order now pattern: order_now:<productId>:<selectionId>
     if (
       (actionId === "ORDER_NOW" || action.type === "ORDER_NOW") &&
       payload.productId
     ) {
-      return `order_now:${payload.productId}:${payload.formId || ""}`.slice(0, 256);
-    }
-
-    // Compact generic actions: SET_FIELD|fieldId|value
-    if ((actionId === "SET_FIELD" || action.type === "SET_FIELD") && payload.fieldId && payload.value != null) {
-      return `SET_FIELD|${payload.fieldId}|${payload.value}`.slice(0, 256);
-    }
-
-    // Compact generic requirement: SET_REQUIREMENT|requirementId|value
-    if ((actionId === "SET_REQUIREMENT" || action.type === "SET_REQUIREMENT") && payload.requirementId && payload.value != null) {
-      return `SET_REQUIREMENT|${payload.requirementId}|${payload.value}`.slice(0, 256);
-    }
-
-    // Compact generic addon: TOGGLE_ADDON|addonId
-    if ((actionId === "TOGGLE_ADDON" || action.type === "TOGGLE_ADDON") && payload.addonId) {
-      return `TOGGLE_ADDON|${payload.addonId}`.slice(0, 256);
-    }
-
-    // Compact generic delivery: SET_DELIVERY|method
-    if ((actionId === "SET_DELIVERY" || action.type === "SET_DELIVERY") && (payload.method || payload.value)) {
-      return `SET_DELIVERY|${payload.method || payload.value}`.slice(0, 256);
-    }
-
-    // Compact customer field: SET_CUSTOMER_FIELD|fieldId|value
-    if (
-      (actionId === "SET_CUSTOMER_FIELD" || action.type === "SET_CUSTOMER_FIELD") &&
-      payload.fieldId &&
-      payload.value != null
-    ) {
-      return `SET_CUSTOMER_FIELD|${payload.fieldId}|${payload.value}`.slice(0, 256);
+      return `order_now:${payload.productId}:${payload.selectionId || payload.formId || ""}`.slice(0, 256);
     }
 
     // Compact form field action pattern: form_field:<formId>:<fieldId>:<value>
@@ -74,28 +81,6 @@ export default class WhatsappActionCodec {
       payload.value != null
     ) {
       return `form_field:${payload.formId || ""}:${payload.fieldId}:${payload.value}`.slice(0, 256);
-    }
-
-    // Compact generic control actions without special payload
-    const payloadKeys = Object.keys(payload);
-    if (
-      [
-        "ORDER_NOW",
-        "NEXT_STEP",
-        "BACK",
-        "EDIT_ORDER",
-        "CONFIRM_ORDER",
-        "CANCEL_ORDER",
-      ].includes(actionId) &&
-      (payloadKeys.length === 0 ||
-        payloadKeys.every(
-          (k) =>
-            payload[k] === true ||
-            payload[k] === false ||
-            payload[k] == null,
-        ))
-    ) {
-      return actionId;
     }
 
     const fullPayload = {
@@ -130,30 +115,14 @@ export default class WhatsappActionCodec {
     let text = String(value || "").trim();
     if (!text) return null;
 
-    // Strip common interactive wrapper prefixes (e.g., "ButtonsV3:", "ButtonsV2:", "Buttons:", "Button:", "quick_reply:", "meta:")
-    for (const prefix of [
-      "SET_FIELD|",
-      "SET_REQUIREMENT|",
-      "TOGGLE_ADDON|",
-      "SET_DELIVERY|",
-      "SET_CUSTOMER_FIELD|",
-      "order_now:",
-      "form_field:",
-      "nested:",
-      "selection:",
-      "product:",
-      "a:",
-    ]) {
-      const idx = text.indexOf(prefix);
-      if (idx !== -1) {
-        text = text.slice(idx);
-        break;
-      }
-    }
-
-    if (text.startsWith("SET_FIELD|")) {
-      const parts = text.split("|");
-      if (parts.length >= 3) {
+    // Check pipe-delimited pattern (strip prefix if any)
+    const pipeIdx = text.indexOf("|");
+    if (pipeIdx !== -1) {
+      const colonIdx = text.lastIndexOf(":", pipeIdx);
+      const cleanText = colonIdx !== -1 ? text.slice(colonIdx + 1) : text;
+      const parts = cleanText.split("|");
+      const id = parts[0];
+      if (id === "SET_FIELD" && parts.length >= 3) {
         return {
           id: "SET_FIELD",
           type: "SET_FIELD",
@@ -163,11 +132,7 @@ export default class WhatsappActionCodec {
           },
         };
       }
-    }
-
-    if (text.startsWith("SET_REQUIREMENT|")) {
-      const parts = text.split("|");
-      if (parts.length >= 3) {
+      if (id === "SET_REQUIREMENT" && parts.length >= 3) {
         return {
           id: "SET_REQUIREMENT",
           type: "SET_REQUIREMENT",
@@ -177,11 +142,7 @@ export default class WhatsappActionCodec {
           },
         };
       }
-    }
-
-    if (text.startsWith("TOGGLE_ADDON|")) {
-      const parts = text.split("|");
-      if (parts.length >= 2) {
+      if (id === "TOGGLE_ADDON" && parts.length >= 2) {
         return {
           id: "TOGGLE_ADDON",
           type: "TOGGLE_ADDON",
@@ -190,25 +151,16 @@ export default class WhatsappActionCodec {
           },
         };
       }
-    }
-
-    if (text.startsWith("SET_DELIVERY|")) {
-      const parts = text.split("|");
-      if (parts.length >= 2) {
+      if (id === "SET_DELIVERY" && parts.length >= 2) {
         return {
           id: "SET_DELIVERY",
           type: "SET_DELIVERY",
           payload: {
             method: parts.slice(1).join("|"),
-            value: parts.slice(1).join("|"),
           },
         };
       }
-    }
-
-    if (text.startsWith("SET_CUSTOMER_FIELD|")) {
-      const parts = text.split("|");
-      if (parts.length >= 3) {
+      if (id === "SET_CUSTOMER_FIELD" && parts.length >= 3) {
         return {
           id: "SET_CUSTOMER_FIELD",
           type: "SET_CUSTOMER_FIELD",
@@ -220,16 +172,49 @@ export default class WhatsappActionCodec {
       }
     }
 
-    // 1. Compact order now pattern: order_now:<productId>:<formId>
+    // Strip common provider/transport wrapper prefixes (e.g., "ButtonsV3:", "ButtonsV2:", "Buttons:", "Button:", "quick_reply:", "whapi:", "meta:")
+    const orderNowIdx = text.indexOf("order_now:");
+    if (orderNowIdx !== -1) {
+      text = text.slice(orderNowIdx);
+    } else {
+      const formFieldIdx = text.indexOf("form_field:");
+      if (formFieldIdx !== -1) {
+        text = text.slice(formFieldIdx);
+      } else {
+        const nestedIdx = text.indexOf("nested:");
+        if (nestedIdx !== -1) {
+          text = text.slice(nestedIdx);
+        } else {
+          const selectionIdx = text.indexOf("selection:");
+          if (selectionIdx !== -1) {
+            text = text.slice(selectionIdx);
+          } else {
+            const productIdx = text.indexOf("product:");
+            if (productIdx !== -1) {
+              text = text.slice(productIdx);
+            } else {
+              const aIdx = text.indexOf("a:");
+              if (aIdx !== -1) {
+                text = text.slice(aIdx);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 1. Compact order now pattern: order_now:<productId>:<selectionId>
     if (text.startsWith("order_now:")) {
       const parts = text.split(":");
       if (parts.length >= 2) {
+        const secondary = parts.slice(2).join(":") || null;
         return {
           id: "ORDER_NOW",
           type: "ORDER_NOW",
           payload: {
             productId: parts[1],
-            formId: parts.slice(2).join(":") || null,
+            selectionId: secondary,
+            formId: secondary,
           },
         };
       }

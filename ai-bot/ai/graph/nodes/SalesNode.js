@@ -36,6 +36,106 @@ export default class SalesNode {
 
     /*
      * ============================================================
+     * ORDER CONFIRMATION -> CONVERSATIONAL LEAD COLLECTION
+     * ============================================================
+     *
+     * Customer details are collected only after explicit
+     * CONFIRM_ORDER.
+     *
+     * No customer form.
+     * No WhatsApp Flow.
+     * WhatsApp number comes from the inbound channel.
+     */
+
+    if (action?.id === "CONFIRM_ORDER") {
+      console.log("");
+      console.log("========== ORDER CONFIRMED ==========");
+      console.log("========== SALES -> LEAD AGENT ==========");
+
+      const order =
+        state.order ??
+        state.orderContext ??
+        state.liveRequirement ??
+        state.productSales ??
+        null;
+
+      if (!order) {
+        const message =
+          "I couldn't find the current order. Please start the order again.";
+
+        return {
+          ...state,
+          action: null,
+          workflow: "SALES",
+          currentStep: null,
+          nextStep: null,
+          awaitingDecision: false,
+          assistantMessage: message,
+          response: responseBuilder.build({
+            workflow: "SALES",
+            interaction: "MESSAGE",
+            message,
+            actions: [],
+            sections: [],
+            liveRequirement: null,
+            completed: false,
+            metadata: {
+              stage: "ORDER_ERROR",
+            },
+            currentStep: null,
+            nextStep: null,
+          }),
+        };
+      }
+
+      const nextState = {
+        ...state,
+        action,
+
+        workflow: "LEAD",
+        currentStep: "COLLECT_NAME",
+        nextStep: "COLLECT_EMAIL",
+
+        awaitingDecision: true,
+
+        completed: false,
+        confirmed: true,
+        orderConfirmed: true,
+        leadCreated: false,
+
+        order,
+        orderContext: order,
+        liveRequirement: order,
+        productSales: order,
+
+        customer: {
+          phone:
+            state.whatsapp?.phoneNumber ??
+            state.whatsapp?.from ??
+            state.phoneNumber ??
+            "",
+          name: null,
+          email: null,
+          company: null,
+        },
+
+        customerCollection: {
+          started: false,
+          nameResolved: false,
+          emailResolved: false,
+          companyResolved: false,
+        },
+
+        lead: null,
+      };
+
+      this.markPersistenceDirty(nextState);
+
+      return await leadAgent.execute(nextState);
+    }
+
+    /*
+     * ============================================================
      * FORM SUBMISSION
      * ============================================================
      *
@@ -96,8 +196,303 @@ export default class SalesNode {
 
     /*
      * ============================================================
+     * CANCELLATION = HARD RESET
+     * ============================================================
+     *
+     * IMPORTANT:
+     *
+     * Cancellation MUST be handled before buildOrder().
+     *
+     * OrderManager.buildOrder() can clone state.order.
+     * Therefore building the order before cancellation would allow
+     * the cancelled order/product/media state to survive.
+     */
+
+    const isCancellation =
+      result?.metadata?.cancelled === true ||
+      result?.response?.metadata?.cancelled === true ||
+      result?.metadata?.stage === "CANCELLED" ||
+      result?.response?.metadata?.stage === "CANCELLED" ||
+      action?.id === "CANCEL_ORDER";
+
+    if (isCancellation) {
+      console.log(
+        "[SalesNode][CANCEL] Order cancellation confirmed. Hard resetting active state.",
+      );
+
+      const cancellationMessage =
+        result?.message ??
+        result?.response?.message ??
+        "Sure, your current order has been cancelled. What would you like to print?";
+
+      /*
+       * ------------------------------------------------------------
+       * CLEAN CANCELLATION METADATA
+       * ------------------------------------------------------------
+       */
+
+      const cancellationMetadata = {
+        stage: "CANCELLED",
+        cancelled: true,
+
+        product: null,
+        selectedProduct: null,
+        selection: null,
+        productId: null,
+        selectionId: null,
+
+        options: [],
+        recommendation: null,
+
+        recommendations: {
+          relatedProducts: [],
+          frequentlyBoughtTogether: [],
+          similarProducts: [],
+        },
+
+        media: null,
+        image: null,
+        images: [],
+        attachments: [],
+      };
+
+      /*
+       * ------------------------------------------------------------
+       * CLEAN CANCELLATION RESPONSE
+       * ------------------------------------------------------------
+       */
+
+      const response =
+        result?.response ??
+        responseBuilder.build({
+          workflow: "NONE",
+          interaction: "MESSAGE",
+          message: cancellationMessage,
+          actions: [],
+          sections: [],
+          context: null,
+          liveRequirement: null,
+          completed: false,
+          metadata: cancellationMetadata,
+          currentStep: null,
+          nextStep: null,
+        });
+
+      /*
+       * ------------------------------------------------------------
+       * HARD RESET STATE
+       * ------------------------------------------------------------
+       */
+
+      const nextState = {
+        ...state,
+
+        /*
+         * ----------------------------------------------------------
+         * INPUT / ACTION
+         * ----------------------------------------------------------
+         */
+
+        action: null,
+        message: null,
+        userMessage: null,
+
+        /*
+         * ----------------------------------------------------------
+         * CONVERSATION
+         * ----------------------------------------------------------
+         */
+
+        workflow: "NONE",
+        currentStep: null,
+        nextStep: null,
+        awaitingDecision: false,
+
+        /*
+         * ----------------------------------------------------------
+         * COMPLETION / CONFIRMATION
+         * ----------------------------------------------------------
+         */
+
+        completed: false,
+        confirmed: false,
+        orderConfirmed: false,
+        leadCreated: false,
+
+        /*
+         * ----------------------------------------------------------
+         * ACTIVE REQUIREMENT / ORDER
+         * ----------------------------------------------------------
+         */
+
+        liveRequirement: null,
+        productSales: null,
+        orderContext: null,
+        order: null,
+
+        /*
+         * ----------------------------------------------------------
+         * CUSTOMER / LEAD
+         * ----------------------------------------------------------
+         *
+         * These belong to the previous active order/conversation.
+         * Clear them so the next order starts clean.
+         */
+
+        customer: null,
+        lead: null,
+        customerCollection: null,
+
+        /*
+         * ----------------------------------------------------------
+         * PRODUCT
+         * ----------------------------------------------------------
+         */
+
+        selectedProduct: null,
+        selectedProductId: null,
+
+        product: null,
+        productId: null,
+
+        selection: null,
+        selectionId: null,
+
+        /*
+         * ----------------------------------------------------------
+         * ORDER DATA
+         * ----------------------------------------------------------
+         */
+
+        fields: null,
+        requirements: null,
+        addons: null,
+        delivery: null,
+        review: null,
+
+        /*
+         * ----------------------------------------------------------
+         * DISCOVERY
+         * ----------------------------------------------------------
+         */
+
+        discoveryMatches: [],
+        browseCatalog: false,
+
+        /*
+         * ----------------------------------------------------------
+         * MEDIA
+         * ----------------------------------------------------------
+         */
+
+        attachments: [],
+        mediaContext: null,
+
+        /*
+         * ----------------------------------------------------------
+         * WORKFLOW EXECUTION
+         * ----------------------------------------------------------
+         */
+
+        workflowStack: [],
+        executionPlan: [],
+        currentExecutionIndex: 0,
+
+        /*
+         * ----------------------------------------------------------
+         * SALES RESULT / RESPONSE
+         * ----------------------------------------------------------
+         */
+
+        sales: result,
+        response,
+
+        assistantMessage: cancellationMessage,
+
+        /*
+         * ----------------------------------------------------------
+         * EXPLICIT CLEAN METADATA
+         * ----------------------------------------------------------
+         *
+         * This is important because downstream code may inspect
+         * state.metadata rather than response.metadata.
+         */
+
+        metadata: cancellationMetadata,
+
+        /*
+         * ----------------------------------------------------------
+         * INCOMING MEDIA
+         * ----------------------------------------------------------
+         *
+         * Preserve identity/session information but remove all
+         * media belonging to the cancelled order.
+         */
+
+        incoming: {
+          ...(state.incoming ?? {}),
+          attachments: [],
+          media: null,
+          mediaContext: null,
+        },
+
+        /*
+         * ----------------------------------------------------------
+         * WHATSAPP MEDIA
+         * ----------------------------------------------------------
+         */
+
+        whatsapp: {
+          ...(state.whatsapp ?? {}),
+          attachments: [],
+          media: null,
+          mediaContext: null,
+        },
+
+        /*
+         * ----------------------------------------------------------
+         * PERSISTENCE
+         * ----------------------------------------------------------
+         */
+
+        persistence: {
+          ...(state.persistence ?? {}),
+
+          conversation: {
+            ...(state.persistence?.conversation ?? {}),
+            dirty: true,
+            updatedAt: new Date(),
+          },
+
+          order: {
+            ...(state.persistence?.order ?? {}),
+            dirty: true,
+            updatedAt: new Date(),
+          },
+        },
+      };
+
+      this.markPersistenceDirty(nextState);
+
+      console.log("[SalesNode][CANCEL] Active order state cleared.");
+      console.log("[SalesNode][CANCEL] Product state cleared.");
+      console.log("[SalesNode][CANCEL] Selection state cleared.");
+      console.log("[SalesNode][CANCEL] Discovery state cleared.");
+      console.log("[SalesNode][CANCEL] Media state cleared.");
+      console.log("[SalesNode][CANCEL] Returning clean conversation state.");
+
+      return nextState;
+    }
+
+    /*
+     * ============================================================
      * BUILD RUNTIME ORDER
      * ============================================================
+     *
+     * Cancellation has already returned above.
+     *
+     * Therefore this can safely use the existing order for normal
+     * sales processing.
      */
 
     const order = orderManager.buildOrder(
@@ -143,124 +538,21 @@ export default class SalesNode {
 
     /*
      * ============================================================
-     * SALES -> LEAD
-     * ============================================================
-     *
-     * This should only happen after a successful order-form
-     * submission.
-     */
-
-    if (result.completed === true && result.workflow === "LEAD") {
-      console.log("");
-      console.log("========== SALES -> LEAD ==========");
-
-      const nextState = {
-        ...state,
-
-        action,
-
-        assistantMessage:
-          result.message ??
-          "Your order details have been received. Let's get your contact details.",
-
-        liveRequirement: result.liveRequirement ?? order,
-
-        productSales: result.liveRequirement ?? order,
-
-        sales: result,
-
-        response,
-
-        workflow: "LEAD",
-
-        currentStep: "COLLECT_CUSTOMER",
-
-        nextStep: "SUBMIT_LEAD",
-
-        awaitingDecision: true,
-
-        order,
-
-        orderContext: order,
-      };
-
-      this.markPersistenceDirty(nextState);
-
-      /*
-       * LeadAgent now owns customer information.
-       *
-       * SalesNode does NOT collect:
-       *
-       * - name
-       * - email
-       * - phone
-       * - company
-       */
-
-      return await leadAgent.execute(nextState);
-    }
-
-    /*
-     * ============================================================
-     * CANCELLATION DETECTED
-     * ============================================================
-     */
-
-    if (
-      result.metadata?.cancelled === true ||
-      action?.id === "CANCEL_ORDER" ||
-      result.workflow === "NONE"
-    ) {
-      console.log(
-        "[SalesNode] Order cancellation confirmed. Wiping active state.",
-      );
-      const nextState = {
-        ...state,
-        action,
-        selectedProduct: null,
-        assistantMessage:
-          result.message ?? "Your order form has been cancelled.",
-        liveRequirement: null,
-        productSales: null,
-        sales: result,
-        response,
-        workflow: "NONE",
-        currentStep: null,
-        nextStep: null,
-        awaitingDecision: false,
-        order: state.order
-          ? {
-              ...(typeof state.order.toObject === "function"
-                ? state.order.toObject()
-                : state.order),
-              status: "CANCELLED",
-              active: false,
-            }
-          : null,
-        orderContext: null,
-        workflowStack: [],
-        executionPlan: [],
-        currentExecutionIndex: 0,
-      };
-
-      this.markPersistenceDirty(nextState);
-      return nextState;
-    }
-
-    /*
-     * ============================================================
      * ORDER COMPLETED (Customer Collection Finalization)
      * ============================================================
      *
      * SalesBrain returns currentStep="ORDER_COMPLETED" after
      * customer collection + lead creation.
      *
-     * This MUST be handled before the generic sales state
-     * to preserve completed/confirmed/lead fields that
-     * SalesValidator strips.
+     * This MUST be handled before the generic sales state to
+     * preserve completed/confirmed/lead fields that SalesValidator
+     * strips.
      */
 
-    if (result.currentStep === "ORDER_COMPLETED" && result.completed === true) {
+    if (
+      result.currentStep === "ORDER_COMPLETED" &&
+      result.completed === true
+    ) {
       console.log("");
       console.log("========== ORDER COMPLETED ==========");
 
@@ -270,23 +562,38 @@ export default class SalesNode {
         state.customer ??
         null;
 
-      const resolvedLead = result.context?.lead ?? state.lead ?? null;
+      const resolvedLead =
+        result.context?.lead ??
+        state.lead ??
+        null;
 
       const completedOrder = {
-        ...(typeof order?.toObject === "function" ? order.toObject() : order),
+        ...(typeof order?.toObject === "function"
+          ? order.toObject()
+          : order),
+
         ...(result.liveRequirement
           ? {
-              confirmed: result.liveRequirement.confirmed ?? true,
-              completed: true,
-              status: result.liveRequirement.status ?? "CONFIRMED",
-              customer: resolvedCustomer,
-              leadId:
-                result.liveRequirement.leadId ?? resolvedLead?._id ?? null,
-              orderNumber:
-                result.liveRequirement.orderNumber ??
-                order?.orderNumber ??
-                null,
-            }
+            confirmed:
+              result.liveRequirement.confirmed ?? true,
+
+            completed: true,
+
+            status:
+              result.liveRequirement.status ?? "CONFIRMED",
+
+            customer: resolvedCustomer,
+
+            leadId:
+              result.liveRequirement.leadId ??
+              resolvedLead?._id ??
+              null,
+
+            orderNumber:
+              result.liveRequirement.orderNumber ??
+              order?.orderNumber ??
+              null,
+          }
           : {}),
       };
 
@@ -294,13 +601,19 @@ export default class SalesNode {
         result.response ??
         responseBuilder.build({
           workflow: "SALES",
+
           interaction: "MESSAGE",
+
           message:
             result.message ??
             "Thank you! Your order details have been submitted successfully.",
+
           liveRequirement: completedOrder,
+
           completed: true,
+
           metadata: result.metadata ?? {},
+
           currentStep: "ORDER_COMPLETED",
         });
 
@@ -311,9 +624,11 @@ export default class SalesNode {
 
         assistantMessage: result.message ?? "",
 
-        liveRequirement: result.liveRequirement ?? completedOrder,
+        liveRequirement:
+          result.liveRequirement ?? completedOrder,
 
-        productSales: result.liveRequirement ?? completedOrder,
+        productSales:
+          result.liveRequirement ?? completedOrder,
 
         sales: result,
 
@@ -324,9 +639,11 @@ export default class SalesNode {
         metadata: {
           ...(state.metadata ?? {}),
           ...(result.metadata ?? {}),
+
           routing: {
             ...(state.metadata?.routing ?? {}),
             ...(result.metadata?.routing ?? {}),
+
             step: "ORDER_COMPLETED",
           },
         },
@@ -370,10 +687,19 @@ export default class SalesNode {
       order?.items?.[0]?.selection ??
       null;
 
-    const itemObj = (result.liveRequirement ?? order)?.items?.[0] ?? {};
-    const selId = itemObj.selection?.id ?? itemObj.selectedProduct?.id ?? null;
+    const itemObj =
+      (result.liveRequirement ?? order)?.items?.[0] ?? {};
+
+    const selId =
+      itemObj.selection?.id ??
+      itemObj.selectedProduct?.id ??
+      null;
+
     const prodId =
-      itemObj.product?.id ?? itemObj.selectedProduct?.parentProductId ?? null;
+      itemObj.product?.id ??
+      itemObj.selectedProduct?.parentProductId ??
+      null;
+
     console.log(
       `[WhatsApp][State] productId=${prodId || "none"} selectionId=${selId || "none"} currentField=${result.currentStep || "none"}`,
     );
@@ -388,14 +714,16 @@ export default class SalesNode {
     const metadata = {
       ...(state.metadata ?? {}),
       ...(result.metadata ?? {}),
+
       ...(result.currentStep
         ? {
-            routing: {
-              ...(state.metadata?.routing ?? {}),
-              ...(result.metadata?.routing ?? {}),
-              step: result.currentStep,
-            },
-          }
+          routing: {
+            ...(state.metadata?.routing ?? {}),
+            ...(result.metadata?.routing ?? {}),
+
+            step: result.currentStep,
+          },
+        }
         : {}),
     };
 
@@ -410,31 +738,41 @@ export default class SalesNode {
         result.assistantMessage ??
         result.response?.message ??
         (result.message !== state.message &&
-        result.message !== state.userMessage
+          result.message !== state.userMessage
           ? result.message
-          : (result.response?.message ?? "")),
+          : result.response?.message ?? ""),
 
-      liveRequirement: result.liveRequirement ?? order,
+      liveRequirement:
+        result.liveRequirement ?? order,
 
-      productSales: result.liveRequirement ?? order,
+      productSales:
+        result.liveRequirement ?? order,
 
       sales: result,
 
       customer: resolvedCustomer,
 
-      lead: result.lead ?? result.context?.lead ?? state.lead ?? null,
+      lead:
+        result.lead ??
+        result.context?.lead ??
+        state.lead ??
+        null,
 
       metadata,
 
       response,
 
-      workflow: result.workflow ?? "SALES",
+      workflow:
+        result.workflow ?? "SALES",
 
-      currentStep: result.currentStep ?? null,
+      currentStep:
+        result.currentStep ?? null,
 
-      nextStep: result.nextStep ?? null,
+      nextStep:
+        result.nextStep ?? null,
 
-      awaitingDecision: result.awaitingDecision ?? true,
+      awaitingDecision:
+        result.awaitingDecision ?? true,
 
       order,
 
@@ -557,16 +895,16 @@ export default class SalesNode {
           actions: Array.isArray(result.actions)
             ? result.actions
             : [
-                {
-                  id: FORM_SUBMIT_ACTION,
+              {
+                id: FORM_SUBMIT_ACTION,
 
-                  label: "Continue",
+                label: "Continue",
 
-                  payload: {
-                    formId,
-                  },
+                payload: {
+                  formId,
                 },
-              ],
+              },
+            ],
 
           sections: Array.isArray(result.sections) ? result.sections : [],
 
@@ -646,18 +984,18 @@ export default class SalesNode {
      * ORDER FORM SUCCESS
      * ============================================================
      *
+     * The order configuration is complete.
+     *
      * IMPORTANT:
+     * Customer collection does NOT start here.
      *
-     * The order form is now complete.
-     *
-     * Customer information is NOT collected here.
-     *
-     * LeadAgent takes over.
+     * The user must explicitly confirm the completed order.
+     * CONFIRM_ORDER then starts LeadAgent.
      */
 
     console.log("");
     console.log("========== ORDER FORM COMPLETED ==========");
-    console.log("========== SALES -> LEAD AGENT ==========");
+    console.log("========== WAITING FOR CONFIRM_ORDER ==========");
 
     const activeProduct =
       order?.items?.[0]?.selectedProduct ??
@@ -678,71 +1016,60 @@ export default class SalesNode {
 
       assistantMessage:
         result.message ??
-        "Your order details have been received. Let's get your contact details so our sales team can prepare your quotation.",
+        "Your order details are ready. Please confirm the order to continue.",
 
       liveRequirement: order,
-
       productSales: order,
-
       sales: result,
 
       response:
         result.response ??
         responseBuilder.build({
-          workflow: "LEAD",
-
-          interaction: "MESSAGE",
-
+          workflow: "SALES",
+          interaction:
+            Array.isArray(result.actions) &&
+              result.actions.length > 0
+              ? "BUTTONS"
+              : "MESSAGE",
           message:
-            "Your order details have been received. Let's get your contact details so our sales team can prepare your quotation.",
-
-          actions: [],
-
-          sections: [],
-
+            result.message ??
+            "Your order details are ready. Please confirm the order to continue.",
+          actions:
+            Array.isArray(result.actions)
+              ? result.actions
+              : [],
+          sections:
+            Array.isArray(result.sections)
+              ? result.sections
+              : [],
           liveRequirement: order,
-
-          completed: true,
-
+          completed: false,
           metadata: {
             ...(result.metadata ?? {}),
-
-            stage: "COLLECT_CUSTOMER",
-
+            stage: "ORDER_REVIEW",
             source: "ORDER_FORM",
-
-            leadType: "ORDER_REQUEST",
-
-            formId,
           },
-
-          currentStep: "COLLECT_CUSTOMER",
-
-          nextStep: "SUBMIT_LEAD",
-
-          context: {
-            stage: "COLLECT_CUSTOMER",
-
-            order,
-          },
+          currentStep:
+            result.currentStep ??
+            "CONFIRM_ORDER",
+          nextStep: "CONFIRM_ORDER",
+          context: result.context ?? null,
         }),
 
-      workflow: "LEAD",
-
-      currentStep: "COLLECT_CUSTOMER",
-
-      nextStep: "SUBMIT_LEAD",
-
+      workflow: "SALES",
+      currentStep:
+        result.currentStep ??
+        "CONFIRM_ORDER",
+      nextStep: "CONFIRM_ORDER",
       awaitingDecision: true,
 
       order,
-
       orderContext: order,
     };
 
     this.markPersistenceDirty(nextState);
 
-    return await leadAgent.execute(nextState);
+    return nextState;
   }
 
   /*
@@ -837,6 +1164,9 @@ export default class SalesNode {
    */
 
   normalizeAction(action = null, state = {}) {
+    /*
+     * No action
+     */
     if (!action) {
       return null;
     }
@@ -845,10 +1175,24 @@ export default class SalesNode {
      * ============================================================
      * OBJECT ACTION
      * ============================================================
+     *
+     * Canonical:
+     *
+     * {
+     *   id: "SUBMIT_ORDER_FORM",
+     *   payload: {
+     *     formId: "...",
+     *     values: {}
+     *   }
+     * }
      */
 
-    if (typeof action === "object" && action.id) {
-      const payload = action.payload ?? {};
+    if (
+      typeof action === "object" &&
+      action.id
+    ) {
+      const payload =
+        action.payload ?? {};
 
       return {
         ...action,
@@ -882,20 +1226,29 @@ export default class SalesNode {
      * STRING ACTION
      * ============================================================
      *
-     * This is supported ONLY if the API already copied
-     * formId/values into graph state.
+     * Supports APIs that send:
+     *
+     * action: "SUBMIT_ORDER_FORM"
      */
 
-    if (typeof action === "string") {
+    if (
+      typeof action === "string"
+    ) {
       return {
         id: action,
 
         label: null,
 
         payload: {
-          formId: state.formId ?? state.form?.id ?? null,
+          formId:
+            state.formId ??
+            state.form?.id ??
+            null,
 
-          values: state.values ?? state.formValues ?? {},
+          values:
+            state.values ??
+            state.formValues ??
+            {},
         },
       };
     }

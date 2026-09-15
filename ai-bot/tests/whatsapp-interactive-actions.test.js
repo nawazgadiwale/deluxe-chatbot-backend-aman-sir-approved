@@ -21,16 +21,14 @@ async function runInteractiveTests() {
   console.log("🧪 RUNNING WHATSAPP INTERACTIVE ACTIONS TEST SUITE");
   console.log("=================================================\n");
 
-  const testAccessToken = "test_meta_token_interactive_123";
-  const testAppSecret = "test_meta_app_secret_interactive";
-  const phoneNumberId = "phone_id_interactive_1";
+  const testWhapiToken = "test_whapi_token_interactive_123";
+  const testWebhookSecret = "test_whapi_webhook_secret_interactive";
   const botNumber = "9513166750";
   const customerNumber = "8310412768";
   const otherNumber = "9876543210";
 
-  process.env.WHATSAPP_ACCESS_TOKEN = testAccessToken;
-  process.env.WHATSAPP_APP_SECRET = testAppSecret;
-  process.env.WHATSAPP_PHONE_NUMBER_ID = phoneNumberId;
+  process.env.WHAPI_TOKEN = testWhapiToken;
+  process.env.WHAPI_WEBHOOK_SECRET = testWebhookSecret;
   process.env.WHATSAPP_BOT_NUMBER = botNumber;
 
   const responseAdapter = new WhatsAppResponseAdapter();
@@ -88,7 +86,7 @@ async function runInteractiveTests() {
   // ============================================================
   console.log("Test 2: Button selection parsed back into structured SELECT_SELECTION action");
   const inboundButtonPayload = {
-    id: "btn_click_001",
+    id: "whapi_btn_click_001",
     from: customerNumber,
     type: "interactive",
     interactive: {
@@ -114,7 +112,7 @@ async function runInteractiveTests() {
   // ============================================================
   console.log("Test 3: List selection parsed back into structured SELECT_SELECTION action");
   const inboundListPayload = {
-    id: "list_click_001",
+    id: "whapi_list_click_001",
     from: customerNumber,
     type: "interactive",
     interactive: {
@@ -225,10 +223,7 @@ async function runInteractiveTests() {
       };
     },
   };
-  const mockApi = new WhatsAppApiService({
-    accessToken: testAccessToken,
-    phoneNumberId,
-  });
+  const mockApi = new WhatsAppApiService({ whapiToken: testWhapiToken });
   mockApi.sendMessage = async () => {
     mockOutboundCount++;
     return { messages: [{ id: "out_msg_ok" }] };
@@ -243,33 +238,19 @@ async function runInteractiveTests() {
     null,
     mockAi,
   );
+  dupTestService.whapiToken = testWhapiToken;
 
   const dupMsgPayload = {
-    object: "whatsapp_business_account",
-    entry: [
+    messages: [
       {
-        id: "waba_interactive_test",
-        changes: [
-          {
-            field: "messages",
-            value: {
-              messaging_product: "whatsapp",
-              metadata: { phone_number_id: phoneNumberId },
-              contacts: [{ wa_id: customerNumber, profile: { name: "Test User" } }],
-              messages: [
-                {
-                  id: "msg_dup_unique_123",
-                  from: customerNumber,
-                  timestamp: String(Math.floor(Date.now() / 1000)),
-                  type: "text",
-                  text: { body: "Testing duplicates" },
-                },
-              ],
-            },
-          },
-        ],
+        id: "msg_dup_unique_123",
+        from: `${customerNumber}@s.whatsapp.net`,
+        from_me: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        text: { body: "Testing duplicates" },
       },
     ],
+    channel_id: botNumber,
   };
 
   // 1st delivery
@@ -284,30 +265,28 @@ async function runInteractiveTests() {
   console.log("✅ Test 9 passed: Duplicate inbound message ID ignored\n");
 
   // ============================================================
-  // Test 10: Invalid HMAC signature is rejected
+  // Test 10: Invalid webhook secret is rejected
   // ============================================================
-  console.log("Test 10: Invalid HMAC signature is rejected");
+  console.log("Test 10: Invalid webhook secret is rejected");
   const webhookHandler = new WhatsAppWebhookHandler(dupTestService);
   const invalidSecretRes = await webhookHandler.handle({
-    headers: { "x-hub-signature-256": "sha256=wrong_secret_value" },
+    headers: { "whapi-secret": "wrong_secret_value" },
     body: dupMsgPayload,
-    rawBody: Buffer.from(JSON.stringify(dupMsgPayload)),
   });
   assert.equal(invalidSecretRes.status, 403);
-  assert.equal(invalidSecretRes.body, "Invalid signature");
-  console.log("✅ Test 10 passed: Invalid HMAC signature rejected with 403\n");
+  assert.equal(invalidSecretRes.body, "Invalid Whapi authentication");
+  console.log("✅ Test 10 passed: Invalid webhook secret rejected with 403\n");
 
   // ============================================================
-  // Test 11: Missing HMAC signature fails closed
+  // Test 11: Missing webhook secret fails closed
   // ============================================================
-  console.log("Test 11: Missing HMAC signature fails closed");
+  console.log("Test 11: Missing webhook secret fails closed");
   const missingSecretRes = await webhookHandler.handle({
     headers: {},
     body: dupMsgPayload,
-    rawBody: Buffer.from(JSON.stringify(dupMsgPayload)),
   });
   assert.equal(missingSecretRes.status, 403);
-  console.log("✅ Test 11 passed: Missing signature header rejected with 403\n");
+  console.log("✅ Test 11 passed: Missing secret header rejected with 403\n");
 
   // ============================================================
   // Test 12 & 13: Invalid webhook does not invoke AI or send outbound
@@ -316,9 +295,8 @@ async function runInteractiveTests() {
   const prevAiCount = mockAiCallCount;
   const prevOutboundCount = mockOutboundCount;
   await webhookHandler.handle({
-    headers: { "x-hub-signature-256": "sha256=invalid" },
+    headers: { "whapi-secret": "invalid" },
     body: dupMsgPayload,
-    rawBody: Buffer.from(JSON.stringify(dupMsgPayload)),
   });
   assert.equal(mockAiCallCount, prevAiCount);
   assert.equal(mockOutboundCount, prevOutboundCount);
@@ -335,29 +313,13 @@ async function runInteractiveTests() {
   };
 
   await dupTestService.handleWebhook({
-    object: "whatsapp_business_account",
-    entry: [
+    messages: [
       {
-        id: "waba_interactive_test",
-        changes: [
-          {
-            field: "messages",
-            value: {
-              messaging_product: "whatsapp",
-              metadata: { phone_number_id: phoneNumberId },
-              contacts: [{ wa_id: customerNumber, profile: { name: "Test User" } }],
-              messages: [
-                {
-                  id: "msg_auth_context_001",
-                  from: customerNumber,
-                  timestamp: String(Math.floor(Date.now() / 1000)),
-                  type: "text",
-                  text: { body: "I am customer 8310412768" },
-                },
-              ],
-            },
-          },
-        ],
+        id: "msg_auth_context_001",
+        from: `${customerNumber}@s.whatsapp.net`,
+        from_me: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        text: { body: "I am customer 8310412768" },
       },
     ],
   });

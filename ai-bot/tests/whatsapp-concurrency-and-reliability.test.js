@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 import AIService from "../../services/AIService.js";
 import WhatsAppService from "../modules/whatsapp/WhatsAppService.js";
 import OrderRepository from "../repositories/OrderRequestRepository.js";
-import MetaProviderAdapter from "../modules/whatsapp/providers/MetaProviderAdapter.js";
+import WhatsAppProviderFactory from "../modules/whatsapp/providers/WhatsAppProviderFactory.js";
 
 // Ensure environment variables for outbound policy checks in test
+process.env.WHAPI_TOKEN = "test-whapi-token-valid-12345";
 process.env.WHATSAPP_PHONE_NUMBER_ID = "phone_12345";
 process.env.WHATSAPP_ACCESS_TOKEN = "test-meta-token-valid-12345";
 
@@ -149,9 +150,9 @@ describe("Production Concurrency, Isolation & Reliability Suite", () => {
     assert.equal(executionLog[1].step, 2);
     assert.equal(executionLog[2].step, 3);
 
-    // res1 entered ORDER_FORM / COLLECT_PRODUCT_FIELD
+    // res1 entered ordering flow
     assert.equal(res1.workflow, "SALES");
-    assert.ok(res1.currentStep === "ORDER_FORM" || res1.currentStep === "COLLECT_PRODUCT_FIELD");
+    assert.ok(res1.currentStep === "COLLECT_PRODUCT_FIELD" || res1.currentStep === "ORDER_FORM");
 
     // res2 cancelled order and wiped active workflow
     assert.ok(res2.workflow === "NONE" || res2.workflow === null);
@@ -212,7 +213,7 @@ describe("Production Concurrency, Isolation & Reliability Suite", () => {
       messageId: duplicateMessageId,
       customerWaId: "8310412768",
       text: "Hello there",
-      provider: "meta",
+      provider: "whapi",
     };
 
     // Dispatch event twice concurrently
@@ -300,15 +301,15 @@ describe("Production Concurrency, Isolation & Reliability Suite", () => {
   });
 
   // =========================================================================
-  // TEST 6: Meta provider adapter initializes properly
+  // TEST 6: Meta and Whapi provider adapters include AbortSignal timeout
   // =========================================================================
-  it("TEST 6: Meta provider adapter initializes properly", () => {
-    const metaProvider = new MetaProviderAdapter({
-      accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-    });
+  it("TEST 6: Meta and Whapi providers configure AbortSignal timeout on HTTP calls", () => {
+    const metaProvider = WhatsAppProviderFactory.getProvider("meta");
+    const whapiProvider = WhatsAppProviderFactory.getProvider("whapi");
 
     assert.ok(metaProvider);
+    assert.ok(whapiProvider);
     assert.equal(metaProvider.name, "meta");
+    assert.equal(whapiProvider.name, "whapi");
   });
 });

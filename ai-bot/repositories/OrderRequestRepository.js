@@ -5,8 +5,8 @@ export default class OrderRepository {
   isConnected() {
     return Boolean(
       mongoose.connection &&
-        (mongoose.connection.readyState === 1 ||
-          mongoose.connection.readyState === 2),
+      (mongoose.connection.readyState === 1 ||
+        mongoose.connection.readyState === 2),
     );
   }
 
@@ -85,7 +85,6 @@ export default class OrderRepository {
 
     return OrderModel.findOne({
       sessionId,
-
       status: {
         $nin: ["CONFIRMED", "CANCELLED", "DELETED"],
       },
@@ -93,7 +92,6 @@ export default class OrderRepository {
       createdAt: -1,
     });
   }
-
   /*
    * =====================================================
    * CONVERSATION ORDER
@@ -257,19 +255,37 @@ export default class OrderRepository {
    * =====================================================
    */
 
-  async attachLeadAndCustomer(orderId, leadId = null, customer = {}) {
+  async attachLeadAndCustomer(
+    orderId,
+    leadId = null,
+    customer = {},
+  ) {
     if (!orderId || !this.isConnected()) {
       return null;
     }
 
     const updates = {
-      customer,
-
       updatedAt: new Date(),
     };
 
     if (leadId) {
       updates.leadId = leadId;
+    }
+
+    if (customer.name != null) {
+      updates["customer.name"] = customer.name;
+    }
+
+    if (customer.company != null) {
+      updates["customer.company"] = customer.company;
+    }
+
+    if (customer.phone != null) {
+      updates["customer.phone"] = customer.phone;
+    }
+
+    if (customer.email != null) {
+      updates["customer.email"] = customer.email;
     }
 
     return OrderModel.findByIdAndUpdate(
@@ -346,68 +362,109 @@ export default class OrderRepository {
    * =====================================================
    */
 
+  /*
+  * =====================================================
+  * SAVE DRAFT ORDER
+  * =====================================================
+  *
+  * Rules:
+  * - Existing order -> update by _id only.
+  * - New order -> create a new document.
+  * - sessionId is NOT an order identity.
+  * - Same customer/session may have multiple orders.
+  */
   async saveDraft(sessionId, conversationId, order = {}) {
     if (!sessionId || !order || !this.isConnected()) {
       return null;
     }
 
-    const isConfirming = order.status === "CONFIRMED" || order.confirmed === true;
-    if (!isConfirming) {
-      // Guard against stale draft overwriting an already CONFIRMED order
-      const existing = await OrderModel.findOne({ sessionId, status: "CONFIRMED" });
-      if (existing) {
-        return existing;
+    const now = new Date();
+
+    /*
+     * =====================================================
+     * EXISTING ORDER
+     * =====================================================
+     */
+
+    let leadId = order.leadId;
+    if (leadId) {
+      try {
+        if (leadId?.buffer) {
+          leadId = new mongoose.Types.ObjectId(leadId.buffer);
+        } else if (typeof leadId === "string" && mongoose.Types.ObjectId.isValid(leadId)) {
+          leadId = new mongoose.Types.ObjectId(leadId);
+        } else if (leadId?._id && mongoose.Types.ObjectId.isValid(String(leadId._id))) {
+          leadId = new mongoose.Types.ObjectId(String(leadId._id));
+        }
+      } catch (e) {
+        // keep fallback
       }
     }
 
-    const update = {
-      conversationId,
+    if (order._id) {
+      let orderId = order._id;
+      try {
+        if (orderId?.buffer) {
+          orderId = new mongoose.Types.ObjectId(orderId.buffer);
+        } else if (typeof orderId === "string" && mongoose.Types.ObjectId.isValid(orderId)) {
+          orderId = new mongoose.Types.ObjectId(orderId);
+        } else if (orderId?._id && mongoose.Types.ObjectId.isValid(String(orderId._id))) {
+          orderId = new mongoose.Types.ObjectId(String(orderId._id));
+        }
+      } catch (e) {
+        // keep fallback
+      }
 
-      status: order.status,
-
-      confirmed: order.confirmed,
-
-      customer: order.customer,
-
-      delivery: order.delivery,
-
-      pricing: order.pricing,
-
-      items: order.items,
-
-      totalItems: order.totalItems,
-
-      totalQuantity: order.totalQuantity,
-
-      notes: order.notes,
-
-      leadId: order.leadId,
-
-      orderNumber: order.orderNumber,
-
-      updatedAt: new Date(),
-    };
-
-    const doc = await OrderModel.findOneAndUpdate(
-      {
-        sessionId,
-      },
-      {
-        $set: update,
-
-        $setOnInsert: {
-          sessionId,
+      return OrderModel.findByIdAndUpdate(
+        orderId,
+        {
+          $set: {
+            conversationId,
+            status: order.status,
+            confirmed: order.confirmed,
+            customer: order.customer,
+            delivery: order.delivery,
+            pricing: order.pricing,
+            items: order.items,
+            totalItems: order.totalItems,
+            totalQuantity: order.totalQuantity,
+            notes: order.notes,
+            leadId,
+            orderNumber: order.orderNumber,
+            updatedAt: now,
+          },
         },
-      },
-      {
-        upsert: true,
+        {
+          returnDocument: "after",
+          runValidators: true,
+        },
+      );
+    }
 
-        returnDocument: "after",
-
-        runValidators: true,
-      },
-    );
-
-    return doc;
+    /*
+     * =====================================================
+     * NEW ORDER
+     * =====================================================
+     *
+     * No _id means this is a genuinely new order.
+     * Never search by phone/session and overwrite an old order.
+     */
+    return OrderModel.create({
+      sessionId,
+      conversationId,
+      status: order.status ?? "DRAFT",
+      confirmed: order.confirmed ?? false,
+      customer: order.customer ?? null,
+      delivery: order.delivery ?? null,
+      pricing: order.pricing ?? null,
+      items: order.items ?? [],
+      totalItems: order.totalItems ?? 0,
+      totalQuantity: order.totalQuantity ?? 0,
+      notes: order.notes ?? [],
+      leadId: leadId ?? null,
+      orderNumber: order.orderNumber ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 }

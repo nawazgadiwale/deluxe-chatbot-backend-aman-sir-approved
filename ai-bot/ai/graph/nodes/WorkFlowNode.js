@@ -2,19 +2,74 @@ import WorkflowPlanner from "../../../modules/workflow/WorkflowPlanner.js";
 
 const planner = new WorkflowPlanner();
 
+const CANCELLATION_REGEX =
+  /^(cancel|cancel order|cancelled|canceling|i want to cancel|please cancel|cancel please|stop|restart|start over|start again|reset|quit|exit|nevermind|i don't want this anymore|i dont want this anymore)$/i;
+
 export default class WorkflowNode {
-  async execute(state) {
+  async execute(state = {}) {
     console.log("WorkflowNode");
 
     console.log({
       capability: state.capability,
       workflow: state.workflow,
       step: state.currentStep,
+      action: state.action?.id ?? null,
     });
 
     /*
      * =====================================================
-     * Workflow Transition
+     * GLOBAL CANCELLATION
+     * =====================================================
+     */
+
+    const isCancellation =
+      state.action?.id === "CANCEL_ORDER" ||
+      state.routing?.action?.id === "CANCEL_ORDER" ||
+      CANCELLATION_REGEX.test(
+        String(state.userMessage ?? "").trim(),
+      );
+
+    if (isCancellation) {
+      console.log(
+        "[WorkflowNode] Cancellation detected. Routing directly to SalesNode.",
+      );
+
+      state.action = {
+        id: "CANCEL_ORDER",
+        type: "CANCEL_ORDER",
+        label: "Cancel Order",
+        payload: {
+          text: state.userMessage ?? "",
+        },
+      };
+
+      state.workflow = "SALES";
+
+      /*
+       * SalesNode owns the actual cancellation/reset.
+       * WorkflowNode only guarantees that CANCEL_ORDER
+       * reaches SalesNode without creating/restoring
+       * transient workflow state.
+       */
+      state.transientExecution = null;
+
+      state.executionPlan = [
+        {
+          capability: "sales",
+          node: "SalesNode",
+          persistent: true,
+          workflow: "SALES",
+        },
+      ];
+
+      state.currentExecutionIndex = 0;
+
+      return state;
+    }
+
+    /*
+     * =====================================================
+     * WORKFLOW TRANSITION
      * =====================================================
      */
 
@@ -41,17 +96,20 @@ export default class WorkflowNode {
 
     /*
      * =====================================================
-     * Continue Existing Workflow
+     * CONTINUE EXISTING WORKFLOW
      * =====================================================
      */
 
-    if (state.routing?.source === "WORKFLOW" && state.executionPlan?.length) {
+    if (
+      state.routing?.source === "WORKFLOW" &&
+      state.executionPlan?.length
+    ) {
       return state;
     }
 
     /*
      * =====================================================
-     * Resume / Cancel
+     * RESUME / CANCEL WORKFLOW
      * =====================================================
      */
 
@@ -64,17 +122,19 @@ export default class WorkflowNode {
 
     /*
      * =====================================================
-     * Resolve Capability
+     * RESOLVE CAPABILITY
      * =====================================================
      */
 
-    const capability = state.capability ?? state.capabilities?.[0];
+    const capability =
+      state.capability ??
+      state.capabilities?.[0];
 
     const plan = planner.plan(capability);
 
     /*
      * =====================================================
-     * Workflow Not Found
+     * WORKFLOW NOT FOUND
      * =====================================================
      */
 
@@ -90,7 +150,7 @@ export default class WorkflowNode {
 
     /*
      * =====================================================
-     * Build Execution Plan & Track Transient Execution
+     * BUILD EXECUTION PLAN
      * =====================================================
      */
 
@@ -100,13 +160,45 @@ export default class WorkflowNode {
       state.transientExecution = {
         active: true,
         capability,
-        persistentWorkflow: state.workflow,
-        persistentStep: state.currentStep,
-        persistentOrder: state.order,
-        persistentSelectedProduct: state.selectedProduct,
-        persistentLiveRequirement: state.liveRequirement,
-        persistentProductSales: state.productSales,
-        persistentAwaitingDecision: state.awaitingDecision,
+
+        persistentWorkflow:
+          state.workflow ?? null,
+
+        persistentStep:
+          state.currentStep ?? null,
+
+        persistentOrder:
+          state.order ?? null,
+
+        persistentOrderContext:
+          state.orderContext ?? null,
+
+        persistentSelectedProduct:
+          state.selectedProduct ?? null,
+
+        persistentSelectedProductId:
+          state.selectedProductId ?? null,
+
+        persistentProduct:
+          state.product ?? null,
+
+        persistentProductId:
+          state.productId ?? null,
+
+        persistentSelection:
+          state.selection ?? null,
+
+        persistentSelectionId:
+          state.selectionId ?? null,
+
+        persistentLiveRequirement:
+          state.liveRequirement ?? null,
+
+        persistentProductSales:
+          state.productSales ?? null,
+
+        persistentAwaitingDecision:
+          state.awaitingDecision ?? false,
       };
     } else {
       state.transientExecution = null;

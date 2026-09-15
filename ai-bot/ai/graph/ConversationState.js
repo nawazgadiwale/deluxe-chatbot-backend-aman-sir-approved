@@ -208,6 +208,54 @@ const ConversationState = Annotation.Root({
   comparisonProducts: Annotation({
     default: () => [],
   }),
+
+  customerCollection: Annotation({
+    default: () => null,
+  }),
+
+  productSales: Annotation({
+    default: () => null,
+  }),
+
+  lead: Annotation({
+    default: () => null,
+  }),
+
+  nextStep: Annotation({
+    default: () => null,
+  }),
+
+  completed: Annotation({
+    default: () => false,
+  }),
+
+  confirmed: Annotation({
+    default: () => false,
+  }),
+
+  leadSubmission: Annotation({
+    default: () => false,
+  }),
+
+  channel: Annotation({
+    default: () => "WEB",
+  }),
+
+  whatsapp: Annotation({
+    default: () => null,
+  }),
+
+  transientExecution: Annotation({
+    default: () => null,
+  }),
+
+  requestType: Annotation({
+    default: () => null,
+  }),
+
+  leadContext: Annotation({
+    default: () => null,
+  }),
 });
 
 export default ConversationState;

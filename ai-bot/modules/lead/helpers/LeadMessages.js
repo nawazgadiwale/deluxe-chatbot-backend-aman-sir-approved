@@ -13,6 +13,9 @@ const LeadMessages = {
 
   WHATSAPP_FORM_ERROR:
     "I couldn't process the form submission. Please try again.",
+
+  WHATSAPP_FLOW_UNAVAILABLE:
+    "The customer information form is currently unavailable. Please try again later.",
 };
 
 export default LeadMessages;

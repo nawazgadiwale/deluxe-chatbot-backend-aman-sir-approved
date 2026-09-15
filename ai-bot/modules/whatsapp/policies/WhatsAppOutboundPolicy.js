@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 export const OutboundBlockReasons = Object.freeze({
   WHATSAPP_INBOUND_TRIGGER_REQUIRED: "WHATSAPP_INBOUND_TRIGGER_REQUIRED",
   CUSTOMER_SERVICE_WINDOW_EXPIRED: "CUSTOMER_SERVICE_WINDOW_EXPIRED",
@@ -6,6 +8,7 @@ export const OutboundBlockReasons = Object.freeze({
   INVALID_INBOUND_MESSAGE: "INVALID_INBOUND_MESSAGE",
   DUPLICATE_INBOUND_MESSAGE: "DUPLICATE_INBOUND_MESSAGE",
   INVALID_WEBHOOK_SIGNATURE: "INVALID_WEBHOOK_SIGNATURE",
+  INVALID_FLOW_CONTEXT: "INVALID_FLOW_CONTEXT",
   INVALID_ACTION: "INVALID_ACTION",
   INVALID_PAYLOAD: "INVALID_PAYLOAD",
   WHATSAPP_CONFIGURATION_MISSING: "WHATSAPP_CONFIGURATION_MISSING",
@@ -14,9 +17,9 @@ export const OutboundBlockReasons = Object.freeze({
 /**
  * WhatsAppOutboundPolicy
  *
- * Deterministic Outbound Authorization Policy for Meta WhatsApp Business Cloud API.
+ * Deterministic Outbound Authorization Policy.
  * Enforces strict inbound-only response rules, recipient identity binding,
- * 24-hour customer service window, payload validity, and Meta API credentials.
+ * 24-hour customer service window, payload validity, and credentials.
  *
  * The LLM is NEVER the source of truth for outbound send authorization.
  */
@@ -92,55 +95,100 @@ export default class WhatsAppOutboundPolicy {
       return this.block(OutboundBlockReasons.DUPLICATE_INBOUND_MESSAGE);
     }
 
-    // 7. Outbound Payload Validity
+    // 7. Flow context validation if applicable
+    if (inboundTriggerContext.isFlowSubmission && inboundTriggerContext.flowValid === false) {
+      return this.block(OutboundBlockReasons.INVALID_FLOW_CONTEXT);
+    }
+
+    // 8. Outbound Payload Validity
     if (!message || typeof message !== "object" || !message.type) {
       return this.block(OutboundBlockReasons.INVALID_PAYLOAD);
     }
 
-    // 8. 24-Hour Customer Service Window Guard (Meta Cloud API Policy)
+    // 9. 24-Hour Customer Service Window Guard (Provider Specific)
+    // =====================================================
+    // TEMPORARY WHAPI TEST MODE:
+    // Meta Graph API strictly enforces a 24-hour customer service window.
+    // Whapi does not enforce Meta's Graph API 24h window restriction.
+    // For Whapi provider mode, bypass Meta-specific 24h window expiration check
+    // while retaining mandatory inbound trigger and recipient identity verification.
+    // For Meta provider mode, strictly enforce the 24h customer service window.
+    // =====================================================
+    const whapiToken = credentials.whapiToken || process.env.WHAPI_TOKEN;
+    const isWhapiMode =
+      inboundTriggerContext.provider === "whapi" ||
+      (inboundTriggerContext.provider !== "meta" && Boolean(whapiToken));
+
     const effectiveInboundTimestamp =
       lastUserMessageAt ??
       inboundTriggerContext.inboundReceivedAt ??
       (this.windowPolicy ? this.windowPolicy.getLastUserMessageAt(inboundCustomerWaId) : null);
 
-    if (!effectiveInboundTimestamp) {
-      return this.block(OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED);
-    }
-
     let windowExpiresAt = null;
     let remainingMs = 86400000;
 
-    if (this.windowPolicy) {
-      const windowCheck = this.windowPolicy.checkOutboundEligibility({
-        lastUserMessageAt: effectiveInboundTimestamp,
-        now,
-      });
-
-      if (!windowCheck.allowed) {
-        return this.block(
-          OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED,
-          windowCheck.remainingMs,
-          windowCheck.windowExpiresAt,
-        );
+    if (isWhapiMode) {
+      // Whapi Mode: Require verified inbound trigger context
+      if (!effectiveInboundTimestamp && !inboundTriggerContext.inboundMessageId) {
+        return this.block(OutboundBlockReasons.WHATSAPP_INBOUND_TRIGGER_REQUIRED);
       }
-      remainingMs = windowCheck.remainingMs;
-      windowExpiresAt = windowCheck.windowExpiresAt;
+      windowExpiresAt = effectiveInboundTimestamp
+        ? Number(effectiveInboundTimestamp) + 24 * 60 * 60 * 1000
+        : null;
+      remainingMs = 86400000;
     } else {
-      const windowDurationMs = 24 * 60 * 60 * 1000;
-      windowExpiresAt = Number(effectiveInboundTimestamp) + windowDurationMs;
-      if (now >= windowExpiresAt) {
-        return this.block(OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED, 0, windowExpiresAt);
+      // META PROVIDER: Strictly enforce Meta 24-hour Customer Service Window
+      if (!effectiveInboundTimestamp) {
+        return this.block(OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED);
       }
-      remainingMs = Math.max(0, windowExpiresAt - now);
+
+      if (this.windowPolicy) {
+        const windowCheck = this.windowPolicy.checkOutboundEligibility({
+          lastUserMessageAt: effectiveInboundTimestamp,
+          now,
+        });
+
+        if (!windowCheck.allowed) {
+          return this.block(
+            OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED,
+            windowCheck.remainingMs,
+            windowCheck.windowExpiresAt
+          );
+        }
+        remainingMs = windowCheck.remainingMs;
+        windowExpiresAt = windowCheck.windowExpiresAt;
+      } else {
+        // Fallback calculation: 24 hours
+        const windowDurationMs = 24 * 60 * 60 * 1000;
+        windowExpiresAt = Number(effectiveInboundTimestamp) + windowDurationMs;
+        if (now >= windowExpiresAt) {
+          return this.block(OutboundBlockReasons.CUSTOMER_SERVICE_WINDOW_EXPIRED, 0, windowExpiresAt);
+        }
+        remainingMs = Math.max(0, windowExpiresAt - now);
+      }
     }
 
-    // 9. Meta API Credentials Configuration
-    const token =
-      credentials.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneId =
-      credentials.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
-    if (!token || !phoneId) {
-      return this.block(OutboundBlockReasons.WHATSAPP_CONFIGURATION_MISSING);
+    // 10. Credentials Configuration
+    // =====================================================
+    // TEMPORARY WHAPI TEST MODE
+    // =====================================================
+    if (isWhapiMode) {
+      if (!whapiToken) {
+        return this.block(OutboundBlockReasons.WHATSAPP_CONFIGURATION_MISSING);
+      }
+    } else {
+      // =====================================================
+      // ORIGINAL META IMPLEMENTATION
+      // Original Meta implementation intentionally retained below.
+      // Restore Meta provider when Whapi testing is complete.
+      // =====================================================
+      const token =
+        credentials.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneId =
+        credentials.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+      if (!token || !phoneId) {
+        return this.block(OutboundBlockReasons.WHATSAPP_CONFIGURATION_MISSING);
+      }
     }
 
     return {

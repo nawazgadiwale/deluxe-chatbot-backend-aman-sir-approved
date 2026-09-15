@@ -426,11 +426,11 @@ async function runTests() {
     salesRes = await salesBrain.execute(salesState);
   }
 
-  if (salesRes.currentStep === "WAITING_FOR_ARTWORK") {
+  if (salesRes.currentStep === "WAITING_FOR_ARTWORK" || salesRes.currentStep === "ARTWORK") {
     // 8.5 Upload Artwork
     salesState = {
       channel: "WHATSAPP",
-      currentStep: "WAITING_FOR_ARTWORK",
+      currentStep: salesRes.currentStep,
       liveRequirement: salesRes.liveRequirement,
       attachments: [
         {
@@ -442,11 +442,19 @@ async function runTests() {
       ],
     };
     salesRes = await salesBrain.execute(salesState);
-    assert.equal(salesRes.currentStep, "COLLECT_CUSTOMER");
-    assert.equal(salesRes.workflow, "LEAD");
-  } else {
-    assert.ok(["ORDER_REVIEW", "REVIEW_ORDER", "SELECT_ADDONS"].includes(salesRes.currentStep));
+    if (salesRes.currentStep === "SELECT_ADDONS") {
+      salesState = {
+        channel: "WHATSAPP",
+        liveRequirement: salesRes.liveRequirement,
+        action: {
+          id: "NEXT_STEP",
+          payload: { step: "addons" },
+        },
+      };
+      salesRes = await salesBrain.execute(salesState);
+    }
   }
+  assert.ok(["ORDER_REVIEW", "REVIEW_ORDER", "SELECT_ADDONS"].includes(salesRes.currentStep));
 
   // 8.6 Review step formatted with LeadAgent
   const leadAgent = new LeadAgent();
@@ -470,6 +478,7 @@ async function runTests() {
   const confirmState = {
     channel: "WHATSAPP",
     currentStep: "ORDER_REVIEW",
+    customer: leadState.customer,
     liveRequirement: salesRes.liveRequirement,
     action: { id: "CONFIRM_ORDER", payload: {} },
   };

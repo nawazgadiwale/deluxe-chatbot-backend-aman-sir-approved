@@ -1,3 +1,5 @@
+import WhatsAppFlowTokenService from "./WhatsappFlowTokenService.js";
+import WhatsAppFlowBuilder from "./flows/WhatsAppFlowBuilder.js";
 import WhatsappActionCodec from "./WhatsappActionCodec.js";
 import OrderManager from "../sales/services/OrderManager.js";
 import PricingService from "../sales/services/PricingService.js";
@@ -14,10 +16,12 @@ import {
 export { normalizeImageUrl, resolveCatalogImage };
 
 export const BRAND_GREETING_LOGO_URL =
-  "https://www.exprintmart.com/_next/static/media/exprint_logo.41b1dc5b.svg";
+  "https://www.dlxprint.com/images/dlxprint.svg";
 
 export default class WhatsAppResponseAdapter {
   constructor() {
+    this.flowTokenService = new WhatsAppFlowTokenService();
+    this.flowBuilder = new WhatsAppFlowBuilder(this.flowTokenService);
     this.orderManager = new OrderManager();
     this.pricingService = new PricingService();
     this.catalogService = new SalesCatalogService();
@@ -28,18 +32,51 @@ export default class WhatsAppResponseAdapter {
   // =====================================================
 
   toWhatsAppMessages(result = {}) {
+    const isCancelled =
+      result?.metadata?.cancelled === true ||
+      result?.response?.metadata?.cancelled === true ||
+      result?.metadata?.stage === "CANCELLED" ||
+      result?.response?.metadata?.stage === "CANCELLED" ||
+      result?.action?.id === "CANCEL_ORDER" ||
+      result?.response?.action?.id === "CANCEL_ORDER";
+
+    if (isCancelled) {
+      console.log("[CANCEL][OUTBOUND][RESET] Sending text only.");
+
+      const message =
+        result?.message ||
+        result?.response?.message ||
+        "Sure, your current order has been cancelled. What would you like to print?";
+
+      return [
+        {
+          type: "text",
+          text: {
+            preview_url: false,
+            body: message,
+          },
+        },
+      ];
+    }
+
     const messages = [];
 
-    // 1. Order Form (interactive controls)
+    // 1. Order Form (Flow or interactive controls)
     if (this.isOrderForm(result)) {
+      const flow = this.buildOrderFlow(result);
+      if (flow) return [flow];
+
       const interactiveForm = this.buildInteractiveOrderForm(result);
       if (interactiveForm && interactiveForm.length > 0) {
         return interactiveForm;
       }
     }
 
-    // 2. Lead Form (interactive controls)
+    // 2. Lead Form (Flow or interactive controls)
     if (this.isLeadForm(result)) {
+      const flow = this.buildLeadFlow(result);
+      if (flow) return [flow];
+
       const interactiveLead = this.buildInteractiveLeadForm(result);
       if (interactiveLead && interactiveLead.length > 0) {
         return interactiveLead;
@@ -51,9 +88,40 @@ export default class WhatsAppResponseAdapter {
     const formattedMessage = this.formatWhatsAppText(rawMessage);
     const actions = this.extractActions(result);
     const isGreetingMsg = this.isGreeting(result);
-    const imageUrl = isGreetingMsg
-      ? BRAND_GREETING_LOGO_URL
-      : this.extractProductImage(result);
+
+    const isOrderActive =
+      result?.order?.items?.[0]?.orderStarted === true ||
+      result?.liveRequirement?.items?.[0]?.orderStarted === true ||
+      result?.orderStarted === true ||
+      result?.response?.context?.orderStarted === true ||
+      [
+        "COLLECT_PRODUCT_FIELD",
+        "COLLECT_REQUIREMENT",
+        "SELECT_ADDONS",
+        "SELECT_DELIVERY_METHOD",
+        "DELIVERY_ADDRESS",
+        "DELIVERY_DATE",
+        "ARTWORK",
+        "ORDER_REVIEW",
+        "CONFIRM_ORDER",
+        "COLLECT_NAME",
+        "COLLECT_EMAIL",
+        "COLLECT_COMPANY",
+        "ORDER_COMPLETED",
+      ].includes(result?.currentStep ?? result?.response?.currentStep);
+
+    const isOrderFlow =
+      isOrderActive ||
+      result?.workflow === "LEAD" ||
+      result?.response?.workflow === "LEAD" ||
+      result?.currentStep === "ERROR" ||
+      result?.response?.currentStep === "ERROR";
+
+    const canSendImage = !isOrderFlow && !isCancelled;
+
+    const imageUrl = canSendImage
+      ? (isGreetingMsg ? (result?.response?.data?.brandAsset || BRAND_GREETING_LOGO_URL) : this.extractProductImage(result))
+      : null;
 
     // 4. Build WhatsApp interactive or media messages
     if (actions.length > 0) {
@@ -109,18 +177,39 @@ export default class WhatsAppResponseAdapter {
         }
       } else {
         // 4 to 10 choices -> WhatsApp Interactive List
+        // Meta WhatsApp does not support image headers on list messages; send image first
         if (imageUrl) {
           messages.push({
             type: "image",
             image: {
               link: imageUrl,
+              ...(formattedMessage && formattedMessage.length <= 1024
+                ? { caption: formattedMessage }
+                : {}),
             },
+          });
+          if (formattedMessage && formattedMessage.length > 1024) {
+            messages.push({
+              type: "text",
+              text: { preview_url: false, body: formattedMessage },
+            });
+          }
+        } else if (formattedMessage && formattedMessage.length <= 1024) {
+          const interactive = this.buildInteractive(actions, formattedMessage);
+          if (interactive) {
+            messages.push(interactive);
+            return messages;
+          }
+        } else if (formattedMessage) {
+          messages.push({
+            type: "text",
+            text: { preview_url: false, body: formattedMessage },
           });
         }
 
         const interactive = this.buildInteractive(
           actions,
-          formattedMessage || "Available options",
+          "Please choose an option:",
         );
         if (interactive) {
           messages.push(interactive);
@@ -181,12 +270,59 @@ export default class WhatsAppResponseAdapter {
   // =====================================================
 
   extractProductImage(result = {}) {
+    const isCancelled =
+      result?.metadata?.cancelled === true ||
+      result?.response?.metadata?.cancelled === true ||
+      result?.metadata?.stage === "CANCELLED" ||
+      result?.response?.metadata?.stage === "CANCELLED" ||
+      result?.action?.id === "CANCEL_ORDER" ||
+      result?.response?.action?.id === "CANCEL_ORDER";
+
+    if (isCancelled) {
+      console.log("[CANCEL][MEDIA_BLOCKED]");
+      return null;
+    }
+
+    const isOrderActive =
+      result?.order?.items?.[0]?.orderStarted === true ||
+      result?.liveRequirement?.items?.[0]?.orderStarted === true ||
+      result?.orderStarted === true ||
+      result?.response?.context?.orderStarted === true ||
+      [
+        "COLLECT_PRODUCT_FIELD",
+        "COLLECT_REQUIREMENT",
+        "SELECT_ADDONS",
+        "SELECT_DELIVERY_METHOD",
+        "DELIVERY_ADDRESS",
+        "DELIVERY_DATE",
+        "ARTWORK",
+        "ORDER_REVIEW",
+        "CONFIRM_ORDER",
+        "COLLECT_NAME",
+        "COLLECT_EMAIL",
+        "COLLECT_COMPANY",
+        "ORDER_COMPLETED",
+      ].includes(result?.currentStep ?? result?.response?.currentStep);
+
+    if (
+      isOrderActive ||
+      result?.workflow === "LEAD" ||
+      result?.response?.workflow === "LEAD" ||
+      result?.currentStep === "ERROR" ||
+      result?.response?.currentStep === "ERROR"
+    ) {
+      return null;
+    }
+
+    // Exclude forms, greetings, generic FAQ, support, errors, artwork upload, or completed orders
     if (
       this.isOrderForm(result) ||
       this.isLeadForm(result) ||
       result?.currentStep === "ORDER_FORM" ||
       result?.currentStep === "ORDER_COMPLETED" ||
       result?.currentStep === "WAITING_FOR_ARTWORK" ||
+      result?.currentStep === "ARTWORK" ||
+      result?.response?.currentStep === "ARTWORK" ||
       result?.workflow === "FAQ" ||
       result?.workflow === "GREETING" ||
       result?.workflow === "SUPPORT" ||
@@ -202,6 +338,7 @@ export default class WhatsAppResponseAdapter {
       result?.metadata?.stage ??
       null;
 
+    // 1. SELECT_NESTED_PRODUCT: Rendering a category with nested products
     if (currentStep === "SELECT_NESTED_PRODUCT") {
       const categoryObj =
         result?.context?.category ??
@@ -212,6 +349,8 @@ export default class WhatsAppResponseAdapter {
       return resolveCatalogImage(categoryObj);
     }
 
+    // 2. SELECT_SELECTION: Rendering a parent product and its selection options
+    // Strict isolation: resolve from parent product only. If parent has no image, return null!
     if (currentStep === "SELECT_SELECTION") {
       const productObj =
         result?.context?.product ??
@@ -232,6 +371,7 @@ export default class WhatsAppResponseAdapter {
       return null;
     }
 
+    // 3. Selected product (nested / variant / child product)
     const selectedProd =
       result?.context?.selectedProduct ??
       result?.response?.context?.selectedProduct ??
@@ -243,6 +383,7 @@ export default class WhatsAppResponseAdapter {
       if (img) return img;
     }
 
+    // 4. Selection option
     const selectionObj =
       result?.context?.selection ??
       result?.response?.context?.selection ??
@@ -254,6 +395,7 @@ export default class WhatsAppResponseAdapter {
       if (img) return img;
     }
 
+    // 5. Product object
     const productObj =
       result?.context?.product ??
       result?.response?.context?.product ??
@@ -268,6 +410,7 @@ export default class WhatsAppResponseAdapter {
       if (img) return img;
     }
 
+    // 6. Discovery / Winner product
     const responseData = result?.response?.data ?? result?.data ?? {};
     if (responseData.product) {
       return resolveCatalogImage(responseData.product);
@@ -336,6 +479,7 @@ export default class WhatsAppResponseAdapter {
       lines.push("", description);
     }
 
+    // Price calculation from authoritative PricingService
     let priceText = null;
     let deliveryText = null;
     let totalText = null;
@@ -404,6 +548,7 @@ export default class WhatsAppResponseAdapter {
       if (badgeText) lines.push(badgeText);
     }
 
+    // Specifications / options from catalog
     const specs = catalogProduct?.specifications || resolvedItem.specifications;
     if (specs && typeof specs === "object") {
       const specEntries = Object.entries(specs).filter(
@@ -446,6 +591,7 @@ export default class WhatsAppResponseAdapter {
   // =====================================================
 
   extractMessage(result = {}) {
+    // 1. Check for form validation errors
     const errors =
       result?.response?.context?.errors ??
       result?.context?.errors ??
@@ -453,11 +599,7 @@ export default class WhatsAppResponseAdapter {
       result?.errors ??
       null;
 
-    if (
-      errors &&
-      typeof errors === "object" &&
-      Object.keys(errors).length > 0
-    ) {
+    if (errors && typeof errors === "object" && Object.keys(errors).length > 0) {
       const errorLines = ["⚠️ *Please check the following details:*"];
       for (const [key, val] of Object.entries(errors)) {
         if (!val) continue;
@@ -474,6 +616,7 @@ export default class WhatsAppResponseAdapter {
       return errorLines.join("\n");
     }
 
+    // 2. Product Details structured message
     if (
       result?.currentStep === "PRODUCT_DETAILS" ||
       result?.response?.currentStep === "PRODUCT_DETAILS"
@@ -492,6 +635,7 @@ export default class WhatsAppResponseAdapter {
       }
     }
 
+    // 3. Direct message strings
     if (
       typeof result?.response?.message === "string" &&
       result.response.message.trim()
@@ -514,6 +658,7 @@ export default class WhatsAppResponseAdapter {
       return result.whatsapp.message.trim();
     }
 
+    // 4. Structured response types from graph nodes
     const responseData = result?.response?.data ?? result?.data ?? {};
     const responseType = result?.response?.type ?? result?.type;
 
@@ -624,60 +769,6 @@ export default class WhatsAppResponseAdapter {
 
     if (responseType === "lead" && responseData.response?.message) {
       return responseData.response.message;
-    }
-
-    const currentStep =
-      result?.currentStep ??
-      result?.response?.currentStep ??
-      result?.response?.metadata?.stage ??
-      result?.metadata?.stage ??
-      null;
-
-    const context = result?.context ?? result?.response?.context ?? {};
-
-    if (currentStep === "COLLECT_PRODUCT_FIELD") {
-      return (
-        context?.field?.question ||
-        context?.field?.label ||
-        "Please choose an option:"
-      );
-    }
-
-    if (currentStep === "COLLECT_REQUIREMENT") {
-      return (
-        context?.requirement?.instruction ||
-        context?.requirement?.description ||
-        context?.requirement?.name ||
-        "Please provide the requested details:"
-      );
-    }
-
-    if (currentStep === "SELECT_ADDONS") {
-      return "Would you like to add any finishing options or addons to your order?";
-    }
-
-    if (currentStep === "SELECT_DELIVERY_METHOD") {
-      return (
-        context?.message || "Please select your preferred delivery method:"
-      );
-    }
-
-    if (currentStep === "REVIEW_ORDER" || currentStep === "ORDER_REVIEW") {
-      return (
-        context?.summary ||
-        context?.message ||
-        "Please review your order summary below:"
-      );
-    }
-
-    if (currentStep === "COLLECT_CUSTOMER") {
-      return (
-        result?.response?.message ||
-        result?.message ||
-        result?.assistantMessage ||
-        context?.message ||
-        "Great! To complete your order, please enter your full name."
-      );
     }
 
     return "";
@@ -896,6 +987,7 @@ export default class WhatsAppResponseAdapter {
 
     return (
       (interaction === "FORM" ||
+        interaction === "WHATSAPP_FLOW" ||
         currentStep === "ORDER_FORM" ||
         hasFormSection) &&
       hasForm
@@ -920,6 +1012,114 @@ export default class WhatsAppResponseAdapter {
     );
   }
 
+  // =====================================================
+  // ORDER FLOW
+  // =====================================================
+
+  buildOrderFlow(result = {}) {
+    const flowId = process.env.WHATSAPP_ORDER_FLOW_ID;
+    if (!flowId) return null;
+
+    const form =
+      result?.context?.form ?? result?.response?.context?.form ?? null;
+    if (!form) return null;
+
+    const requirement =
+      result?.liveRequirement ?? result?.order ?? result?.productSales ?? null;
+    const phoneNumber =
+      result?.whatsapp?.phoneNumber ?? result?.visitor?.phone ?? null;
+    const sessionId = result?.sessionId ?? null;
+    const product = requirement?.items?.[0]?.product ?? form?.product ?? null;
+
+    return this.flowBuilder.buildInteractiveFlowMessage({
+      product: product || { name: form?.title },
+      liveRequirement: requirement,
+      order: requirement,
+      customer: result?.customer ?? result?.visitor ?? null,
+      session: { id: sessionId, phoneNumber },
+      workflow: result?.workflow ?? "SALES",
+      formId: form?.id ?? null,
+      flowId,
+      screen: process.env.WHATSAPP_ORDER_FLOW_SCREEN ?? "ORDER_FORM",
+      cta: form?.submit?.label ?? "Continue",
+      correlationId: result?.correlationId,
+    });
+  }
+
+  // =====================================================
+  // LEAD FLOW
+  // =====================================================
+
+  buildLeadFlow(result = {}) {
+    const flowId = process.env.WHATSAPP_LEAD_FLOW_ID;
+    if (!flowId) return null;
+
+    const requirement =
+      result?.liveRequirement ?? result?.order ?? result?.orderContext ?? null;
+    const phoneNumber =
+      result?.whatsapp?.phoneNumber ??
+      result?.visitor?.phone ??
+      requirement?.customer?.phone ??
+      null;
+    const sessionId = result?.sessionId ?? null;
+
+    const requestType =
+      result?.metadata?.leadType ??
+      result?.requestType ??
+      (requirement?.items?.length ? "ORDER" : "EXPERT");
+
+    const token = this.flowTokenService.create({
+      type: "LEAD_FORM",
+      sessionId,
+      phoneNumber,
+      formId: process.env.WHATSAPP_LEAD_FORM_ID ?? "LEAD_FORM",
+      requestType,
+    });
+
+    let bodyText =
+      "Please provide your contact details so our sales team can assist you.";
+    if (requestType === "ORDER") {
+      bodyText =
+        "Your order details are ready. Please provide your contact details so our sales team can prepare your quotation.";
+    } else if (requestType === "QUOTATION") {
+      bodyText =
+        "Please provide your contact details so we can prepare your quotation.";
+    } else if (requestType === "EXPERT") {
+      bodyText =
+        "Please provide your details so our printing expert can assist you.";
+    } else if (requestType === "CONTACT_SALES") {
+      bodyText =
+        "Please provide your details so our sales team can contact you.";
+    }
+
+    return {
+      type: "interactive",
+      interactive: {
+        type: "flow",
+        header: { type: "text", text: "Exprintmart" },
+        body: { text: bodyText },
+        footer: { text: "Your WhatsApp number is already known." },
+        action: {
+          name: "flow",
+          parameters: {
+            flow_message_version: "3",
+            flow_token: token,
+            flow_id: flowId,
+            flow_cta: requestType === "ORDER" ? "Submit Request" : "Continue",
+            flow_action: "navigate",
+            flow_action_payload: {
+              screen: process.env.WHATSAPP_LEAD_FLOW_SCREEN ?? "LEAD_FORM",
+              data: {
+                request_type: requestType,
+                customer_phone: phoneNumber ?? "",
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
   isFieldVisible(field = {}, values = {}) {
     if (field.ui?.hidden || field.hidden === true) return false;
     const condition = field.conditional ?? field.condition ?? null;
@@ -938,7 +1138,7 @@ export default class WhatsAppResponseAdapter {
   }
 
   // =====================================================
-  // INTERACTIVE ORDER FORM (NORMAL WHATSAPP CONTROLS)
+  // INTERACTIVE ORDER FORM (WHAPI / FALLBACK / NON-FLOW)
   // =====================================================
 
   buildInteractiveOrderForm(result = {}) {
@@ -1036,9 +1236,7 @@ export default class WhatsAppResponseAdapter {
             displayVal = matchedOpt.label || matchedOpt.name || displayVal;
           }
         }
-        lines.push(
-          `• *${field.label || field.name || field.id}*: ${displayVal} ✅`,
-        );
+        lines.push(`• *${field.label || field.name || field.id}*: ${displayVal} ✅`);
       }
     }
 
@@ -1071,6 +1269,7 @@ export default class WhatsAppResponseAdapter {
       const questionPrompt =
         currentField.question || `Please choose ${fieldLabel}:`;
 
+      // Initial entry: send catalog product presentation followed by interactive question prompt
       if (filledFields.length === 0) {
         const concreteItem =
           item.selectedProduct ??
@@ -1081,11 +1280,15 @@ export default class WhatsAppResponseAdapter {
           form.product ??
           {};
 
-        const rawImage =
-          resolveCatalogImage(concreteItem) ||
-          resolveCatalogImage(item.product) ||
-          resolveCatalogImage(form.product) ||
-          null;
+        const workflow = result?.workflow ?? result?.response?.workflow ?? null;
+        const isOrderFlow = workflow === "SALES" || workflow === "LEAD";
+
+        const rawImage = !isOrderFlow
+          ? (resolveCatalogImage(concreteItem) ||
+            resolveCatalogImage(item.product) ||
+            resolveCatalogImage(form.product) ||
+            null)
+          : null;
         const formImage = normalizeImageUrl(rawImage);
         const productCaption = this.generateProductCaption(concreteItem, {
           productName,
@@ -1117,49 +1320,28 @@ export default class WhatsAppResponseAdapter {
           }
         }
         promptLines.push(`👉 *${questionPrompt}*`);
-        if (currentField.description)
-          promptLines.push(`_${currentField.description}_`);
-        if (
-          currentField.type === "number" &&
-          (!currentField.options || currentField.options.length === 0)
-        ) {
+        if (currentField.description) promptLines.push(`_${currentField.description}_`);
+        if (currentField.type === "number" && (!currentField.options || currentField.options.length === 0)) {
           promptLines.push("(e.g., 5, 10, 50, 100, 500)");
-        } else if (
-          currentField.type === "date" ||
-          currentField.type === "datetime-local"
-        ) {
+        } else if (currentField.type === "date" || currentField.type === "datetime-local") {
           promptLines.push("(YYYY-MM-DD)");
         }
 
         const promptText = promptLines.join("\n");
-        if (
-          Array.isArray(currentField.options) &&
-          currentField.options.length > 0
-        ) {
+        if (Array.isArray(currentField.options) && currentField.options.length > 0) {
           const fieldActions = currentField.options.slice(0, 10).map((opt) => ({
             id: "SET_FORM_FIELD",
             type: "SET_FORM_FIELD",
             label: String(opt.label || opt.name || opt.value || opt.id).trim(),
-            payload: {
-              formId: form.id,
-              fieldId: currentField.id,
-              value: opt.value ?? opt.id,
-            },
+            payload: { formId: form.id, fieldId: currentField.id, value: opt.value ?? opt.id },
           }));
-          const interactive = this.buildInteractive(
-            fieldActions,
-            promptText,
-            null,
-          );
+          const interactive = this.buildInteractive(fieldActions, promptText, null);
           if (interactive) {
             messages.push(interactive);
             return messages;
           }
         }
-        messages.push({
-          type: "text",
-          text: { preview_url: false, body: promptText },
-        });
+        messages.push({ type: "text", text: { preview_url: false, body: promptText } });
         return messages;
       }
       lines.push(`\n👉 *${questionPrompt}*`);
@@ -1236,7 +1418,7 @@ export default class WhatsAppResponseAdapter {
   }
 
   // =====================================================
-  // INTERACTIVE LEAD FORM (NORMAL WHATSAPP CONTROLS)
+  // INTERACTIVE LEAD FORM (WHAPI / FALLBACK / NON-FLOW)
   // =====================================================
 
   buildInteractiveLeadForm(result = {}) {

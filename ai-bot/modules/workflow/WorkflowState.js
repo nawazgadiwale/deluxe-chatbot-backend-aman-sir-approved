@@ -76,7 +76,7 @@ export default class WorkflowState {
    */
 
   isCompleted(state) {
-    if (!this.isActive(state)) {
+    if (!state?.workflow || state.workflow === "NONE") {
       return false;
     }
 
@@ -137,7 +137,11 @@ export default class WorkflowState {
    */
 
   isActive(state) {
-    return Boolean(state.workflow && state.workflow !== "NONE");
+    return Boolean(
+      state?.workflow &&
+      state.workflow !== "NONE" &&
+      !this.isCompleted(state),
+    );
   }
 
   /*
@@ -169,10 +173,6 @@ export default class WorkflowState {
     const config = WorkflowConfig[state.workflow];
 
     return config?.interruptibleBy?.includes(capability) ?? false;
-  }
-
-  canInterrupt(state, capability) {
-    return this.shouldPause(state, capability);
   }
 
   pause(state) {

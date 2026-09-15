@@ -162,9 +162,7 @@ async function runTests() {
     console.log("Test 6: POST when WHATSAPP_APP_SECRET is missing");
     delete process.env.WHATSAPP_APP_SECRET;
     const originalServiceSecret = whatsappService.appSecret;
-    const originalAdapterSecret = webhookHandler.metaAdapter.appSecret;
     whatsappService.appSecret = null;
-    webhookHandler.metaAdapter.appSecret = null;
 
     const noSecretRes = await fetch(`${baseUrl}/webhooks/whatsapp`, {
       method: "POST",
@@ -177,7 +175,6 @@ async function runTests() {
     assert.equal(noSecretRes.status, 403);
     process.env.WHATSAPP_APP_SECRET = testAppSecret;
     whatsappService.appSecret = originalServiceSecret;
-    webhookHandler.metaAdapter.appSecret = originalAdapterSecret;
     console.log("✅ Test 6 passed: Missing App Secret failed closed with HTTP 403\n");
 
     // ============================================================
@@ -331,9 +328,9 @@ async function runTests() {
     console.log("✅ Test 9 passed: 24-Hour window policy strictly enforced\n");
 
     // ============================================================
-    // Test 10: Local POST /webhooks/whatsapp Body Key Verification (Meta)
+    // Test 10: Local POST /webhooks/whatsapp Body Key Verification (Whapi)
     // ============================================================
-    console.log("Test 10: Local POST /webhooks/whatsapp Body Key Verification (Meta)");
+    console.log("Test 10: Local POST /webhooks/whatsapp Body Key Verification (Whapi)");
     let interceptedInboundBody = null;
     const originalHandleWebhook = whatsappService.handleWebhook.bind(whatsappService);
     whatsappService.handleWebhook = async (body, ctx) => {
@@ -341,52 +338,33 @@ async function runTests() {
       return originalHandleWebhook(body, ctx);
     };
 
-    const localTestPayload = JSON.stringify({
-      object: "whatsapp_business_account",
-      entry: [
+    const localTestPayload = {
+      messages: [
         {
-          id: "WABA_ID_LOCAL_TEST",
-          changes: [
-            {
-              field: "messages",
-              value: {
-                messaging_product: "whatsapp",
-                metadata: {
-                  phone_number_id: testPhoneNumberId,
-                },
-                contacts: [
-                  { profile: { name: "Local Tester" }, wa_id: "918310412768" },
-                ],
-                messages: [
-                  {
-                    id: "LOCAL_BODY_TEST_123",
-                    from: "918310412768",
-                    timestamp: String(Math.floor(Date.now() / 1000)),
-                    type: "text",
-                    text: { body: "i want to order stamps" },
-                  },
-                ],
-              },
-            },
-          ],
+          id: "LOCAL_BODY_TEST_123",
+          from_me: false,
+          type: "text",
+          timestamp: 1788519207,
+          chat_id: "918310412768@s.whatsapp.net",
+          from: "918310412768",
+          text: {
+            body: "i want to order stamps",
+          },
         },
       ],
-    });
+      channel_id: "HAWKEY-J9A6V",
+    };
 
-    const localSig =
-      "sha256=" +
-      crypto
-        .createHmac("sha256", testAppSecret)
-        .update(Buffer.from(localTestPayload))
-        .digest("hex");
+    const localWhapiSecret = process.env.WHAPI_WEBHOOK_SECRET || "test_whapi_secret_local";
+    whatsappService.whapiWebhookSecret = localWhapiSecret;
 
     const localPostRes = await fetch(`${baseUrl}/webhooks/whatsapp`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-hub-signature-256": localSig,
+        "whapi-secret": localWhapiSecret,
       },
-      body: localTestPayload,
+      body: JSON.stringify(localTestPayload),
     });
 
     assert.equal(localPostRes.status, 200);
@@ -397,9 +375,10 @@ async function runTests() {
     await new Promise((r) => setTimeout(r, 400));
 
     assert.ok(interceptedInboundBody, "handleWebhook must receive non-empty parsed body");
-    assert.ok(Array.isArray(interceptedInboundBody.entry), "body must contain entry array");
-    assert.equal(interceptedInboundBody.object, "whatsapp_business_account");
-    console.log("✅ Test 10 passed: Express handler correctly receives Meta webhook body\n");
+    assert.ok(Array.isArray(interceptedInboundBody.messages), "body must contain messages array");
+    assert.equal(interceptedInboundBody.channel_id, "HAWKEY-J9A6V");
+    assert.equal(interceptedInboundBody.messages[0].id, "LOCAL_BODY_TEST_123");
+    console.log("✅ Test 10 passed: Express handler correctly receives bodyKeys=messages,channel_id\n");
 
     console.log("=================================================");
     console.log("🎉 ALL EXPRESS WHATSAPP ROUTE TESTS PASSED!");

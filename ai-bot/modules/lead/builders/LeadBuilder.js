@@ -121,7 +121,7 @@ export default class LeadBuilder {
       products.push({
         productName: String(productName).trim(),
 
-        productId: product.id ?? product.productId ?? product.slug ?? null,
+        productId: this.resolveProductId(product.id ?? product.productId ?? null),
       });
     }
 
@@ -149,12 +149,22 @@ export default class LeadBuilder {
         products.push({
           productName: String(productName).trim(),
 
-          productId: product.productId ?? product.id ?? product.slug ?? null,
+          productId: this.resolveProductId(product.productId ?? product.id ?? null),
         });
       }
     }
 
     return this.uniqueProducts(products);
+  }
+
+  resolveProductId(rawId) {
+    if (typeof rawId === "number" && !Number.isNaN(rawId)) {
+      return rawId;
+    }
+    if (typeof rawId === "string" && /^\d+$/.test(rawId.trim())) {
+      return Number(rawId.trim());
+    }
+    return LeadConstants.PRODUCT_ID;
   }
 
   uniqueProducts(products = []) {

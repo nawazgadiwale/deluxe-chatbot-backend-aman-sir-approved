@@ -1,32 +1,35 @@
 import BaseAgent from "./BaseAgent.js";
-
-import ResponseBuilder from "../../core/responses/Apiresponse.js";
+import SalesResponseBuilder from "../../modules/sales/builders/SalesResponseBuilder.js";
 
 import LeadEngine from "../../modules/lead/LeadEngine.js";
-
 import LeadConstants from "../../modules/lead/helpers/LeadConstants.js";
-import ReviewBuilder from "../../modules/sales/builders/ReviewBuilder.js";
+import SalesHandoffService from "../../modules/sales/services/SalesHandoffService.js";
 
-const responseBuilder = new ResponseBuilder();
+const responseBuilder = new SalesResponseBuilder();
 const leadEngine = new LeadEngine();
-const reviewBuilder = new ReviewBuilder();
+const salesHandoffService = new SalesHandoffService();
 
-const SUBMIT_LEAD = LeadConstants?.ACTIONS?.SUBMIT_LEAD ?? "SUBMIT_LEAD";
+const SKIP_VALUES = new Set([
+  "",
+  "skip",
+  "no",
+  "none",
+  "not applicable",
+  "na",
+  "n/a",
+  "no thanks",
+  "prefer not",
+]);
 
 export default class LeadAgent extends BaseAgent {
   async execute(state = {}) {
     console.log("========== LEAD AGENT ==========");
-
-    // ==========================================================
-    // 1. NORMALIZE REQUEST TYPE
-    // ==========================================================
 
     const requestType =
       state.conversation?.requestType ??
       state.persistence?.conversation?.requestType ??
       state.leadContext?.requestType ??
       state.requestType ??
-      state.routing?.requestType ??
       this.inferRequestType(state);
 
     state.requestType = requestType;
@@ -36,526 +39,434 @@ export default class LeadAgent extends BaseAgent {
       requestType,
     };
 
-    // ==========================================================
-    // 2. DETECT LEAD SUBMISSION
-    // ==========================================================
+    this.attachCurrentOrder(state);
+    this.attachWhatsAppNumber(state);
 
-    const isLeadSubmission =
-      state.action?.id === SUBMIT_LEAD ||
-      state.currentStep === "SUBMIT_LEAD";
+    const collection = state.customerCollection ?? {};
+    const step = state.currentStep ?? "COLLECT_NAME";
 
-    console.log("[LeadAgent] requestType:", requestType);
-    console.log("[LeadAgent] isLeadSubmission:", isLeadSubmission);
+    /*
+     * ==========================================================
+     * NAME
+     * ==========================================================
+     */
 
-    // ==========================================================
-    // 3. NORMALIZE LEAD FORM DATA
-    // ==========================================================
+    if (!collection.nameResolved) {
+      /*
+       * First entry after CONFIRM_ORDER.
+       *
+       * Do NOT treat "confirm" as the customer's name.
+       */
+      if (!collection.started) {
+        state.customerCollection = {
+          ...collection,
+          started: true,
+          nameResolved: false,
+          emailResolved: false,
+          companyResolved: false,
+        };
 
-    if (isLeadSubmission) {
-      const flowResponse = this.extractFlowResponse(state);
+        return this.ask(
+          state,
+          "COLLECT_NAME",
+          "Sure. May I know your full name?",
+        );
+      }
 
-      console.log("========== NORMALIZED LEAD FORM ==========");
-      console.dir(flowResponse, {
-        depth: null,
-      });
+      const message = this.getUserMessage(state);
 
-      state.whatsapp = {
-        ...(state.whatsapp ?? {}),
-        messageType: state.whatsapp?.messageType ?? "interactive",
+      if (!message) {
+        return this.ask(
+          state,
+          "COLLECT_NAME",
+          "May I know your full name?",
+        );
+      }
+
+      if (message.length < 2) {
+        return this.ask(
+          state,
+          "COLLECT_NAME",
+          "Please provide your full name.",
+        );
+      }
+
+      state.customer = {
+        ...(state.customer ?? {}),
+        name: message,
       };
 
-      state.action = {
-        ...(state.action ?? {}),
-        id: SUBMIT_LEAD,
-        payload: {
-          ...(state.action?.payload ?? {}),
-          values: flowResponse,
-          fields: flowResponse,
-        },
-      };
-    }
-
-    // ==========================================================
-    // 4. PRESERVE SALES REQUIREMENT
-    // ==========================================================
-    //
-    // IMPORTANT:
-    //
-    // Customer form must NEVER replace the order.
-    //
-    // The completed Sales requirement is the source of:
-    //
-    //   product
-    //   selection
-    //   quantity
-    //   artwork
-    //   delivery
-    //   pricing
-    //   order details
-    //
-    // Lead only adds customer information.
-    // ==========================================================
-
-    const existingRequirement =
-      state.liveRequirement ??
-      state.order ??
-      state.orderContext ??
-      state.productSales ??
-      null;
-
-    if (existingRequirement) {
-      state.liveRequirement = existingRequirement;
-
-      state.order = state.order ?? existingRequirement;
-
-      state.orderContext = state.orderContext ?? existingRequirement;
-
-      state.productSales = state.productSales ?? existingRequirement;
-    }
-
-    // ==========================================================
-    // 5. EXECUTE LEAD ENGINE
-    // ==========================================================
-
-    const result = await leadEngine.execute(state);
-
-    console.log("========== LEAD ENGINE RESULT ==========");
-    console.dir(result, {
-      depth: null,
-    });
-
-    // ==========================================================
-    // 6. LEAD FORM STILL REQUIRED
-    // ==========================================================
-
-    if (!result?.completed) {
-      state.workflow = "LEAD";
-
-      state.currentStep = "COLLECT_CUSTOMER";
-
-      state.awaitingDecision = true;
-
-      state.completed = false;
-
-      const resolvedRequestType =
-        state.conversation?.requestType ??
-        state.persistence?.conversation?.requestType ??
-        state.leadContext?.requestType ??
-        state.requestType ??
-        requestType;
-
-      state.requestType = resolvedRequestType;
-
-      state.leadContext = {
-        ...(state.leadContext ?? {}),
-        requestType: resolvedRequestType,
+      state.customerCollection = {
+        ...state.customerCollection,
+        nameResolved: true,
       };
 
-      state.response = responseBuilder.lead({
-        status: result?.status ?? "PENDING",
-
-        response: result?.form ?? result?.response ?? null,
-
-        form: result?.form ?? null,
-      });
-
-      return state;
+      return this.ask(
+        state,
+        "COLLECT_EMAIL",
+        "Thanks. What is your email address? You can skip this if you prefer.",
+      );
     }
 
-    // ==========================================================
-    // 7. CREATED LEAD
-    // ==========================================================
+    /*
+     * ==========================================================
+     * EMAIL
+     * ==========================================================
+     */
 
-    state.lead = result.lead ?? null;
+    if (!collection.emailResolved) {
+      const message = this.getUserMessage(state);
 
-    // ==========================================================
-    // 7.5 ORDER REVIEW GATE
-    // ==========================================================
-    // A lead can be created from the customer form, but the order is
-    // still only a draft. Final order confirmation happens separately.
-    const reviewOrder =
-      result.order ?? state.order ?? state.orderContext ?? state.liveRequirement ?? null;
+      if (!message) {
+        return this.ask(
+          state,
+          "COLLECT_EMAIL",
+          "What is your email address? You can skip this if you prefer.",
+        );
+      }
 
-    if (
-      requestType === LeadConstants.REQUEST_TYPES.ORDER &&
-      Array.isArray(reviewOrder?.items) &&
-      reviewOrder.items.length > 0 &&
-      reviewOrder.confirmed !== true &&
-      reviewOrder.status !== "CONFIRMED"
-    ) {
-      state.order = reviewOrder;
-      state.orderContext = reviewOrder;
-      state.liveRequirement = reviewOrder;
-
-      if (result.lead) {
+      if (this.isSkip(message)) {
         state.customer = {
           ...(state.customer ?? {}),
-          name: result.lead.name ?? state.customer?.name ?? "",
-          phone: result.lead.phoneNumber ?? state.whatsapp?.phoneNumber ?? state.customer?.phone ?? "",
-          email: result.lead.emailId ?? state.customer?.email ?? "",
-          company: result.lead.companyName ?? state.customer?.company ?? "",
+          email: null,
+        };
+      } else {
+        const email = message.trim();
+
+        if (!this.isValidEmail(email)) {
+          return this.ask(
+            state,
+            "COLLECT_EMAIL",
+            "That doesn't look like a valid email address. Please enter a valid email or type 'skip'.",
+          );
+        }
+
+        state.customer = {
+          ...(state.customer ?? {}),
+          email,
         };
       }
 
-      const review = reviewBuilder.build(
-        reviewOrder,
-        reviewOrder.pricing ?? {},
-        reviewOrder.delivery ?? {},
+      state.customerCollection = {
+        ...state.customerCollection,
+        emailResolved: true,
+      };
+
+      return this.ask(
+        state,
+        "COLLECT_COMPANY",
+        "What is your company name? You can skip this if you prefer.",
       );
-
-      const message = this.buildReviewMessage(reviewOrder, state.customer);
-
-      state.workflow = "SALES";
-      state.currentStep = "ORDER_REVIEW";
-      state.nextStep = "CONFIRM_ORDER";
-      state.awaitingDecision = true;
-      state.completed = false;
-      state.orderReview = review;
-      state.assistantMessage = message;
-      state.response = responseBuilder.build({
-        workflow: "SALES",
-        completed: false,
-        interaction: "BUTTONS",
-        liveRequirement: reviewOrder,
-        message,
-        actions: [
-          { id: "CONFIRM_ORDER", label: "Confirm", payload: {} },
-          { id: "EDIT_ORDER", label: "Edit", payload: {} },
-          { id: "HUMAN_HANDOFF", label: "Talk to Expert", payload: {} },
-        ],
-        sections: review.sections ?? [],
-        metadata: { stage: "ORDER_REVIEW", leadCreated: Boolean(result.lead), orderConfirmed: false },
-        currentStep: "ORDER_REVIEW",
-        nextStep: "CONFIRM_ORDER",
-        context: { action: "ORDER_REVIEW", review, order: reviewOrder },
-      });
-      state.persistence = {
-        ...(state.persistence ?? {}),
-        conversation: { ...(state.persistence?.conversation ?? {}), dirty: true, updatedAt: new Date() },
-        order: { ...(state.persistence?.order ?? {}), dirty: true, updatedAt: new Date() },
-        lead: { ...(state.persistence?.lead ?? {}), dirty: true, submitted: Boolean(result.lead), updatedAt: new Date() },
-      };
-      return state;
     }
 
-    // ==========================================================
-    // 8. UPDATED ORDER
-    // ==========================================================
+    /*
+     * ==========================================================
+     * COMPANY
+     * ==========================================================
+     */
 
-    if (result.order) {
-      state.order = result.order;
+    if (!collection.companyResolved) {
+      const message = this.getUserMessage(state);
 
-      state.orderContext = result.order;
+      if (!message) {
+        return this.ask(
+          state,
+          "COLLECT_COMPANY",
+          "What is your company name? You can skip this if you prefer.",
+        );
+      }
 
-      state.liveRequirement = result.order;
-
-      state.productSales = {
-        ...(state.productSales ?? {}),
-        ...result.order,
-      };
-    }
-
-    // ==========================================================
-    // 9. CUSTOMER
-    // ==========================================================
-
-    if (result.lead) {
       state.customer = {
         ...(state.customer ?? {}),
+        company: this.isSkip(message)
+          ? null
+          : message.trim(),
+      };
 
-        name: result.lead.name ?? result.lead.fullName ?? "",
-
-        phone:
-          result.lead.phoneNumber ??
-          result.lead.phone ??
-          state.whatsapp?.phoneNumber ??
-          "",
-
-        email: result.lead.emailId ?? result.lead.email ?? "",
-
-        company: result.lead.companyName ?? result.lead.company ?? "",
+      state.customerCollection = {
+        ...state.customerCollection,
+        companyResolved: true,
       };
     }
 
-    // ==========================================================
-    // 10. WORKFLOW COMPLETE
-    // ==========================================================
+    /*
+     * ==========================================================
+     * CREATE LEAD
+     * ==========================================================
+     */
 
-    state.workflow = "LEAD";
+    state.currentStep = "CREATE_LEAD";
 
-    state.currentStep = "LEAD_COMPLETED";
+    const result = await leadEngine.execute(state);
 
-    state.nextStep = null;
+    if (!result?.completed) {
+      return this.ask(
+        state,
+        result?.nextStep ?? "COLLECT_NAME",
+        result?.message ?? "Please provide your details.",
+      );
+    }
 
-    state.awaitingDecision = false;
+    /*
+     * ==========================================================
+     * SAVE RESULT TO STATE
+     * ==========================================================
+     */
 
-    state.completed = true;
+    state.lead = result.lead ?? null;
 
-    state.leadSubmission = true;
+    if (result.order?._id) {
+      state.order = result.order;
+      state.orderContext = result.order;
+      state.liveRequirement = result.order;
+      state.productSales = result.order;
+    }
 
-    // ==========================================================
-    // 11. REQUEST TYPE
-    // ==========================================================
+    state.customer = {
+      name:
+        result.lead?.name ??
+        state.customer?.name ??
+        "",
 
-    const finalRequestType =
-      state.conversation?.requestType ??
-      state.persistence?.conversation?.requestType ??
-      state.leadContext?.requestType ??
-      state.requestType ??
-      requestType;
+      phone:
+        result.lead?.phoneNumber ??
+        state.customer?.phone ??
+        "",
 
-    state.requestType = finalRequestType;
+      email:
+        result.lead?.emailId ??
+        null,
 
-    state.leadContext = {
-      ...(state.leadContext ?? {}),
-      requestType: finalRequestType,
-
-      stage: "LEAD_COMPLETED",
+      company:
+        result.lead?.companyName ??
+        null,
     };
 
-    // ==========================================================
-    // 12. PERSISTENCE
-    // ==========================================================
+    state.workflow = "LEAD";
+    state.currentStep = "LEAD_COMPLETED";
+    state.nextStep = null;
+    state.awaitingDecision = false;
+    state.completed = true;
+    state.leadSubmission = true;
+
+    state.assistantMessage =
+      result.message ??
+      "Thank you. Your details have been received successfully.";
+
+    state.response = responseBuilder.build({
+      workflow: "LEAD",
+      interaction: "MESSAGE",
+      message:
+        result.message ??
+        "Thank you. Your details have been received successfully.",
+      actions: [],
+      sections: [],
+      liveRequirement:
+        state.order ??
+        state.orderContext ??
+        state.liveRequirement ??
+        null,
+      completed: true,
+      metadata: {
+        stage: "LEAD_COMPLETED",
+        status: "COMPLETED",
+        lead: result.lead,
+        order: result.order,
+      },
+      currentStep: "LEAD_COMPLETED",
+      nextStep: null,
+      context: {
+        stage: "LEAD_COMPLETED",
+        step: "LEAD_COMPLETED",
+        lead: result.lead,
+        order: result.order,
+      },
+    });
 
     if (state.persistence) {
-      if (state.persistence.customer) {
-        state.persistence.customer.dirty = true;
-        state.persistence.customer.updatedAt = new Date();
-      }
-
-      if (state.persistence.conversation) {
-        state.persistence.conversation.dirty = true;
-        state.persistence.conversation.updatedAt = new Date();
-      }
+      state.persistence.lead = {
+        ...(state.persistence.lead ?? {}),
+        dirty: true,
+        submitted: true,
+        submittedAt: new Date(),
+        leadId:
+          result.lead?._id ??
+          result.lead?.id ??
+          result.lead?.leadId ??
+          null,
+      };
 
       if (state.persistence.order) {
         state.persistence.order.dirty = true;
         state.persistence.order.updatedAt = new Date();
       }
 
-      state.persistence.lead = {
-        ...(state.persistence.lead ?? {}),
-
-        dirty: true,
-
-        submitted: true,
-
-        submittedAt: new Date(),
-
-        leadId: result.lead?.id ?? result.lead?.leadId ?? null,
-      };
+      if (state.persistence.conversation) {
+        state.persistence.conversation.dirty = true;
+        state.persistence.conversation.updatedAt = new Date();
+      }
     }
 
-    // ==========================================================
-    // 13. SUCCESS MESSAGE
-    // ==========================================================
-
-    let title = "Request Submitted Successfully";
-
-    let message = "Thank you! Our sales team will contact you shortly.";
-
-    if (finalRequestType === LeadConstants.REQUEST_TYPES.ORDER) {
-      title = "Order Request Submitted Successfully";
-
-      message =
-        "Thank you! Your order request has been received successfully. Our sales team will contact you shortly.";
-    } else if (finalRequestType === LeadConstants.REQUEST_TYPES.QUOTATION) {
-      title = "Quotation Request Submitted Successfully";
-
-      message =
-        "Thank you! Your quotation request has been received. Our sales team will review your requirements and contact you shortly.";
-    } else if (finalRequestType === LeadConstants.REQUEST_TYPES.EXPERT) {
-      title = "Expert Request Submitted Successfully";
-
-      message =
-        "Thank you! Your request has been received. Our printing expert will contact you shortly.";
-    } else if (finalRequestType === LeadConstants.REQUEST_TYPES.CONTACT_SALES) {
-      title = "Sales Request Submitted Successfully";
-
-      message =
-        "Thank you! Your request has been received. Our sales team will contact you shortly.";
+    try {
+      await salesHandoffService.triggerHandoff(state, "SALES_HANDOFF");
+    } catch (err) {
+      console.warn("[LeadAgent] Sales handoff notification skipped:", err.message);
     }
-
-    // ==========================================================
-    // 14. RESPONSE
-    // ==========================================================
-
-    state.response = responseBuilder.lead({
-      status: "COMPLETED",
-
-      lead: result.lead,
-
-      ...(result.order
-        ? {
-            order: result.order,
-          }
-        : {}),
-
-      response: {
-        step: "LEAD_COMPLETED",
-
-        title,
-
-        message,
-      },
-    });
-
-    // ==========================================================
-    // 15. ASSISTANT MESSAGE
-    // ==========================================================
-
-    state.assistantMessage = message;
 
     return state;
   }
 
-  buildReviewMessage(order = {}, customer = {}) {
-    const lines = ["*Please review your order details:*"];
-    for (const item of order.items ?? []) {
-      const product = item.selectedProduct ?? item.product ?? {};
-      const name =
-        product.name ??
-        product.productName ??
-        product.title ??
-        product.slug ??
-        "Product";
-      const fields = item.formData ?? item.productData ?? {};
-      const quantity = fields.quantity ?? item.workflow?.quantity ?? null;
-      lines.push(`• *Product*: ${name}`);
-      if (quantity != null) lines.push(`• *Quantity*: ${quantity}`);
-      const artwork = item.workflow?.artwork ?? fields.artwork;
-      if (artwork) {
-        const artText =
-          typeof artwork === "object"
-            ? artwork.status === "UPLOADED"
-              ? "Uploaded file"
-              : artwork.status
-            : artwork === "have_artwork"
-              ? "Print-ready artwork"
-              : artwork === "need_design"
-                ? "Design service requested"
-                : artwork;
-        lines.push(`• *Artwork*: ${artText}`);
-      }
-      for (const [key, value] of Object.entries(fields)) {
-        if (
-          [
-            "quantity",
-            "artwork",
-            "deliveryMethod",
-            "deliveryDate",
-            "deliveryAddress",
-          ].includes(key)
-        )
-          continue;
-        if (value === undefined || value === null || value === "") continue;
-        const label = key
-          .replace(/([A-Z])/g, " $1")
-          .replace(/^./, (str) => str.toUpperCase());
-        lines.push(
-          `• *${label}*: ${Array.isArray(value) ? value.join(", ") : value}`,
-        );
-      }
-    }
-    if (order.pricing?.total != null && order.pricing.total > 0) {
-      lines.push(
-        `• *Total Price*: ${order.pricing.currency ?? "AED"} ${order.pricing.total}`,
-      );
-    }
-    if (order.delivery?.method) {
-      const methodLabel =
-        order.delivery.method === "pickup" ? "Store Pickup" : "Delivery";
-      lines.push(`• *Method*: ${methodLabel}`);
-    }
-    if (order.delivery?.requiredDate)
-      lines.push(`• *Date*: ${order.delivery.requiredDate}`);
-    if (order.delivery?.address)
-      lines.push(`• *Address*: ${order.delivery.address}`);
-    if (customer?.name) lines.push(`• *Customer*: ${customer.name}`);
-    if (customer?.phone) lines.push(`• *Phone*: ${customer.phone}`);
-    if (customer?.email) lines.push(`• *Email*: ${customer.email}`);
-    lines.push("\nIs everything correct?");
-    return lines.join("\n");
+  /*
+   * ==========================================================
+   * ASK CUSTOMER
+   * ==========================================================
+   */
+
+  ask(state, step, message) {
+    state.workflow = "LEAD";
+    state.currentStep = step;
+
+    state.nextStep =
+      step === "COLLECT_NAME"
+        ? "COLLECT_EMAIL"
+        : step === "COLLECT_EMAIL"
+          ? "COLLECT_COMPANY"
+          : "CREATE_LEAD";
+
+    state.awaitingDecision = true;
+    state.completed = false;
+    state.assistantMessage = message;
+
+    state.response = responseBuilder.build({
+      workflow: "LEAD",
+      interaction: "MESSAGE",
+      message,
+      actions: [],
+      sections: [],
+      liveRequirement:
+        state.order ??
+        state.orderContext ??
+        state.liveRequirement ??
+        null,
+      completed: false,
+      metadata: {
+        stage: "COLLECT_CUSTOMER",
+        conversational: true,
+        customerCollection: true,
+      },
+      currentStep: step,
+      nextStep: state.nextStep,
+      context: {
+        stage: "COLLECT_CUSTOMER",
+        step,
+        customer: {
+          name: state.customer?.name ?? null,
+          phone: state.customer?.phone ?? null,
+          email: state.customer?.email ?? null,
+          company: state.customer?.company ?? null,
+        },
+      },
+    });
+
+    return state;
   }
 
-  // ============================================================
-  // FLOW RESPONSE EXTRACTION
-  // ============================================================
+  /*
+   * ==========================================================
+   * CURRENT ORDER
+   * ==========================================================
+   */
 
-  extractFlowResponse(state = {}) {
-    const payload = state.action?.payload ?? {};
-
-    // ----------------------------------------------------------
-    // Preferred WhatsApp Flow response
-    // ----------------------------------------------------------
-
-    const candidates = [
-      payload.responseJson,
-      payload.flowResponse,
-      payload.values,
-      payload.fields,
-      payload.data,
-      state.whatsapp?.flowResponse,
-      state.flowResponse,
-    ];
-
-    for (const candidate of candidates) {
-      const normalized = this.normalizeFlowResponse(candidate);
-
-      if (normalized && Object.keys(normalized).length > 0) {
-        return normalized;
-      }
-    }
-
-    return {};
-  }
-
-  // ============================================================
-  // NORMALIZE FLOW RESPONSE
-  // ============================================================
-
-  normalizeFlowResponse(value) {
-    if (!value) {
-      return null;
-    }
-
-    if (typeof value === "object" && !Array.isArray(value)) {
-      return value;
-    }
-
-    if (typeof value !== "string") {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
-  }
-
-  // ============================================================
-  // REQUEST TYPE FALLBACK
-  // ============================================================
-
-  inferRequestType(state = {}) {
-    const requirement =
-      state.liveRequirement ??
+  attachCurrentOrder(state) {
+    const order =
       state.order ??
       state.orderContext ??
+      state.liveRequirement ??
       state.productSales ??
       null;
 
-    if (Array.isArray(requirement?.items) && requirement.items.length > 0) {
-      return LeadConstants.REQUEST_TYPES.ORDER;
-    }
+    if (!order) return;
 
-    return LeadConstants.REQUEST_TYPES.EXPERT;
+    state.order = order;
+    state.orderContext = order;
+    state.liveRequirement = order;
+    state.productSales = order;
+  }
+
+  /*
+   * ==========================================================
+   * WHATSAPP NUMBER
+   * ==========================================================
+   */
+
+  attachWhatsAppNumber(state) {
+    const phone =
+      state.whatsapp?.phoneNumber ??
+      state.phoneNumber ??
+      state.customer?.phone ??
+      "";
+
+    state.customer = {
+      ...(state.customer ?? {}),
+      phone,
+    };
+  }
+
+  /*
+   * ==========================================================
+   * USER MESSAGE
+   * ==========================================================
+   */
+
+  getUserMessage(state = {}) {
+    return String(
+      state.userMessage ??
+      state.message ??
+      state.incoming?.message ??
+      state.whatsapp?.text ??
+      "",
+    ).trim();
+  }
+
+  /*
+   * ==========================================================
+   * OPTIONAL VALUE
+   * ==========================================================
+   */
+
+  isSkip(value = "") {
+    return SKIP_VALUES.has(
+      String(value).trim().toLowerCase(),
+    );
+  }
+
+  /*
+   * ==========================================================
+   * EMAIL
+   * ==========================================================
+   */
+
+  isValidEmail(value = "") {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  /*
+   * ==========================================================
+   * REQUEST TYPE
+   * ==========================================================
+   */
+
+  inferRequestType(state = {}) {
+    const requirement =
+      state.order ??
+      state.orderContext ??
+      state.liveRequirement ??
+      state.productSales ??
+      null;
+
+    return Array.isArray(requirement?.items) &&
+      requirement.items.length > 0
+      ? LeadConstants.REQUEST_TYPES.ORDER
+      : LeadConstants.REQUEST_TYPES.EXPERT;
   }
 }

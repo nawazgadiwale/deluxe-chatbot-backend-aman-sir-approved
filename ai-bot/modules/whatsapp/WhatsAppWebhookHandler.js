@@ -1,19 +1,54 @@
 import WhatsAppService from "./WhatsAppService.js";
-import MetaProviderAdapter from "./providers/MetaProviderAdapter.js";
+import WhatsAppProviderFactory from "./providers/WhatsAppProviderFactory.js";
 
 export default class WhatsAppWebhookHandler {
-  constructor(service = null, metaAdapter = null) {
+  constructor(service = null, provider = null) {
     this.service = service || new WhatsAppService();
-    this.metaAdapter =
-      metaAdapter ||
-      new MetaProviderAdapter({
-        appSecret: this.service?.appSecret,
-        verifyToken: this.service?.verifyToken,
-      });
+    this.provider = provider || null;
   }
 
   getProvider(req = null) {
-    return this.metaAdapter;
+    if (this.provider) return this.provider;
+
+    // Detect payload provider if request is provided
+    if (req) {
+      const signature =
+        req.headers?.["x-hub-signature-256"] ??
+        req.headers?.["x-hub-signature"] ??
+        null;
+      const body = req.body || {};
+      const mode = req.query?.["hub.mode"] ?? req.query?.mode;
+
+      if (
+        signature ||
+        body.object === "whatsapp_business_account" ||
+        mode === "subscribe"
+      ) {
+        return WhatsAppProviderFactory.getProvider("meta", {
+          appSecret: this.service?.appSecret,
+          verifyToken: this.service?.verifyToken,
+        });
+      }
+
+      const isWhapi =
+        Boolean(req.headers?.["whapi-secret"]) ||
+        Boolean(req.headers?.["x-whapi-secret"]) ||
+        Array.isArray(body.messages) ||
+        Array.isArray(body.chats_updates) ||
+        Boolean(body.chats_update) ||
+        Boolean(body.channel_id) ||
+        Boolean(body.message);
+
+      if (isWhapi) {
+        return WhatsAppProviderFactory.getProvider("whapi", {
+          webhookSecret: this.service?.whapiWebhookSecret,
+          token: this.service?.whapiToken,
+        });
+      }
+    }
+
+    if (this.service?.provider) return this.service.provider;
+    return WhatsAppProviderFactory.getProvider();
   }
 
   // =====================================================
@@ -22,7 +57,8 @@ export default class WhatsAppWebhookHandler {
 
   verify(req, res) {
     try {
-      const result = this.metaAdapter.verifyWebhook(req);
+      const provider = this.getProvider(req);
+      const result = provider.verifyWebhook(req);
 
       if (!result.verified) {
         if (res && typeof res.status === "function") {
@@ -132,14 +168,14 @@ export default class WhatsAppWebhookHandler {
         `[WhatsApp][Webhook] correlationId=${correlationId} method=${method} path=${path} contentType=${contentType} contentLength=${contentLength} bodyType=${bodyType} isArray=${isArray} bodyKeys=${bodyKeys} rawBodyPresent=${rawBodyPresent} rawBodyLength=${rawBodyLength}`,
       );
 
-      // Meta HMAC SHA-256 Signature Verification
-      const auth = this.metaAdapter.authenticateWebhook(req);
+      const provider = this.getProvider(req);
+      const auth = provider.authenticateWebhook(req);
 
       if (!auth.authenticated) {
         const status = auth.status || 403;
         const errMsg = auth.error || "Authentication failed";
         console.warn(
-          `[WhatsApp Webhook] correlationId=${correlationId} Authentication failed for Meta Cloud API. Status: ${status}, Error: ${errMsg}`,
+          `[WhatsApp Webhook] correlationId=${correlationId} Authentication failed for provider ${provider.name}. Status: ${status}, Error: ${errMsg}`,
         );
 
         if (res && typeof res.status === "function") {
@@ -148,9 +184,9 @@ export default class WhatsAppWebhookHandler {
         return { status, body: errMsg };
       }
 
-      console.log(`[WhatsApp][Auth] correlationId=${correlationId} authenticated provider=meta`);
+      console.log(`[WhatsApp][Auth] correlationId=${correlationId} authenticated provider=${provider.name}`);
 
-      // Fast 200 OK acknowledgment to Meta after successful authentication
+      // Fast 200 OK acknowledgment to provider after successful authentication
       if (res && typeof res.status === "function") {
         res.status(200).send("EVENT_RECEIVED");
       }
@@ -163,14 +199,14 @@ export default class WhatsAppWebhookHandler {
           console.log(`[WhatsApp][Async] correlationId=${correlationId} starting message processing bodyKeys=${bodyKeys}`);
           await this.service.handleWebhook(parsedBody, {
             authenticated: true,
-            provider: "meta",
+            provider: provider.name,
             headers: req.headers,
             correlationId,
           });
           console.log(`[WhatsApp][Async] correlationId=${correlationId} message processing completed`);
         } catch (err) {
           console.error(
-            `[WhatsApp][Async] correlationId=${correlationId} message processing failed (meta):`,
+            `[WhatsApp][Async] correlationId=${correlationId} message processing failed (${provider.name}):`,
             err.message,
             err.stack,
           );
@@ -187,3 +223,4 @@ export default class WhatsAppWebhookHandler {
     }
   }
 }
+

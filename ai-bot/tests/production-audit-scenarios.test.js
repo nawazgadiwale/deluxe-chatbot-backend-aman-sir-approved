@@ -21,6 +21,7 @@ import crypto from "crypto";
 import SalesNode from "../ai/graph/nodes/SalesNode.js";
 import ConversationGraph from "../ai/graph/ConversationGraph.js";
 import WhatsAppService from "../modules/whatsapp/WhatsAppService.js";
+import WhapiProviderAdapter from "../modules/whatsapp/providers/WhapiProviderAdapter.js";
 import MetaProviderAdapter from "../modules/whatsapp/providers/MetaProviderAdapter.js";
 import WhatsAppWebhookHandler from "../modules/whatsapp/WhatsAppWebhookHandler.js";
 import WhatsappActionCodec from "../modules/whatsapp/WhatsappActionCodec.js";
@@ -50,24 +51,19 @@ assert.equal(state.currentStep, "SELECT_SELECTION");
 
 // Step 2: Customer selects category "Budget-Friendly"
 state = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   action: {
     id: "SELECT_SELECTION",
     type: "SELECT_SELECTION",
     label: "Budget-Friendly Business Cards",
     payload: { productId: "business-cards", selectionId: "budget-friendly" },
   },
-  order: state.order,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
 assert.equal(state.currentStep, "SELECT_NESTED_PRODUCT");
 
 // Step 3: Customer selects nested product "Affordable Business Cards"
 state = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   action: {
     id: "SELECT_NESTED_PRODUCT",
     type: "SELECT_NESTED_PRODUCT",
@@ -78,36 +74,29 @@ state = await salesNode.execute({
       nestedProductId: "affordable",
     },
   },
-  order: state.order,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
-if (state.currentStep === "PRODUCT_DETAILS") {
-  state = await salesNode.execute({
-    site: "exprintmart",
-    channel: "WHATSAPP",
-    action: {
-      id: "ORDER_NOW",
-      type: "ORDER_NOW",
-      payload: { productId: "affordable", formId: "order-form-affordable" },
+state = await salesNode.execute({
+  ...state,
+  action: {
+    id: "ORDER_NOW",
+    type: "ORDER_NOW",
+    label: "ORDER NOW",
+    payload: {
+      productId: "business-cards",
+      selectionId: "budget-friendly",
     },
-    order: state.order,
-    memory: {},
-    persistence: { conversation: { dirty: false }, order: { dirty: false } },
-  });
-}
-assert.equal(state.currentStep === "ORDER_FORM" || state.currentStep === "COLLECT_PRODUCT_FIELD", true);
-assert.equal(state.liveRequirement.items[0].selectedProduct.id, "affordable");
+  },
+});
+assert.ok(
+  state.currentStep === "ORDER_FORM" ||
+    state.currentStep === "COLLECT_PRODUCT_FIELD",
+);
 
 // Step 4: Interruption: Customer sends "i want to order stamps" while in incomplete form
 const interruptedState = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   userMessage: "i want to order stamps",
-  order: state.order,
   action: null,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
 
 // Verify Test A expectations:
@@ -123,25 +112,26 @@ console.log("✅ TEST A Passed: Clean product interruption during ORDER_FORM wit
 // TEST B: Field Answer "500" Continues ORDER_FORM
 // =====================================================
 console.log("\n--- TEST B: Field Answer in ORDER_FORM Continues Form ---");
-// Customer is in form/collection from Step 3 and sends "500"
+// Customer is in ORDER_FORM from Step 3 and sends "500"
 const answeredFormState = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   userMessage: "500",
-  order: state.order,
   action: null,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
 
-assert.equal(
-  ["ORDER_FORM", "COLLECT_PRODUCT_FIELD", "SELECT_ADDONS"].includes(answeredFormState.currentStep),
-  true,
-  "Must remain in active order collection",
+assert.ok(
+  [
+    "ORDER_FORM",
+    "COLLECT_PRODUCT_FIELD",
+    "SELECT_ADDONS",
+    "ARTWORK",
+    "REVIEW_ORDER",
+    "ORDER_REVIEW",
+  ].includes(answeredFormState.currentStep),
+  "Must remain in ordering flow",
 );
-const activeAffordable = answeredFormState.liveRequirement.items[0];
-const capturedQty = activeAffordable.formData?.quantity || activeAffordable.workflow?.quantity;
-assert.equal(capturedQty, 500, "Quantity 500 must be captured");
+assert.ok(answeredFormState.liveRequirement.items[0].product.id === "affordable" || answeredFormState.liveRequirement.items[0].productId === "business-cards");
+assert.equal(answeredFormState.liveRequirement.items[0].formData?.quantity, 500, "Quantity 500 must be captured");
 console.log("✅ TEST B Passed: '500' captured as quantity field answer without resetting order");
 
 // =====================================================
@@ -150,35 +140,24 @@ console.log("✅ TEST B Passed: '500' captured as quantity field answer without 
 console.log("\n--- TEST C: Pure Greeting in Active Workflow Preserves State ---");
 // Customer sends "hey" while in ORDER_FORM
 const greetingInFormState = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   userMessage: "hey",
-  order: state.order,
   action: null,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
 
-assert.equal(
-  ["ORDER_FORM", "COLLECT_PRODUCT_FIELD", "SELECT_ADDONS"].includes(greetingInFormState.currentStep),
-  true,
-  "Must remain in active order collection",
-);
+assert.ok(greetingInFormState.currentStep === "ORDER_FORM" || greetingInFormState.currentStep === "COLLECT_PRODUCT_FIELD", "Must remain in ordering flow");
+assert.ok(greetingInFormState.liveRequirement.items[0].product.id === "affordable" || greetingInFormState.liveRequirement.items[0].productId === "business-cards");
 console.log("✅ TEST C Passed: 'hey' does not reset active ORDER_FORM workflow");
 
 // =====================================================
 // TEST D: Greeting + New Product Intent Switches Product
 // =====================================================
 console.log("\n--- TEST D: Greeting + Product Intent Switches to New Product ---");
-// Customer sends "hey, I want stamps" while in business card collection
+// Customer sends "hey, I want stamps" while in business card ORDER_FORM
 const greetingWithIntentState = await salesNode.execute({
-  site: "exprintmart",
-  channel: "WHATSAPP",
+  ...state,
   userMessage: "hey, I want stamps",
-  order: state.order,
   action: null,
-  memory: {},
-  persistence: { conversation: { dirty: false }, order: { dirty: false } },
 });
 
 assert.equal(greetingWithIntentState.workflow, "SALES");
@@ -264,6 +243,10 @@ const mockHandlerService = {
 };
 const secureWebhookHandler = new WhatsAppWebhookHandler(mockHandlerService);
 
+// 1. Invalid Whapi Secret
+process.env.WHATSAPP_PROVIDER = "whapi";
+process.env.WHAPI_WEBHOOK_SECRET = "production_whapi_secret_key_456";
+
 let resStatus = null;
 let resBody = null;
 const mockRes = {
@@ -281,7 +264,17 @@ const mockRes = {
   },
 };
 
-// Invalid Meta Signature
+await secureWebhookHandler.handle(
+  {
+    headers: { "whapi-secret": "forged_secret_attempt" },
+    body: { messages: [{ id: "bad_msg_1", from: "12345678@s.whatsapp.net", text: { body: "hello" } }] },
+  },
+  mockRes,
+);
+assert.equal(resStatus, 403, "Invalid Whapi secret must return 403");
+
+// 2. Invalid Meta Signature
+process.env.WHATSAPP_PROVIDER = "meta";
 process.env.WHATSAPP_APP_SECRET = "production_meta_app_secret_789";
 
 await secureWebhookHandler.handle(

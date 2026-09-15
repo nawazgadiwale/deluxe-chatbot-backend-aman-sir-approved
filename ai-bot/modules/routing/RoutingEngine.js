@@ -27,7 +27,10 @@ const SALES_ACTIONS = new Set([
   "ASK_NUMBER_OF_NAMES",
   "SELECT_DELIVERY_METHOD",
   "ASK_DELIVERY_ADDRESS",
+  "DELIVERY_ADDRESS",
   "ASK_DELIVERY_DATE",
+  "DELIVERY_DATE",
+  "ARTWORK",
   "REVIEW_ORDER",
   "COMPLETE_ORDER",
   "CONFIRM_ORDER",
@@ -48,10 +51,10 @@ const SALES_ACTIONS = new Set([
 ]);
 
 const CANCELLATION_REGEX =
-  /^(cancel|cancel order|cancelled|stop|restart|start over|start again|reset|quit|exit|nevermind|i don't want this anymore|i dont want this anymore)$/i;
+  /^(cancel|cancel order|cancelled|canceling|i want to cancel|please cancel|cancel please|stop|restart|start over|start again|reset|quit|exit|nevermind|i don't want this anymore|i dont want this anymore)$/i;
 
 const CANCELLATION_PHRASE_REGEX =
-  /\b(cancel order|cancel my order|cancel the order|stop order|restart bot|restart chat)\b/i;
+  /\b(cancel order|cancel my order|cancel the order|i want to cancel|please cancel|stop order|restart bot|restart chat)\b/i;
 
 const HUMAN_HANDOFF_REGEX =
   /^(human|agent|talk to (an? )?human|talk to (an? )?agent|representative|executive|expert|live agent)$/i;
@@ -82,20 +85,41 @@ export default class RoutingEngine {
 
     // 3. Global interruption: Cancellation / restart
     const isExplicitCancellation =
-      CANCELLATION_REGEX.test(rawMsg) || CANCELLATION_PHRASE_REGEX.test(rawMsg);
+      CANCELLATION_REGEX.test(rawMsg) ||
+      CANCELLATION_PHRASE_REGEX.test(rawMsg);
 
     if (isExplicitCancellation) {
-      console.log("[RoutingEngine] Global interruption: CANCELLATION detected");
+      console.log(
+        "[RoutingEngine] Global interruption: CANCELLATION detected",
+      );
+
       return {
         capability: "sales",
         capabilities: ["sales"],
+
         confidence: 1,
+
         source: "ACTION",
-        workflow: "SALES",
+
+        workflow: "NONE",
+        step: null,
+
+        routing: {
+          source: "ACTION",
+          capability: "sales",
+          workflow: "NONE",
+          step: null,
+          confidence: 1,
+        },
+
         action: {
           id: "CANCEL_ORDER",
+          type: "CANCEL_ORDER",
           label: "Cancel Order",
-          payload: { text: rawMsg },
+
+          payload: {
+            text: rawMsg,
+          },
         },
       };
     }
@@ -147,13 +171,14 @@ export default class RoutingEngine {
           state.awaitingDecision ||
           state.liveRequirement != null)) ||
       (state.workflow === "LEAD" &&
-        (state.currentStep === "COLLECT_CUSTOMER" ||
-          state.currentStep === "LEAD_FORM")) ||
+        state.currentStep !== "LEAD_COMPLETED" &&
+        state.currentStep != null) ||
       state.routing?.source === "WORKFLOW";
 
     const isWorkflowAnswer =
       hasActiveWorkflow &&
       (state.currentStep === "COLLECT_CUSTOMER" ||
+        state.currentStep?.startsWith("COLLECT_") ||
         WORKFLOW_ANSWER_PATTERNS.some((p) => p.test(rawMsg)) ||
         /^\d+$/.test(rawMsg) ||
         /^(dubai|uae|sharjah|abu dhabi|pickup|delivery|have_artwork|need_design|skip)$/i.test(

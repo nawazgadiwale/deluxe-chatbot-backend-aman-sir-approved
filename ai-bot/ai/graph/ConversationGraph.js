@@ -61,17 +61,37 @@ const SUBMIT_ORDER_FORM =
   DecisionTypes.SUBMIT_ORDER_FORM ?? "SUBMIT_ORDER_FORM";
 
 // ============================================================
-// DIRECT ACTION ROUTER
+// SPECIAL FLOW ROUTER
 // ============================================================
 //
+// This router exists specifically to prevent a WhatsApp Flow
+// submission from falling back into normal conversational
+// routing.
+//
 // Priority:
-// 1. Generic SUBMIT_LEAD action
-// 2. Generic SUBMIT_ORDER_FORM action
-// 3. Normal ConversationRouter
+//
+// 1. WhatsApp Lead Flow submission
+// 2. Generic SUBMIT_LEAD action
+// 3. WhatsApp Order Flow submission
+// 4. Generic SUBMIT_ORDER_FORM action
+// 5. Normal ConversationRouter
 //
 // ============================================================
 
 function routeAfterWorkflow(state = {}) {
+  // ----------------------------------------------------------
+  // WHATSAPP LEAD FLOW
+  // ----------------------------------------------------------
+
+  if (
+    state.isFlowSubmission === true &&
+    (state.flowType === "LEAD_FORM" || state.flowType === "LEAD")
+  ) {
+    console.log("[ConversationGraph] Routing WhatsApp Lead Flow → LeadNode");
+
+    return "LeadNode";
+  }
+
   // ----------------------------------------------------------
   // GENERIC LEAD SUBMISSION
   // ----------------------------------------------------------
@@ -80,6 +100,19 @@ function routeAfterWorkflow(state = {}) {
     console.log("[ConversationGraph] Routing SUBMIT_LEAD → LeadNode");
 
     return "LeadNode";
+  }
+
+  // ----------------------------------------------------------
+  // WHATSAPP ORDER FLOW
+  // ----------------------------------------------------------
+
+  if (
+    state.isFlowSubmission === true &&
+    (state.flowType === "ORDER_FORM" || state.flowType === "ORDER")
+  ) {
+    console.log("[ConversationGraph] Routing WhatsApp Order Flow → SalesNode");
+
+    return "SalesNode";
   }
 
   // ----------------------------------------------------------

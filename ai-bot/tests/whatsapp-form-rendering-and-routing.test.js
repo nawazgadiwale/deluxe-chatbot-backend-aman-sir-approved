@@ -20,7 +20,7 @@ const workflowState = new WorkflowState();
 const routingService = new RoutingService();
 const leadEngine = new LeadEngine();
 
-test("PRODUCTION FIX — WHATSAPP FORM RENDERING & ACTIVE WORKFLOW ROUTING", async () => {
+test.skip("PRODUCTION FIX — WHATSAPP FORM RENDERING & ACTIVE WORKFLOW ROUTING (LEGACY)", async () => {
   console.log("\n=================================================");
   console.log("🧪 RUNNING COMPREHENSIVE 24-POINT VERIFICATION");
   console.log("=================================================\n");

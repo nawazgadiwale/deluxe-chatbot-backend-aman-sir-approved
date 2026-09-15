@@ -275,14 +275,14 @@ export default class LoadSessionNode {
 
     const orderCust = order?.customer
       ? (typeof order.customer.toObject === "function"
-          ? order.customer.toObject()
-          : order.customer)
+        ? order.customer.toObject()
+        : order.customer)
       : {};
 
     const convCust = conversation.customer
       ? (typeof conversation.customer.toObject === "function"
-          ? conversation.customer.toObject()
-          : conversation.customer)
+        ? conversation.customer.toObject()
+        : conversation.customer)
       : {};
 
     state.customer = {
@@ -315,9 +315,41 @@ export default class LoadSessionNode {
       ...(state.metadata ?? {}),
     };
 
+    /*
+     * ===================================================
+     * RESTORE LEAD CUSTOMER COLLECTION STATE
+     * ===================================================
+     *
+     * This state belongs to the conversation and must
+     * survive between WhatsApp messages.
+     */
+
+    const persistedCustomerCollection =
+      conversation.metadata?.customerCollection ?? {};
+
+    state.customerCollection = {
+      started:
+        persistedCustomerCollection.started === true,
+
+      nameResolved:
+        persistedCustomerCollection.nameResolved === true,
+
+      emailResolved:
+        persistedCustomerCollection.emailResolved === true,
+
+      companyResolved:
+        persistedCustomerCollection.companyResolved === true,
+    };
+
     if (state.currentStep && state.metadata?.routing) {
-      state.metadata.routing.step = state.currentStep;
+      state.metadata.routing.step =
+        state.currentStep;
     }
+
+    console.log(
+      "[LoadSessionNode] Customer collection:",
+      state.customerCollection,
+    );
 
     // 10. RESTORE MEMORY
 
@@ -365,28 +397,84 @@ export default class LoadSessionNode {
 
     state.comparisonProducts = state.memory.comparisonProducts ?? [];
 
+    // ===================================================
     // 12. RESTORE ACTIVE WORKFLOW
+    // ===================================================
 
     const activeOrder =
-      order && !["CONFIRMED", "CANCELLED", "DELETED"].includes(order.status);
+      order &&
+      !["CONFIRMED", "CANCELLED", "DELETED"].includes(
+        order.status,
+      );
 
-    const activeSalesWorkflow =
+    /*
+     * ===================================================
+     * LEAD
+     * ===================================================
+     *
+     * LEAD has priority over an active order.
+     *
+     * The order can remain attached to the session
+     * while LeadAgent owns the conversation.
+     */
+
+    if (conversation.workflow === "LEAD") {
+      if (conversation.currentStep !== "LEAD_COMPLETED") {
+        state.workflow = "LEAD";
+
+        state.currentStep =
+          conversation.currentStep ??
+          "COLLECT_NAME";
+
+        state.awaitingDecision = true;
+      } else {
+        state.workflow = "NONE";
+        state.currentStep = null;
+        state.awaitingDecision = false;
+        state.customerCollection = {
+          started: false,
+          nameResolved: false,
+          emailResolved: false,
+          companyResolved: false,
+        };
+      }
+    }
+
+    /*
+     * ===================================================
+     * SALES
+     * ===================================================
+     */
+
+    else if (
       conversation.workflow === "SALES" &&
-      (state.liveRequirement != null || state.productSales != null);
-
-    if (activeOrder || activeSalesWorkflow) {
+      (
+        activeOrder ||
+        state.liveRequirement != null ||
+        state.productSales != null
+      )
+    ) {
       state.workflow = "SALES";
 
       state.currentStep =
         conversation.currentStep ??
-        (order?.status === "REVIEW"
-          ? "ORDER_REVIEW"
-          : (activeOrder ? "ORDER_FORM" : null));
+        (
+          order?.status === "REVIEW"
+            ? "ORDER_REVIEW"
+            : activeOrder
+              ? "ORDER_FORM"
+              : null
+        );
 
       state.awaitingDecision = true;
     }
 
-    // RECOMMENDATION
+    /*
+     * ===================================================
+     * RECOMMENDATION
+     * ===================================================
+     */
+
     else if (
       conversation.workflow === "RECOMMENDATION" &&
       state.recommendationContext?.active &&
@@ -402,22 +490,17 @@ export default class LoadSessionNode {
       state.awaitingDecision = true;
     }
 
-    // LEAD
-    else if (conversation.workflow === "LEAD") {
-      state.workflow = "LEAD";
+    /*
+   * ===================================================
+   * NONE / OTHER
+   * ===================================================
+   */
 
-      state.currentStep = conversation.currentStep ?? "LEAD_COMPLETED";
-
-      state.awaitingDecision = false;
-    }
-
-    // NONE / OTHER
     else {
-      state.workflow = conversation.workflow ?? "NONE";
+      state.workflow =
+        conversation.workflow ?? "NONE";
+
       state.currentStep = null;
-      state.selectedProduct = null;
-      state.liveRequirement = null;
-      state.productSales = null;
       state.awaitingDecision = false;
     }
 

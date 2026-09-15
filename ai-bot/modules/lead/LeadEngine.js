@@ -6,81 +6,35 @@ import LeadService from "./LeadService.js";
 import LeadConstants from "./helpers/LeadConstants.js";
 
 const leadExtractor = new LeadExtractor();
-
 const leadValidator = new LeadValidator();
-
 const leadBuilder = new LeadBuilder();
-
 const leadService = new LeadService();
 
 export default class LeadEngine {
   async execute(state = {}) {
-    console.log("========== WHATSAPP LEAD ENGINE ==========");
+    console.log("========== LEAD ENGINE ==========");
 
-    const channel = state.channel ?? state.whatsapp?.channel ?? "WEBCHAT";
-
-    const isWhatsApp = channel === LeadConstants.CHANNELS.WHATSAPP;
-
-    /*
-     * =====================================================
-     * LEAD CONTEXT
-     * =====================================================
-     */
+    const channel =
+      state.channel ??
+      state.whatsapp?.channel ??
+      LeadConstants.CHANNELS.WEBCHAT;
 
     const leadContext = state.leadContext ?? {};
 
-    /*
-     * =====================================================
-     * REQUIREMENT / ORDER
-     * =====================================================
-     */
-
     const requirement =
-      state.orderContext ??
       state.order ??
+      state.orderContext ??
       state.liveRequirement ??
       state.productSales ??
       {};
 
-    /*
-     * =====================================================
-     * ORDER DETECTION
-     * =====================================================
-     */
-
     const hasOrder =
-      Array.isArray(requirement.items) && requirement.items.length > 0;
-
-    /*
-     * =====================================================
-     * SESSION
-     * =====================================================
-     */
-
-    const sessionId =
-      state.sessionId ??
-      state.conversation?.sessionId ??
-      state.persistence?.conversation?.sessionId ??
-      null;
-
-    /*
-     * =====================================================
-     * REQUEST TYPE
-     * =====================================================
-     */
-
-    const conversationRequestType =
-      state.conversation?.requestType ??
-      state.persistence?.conversation?.requestType ??
-      null;
-
-    const routingRequestType = state.routing?.requestType ?? null;
+      Array.isArray(requirement.items) &&
+      requirement.items.length > 0;
 
     const requestType =
-      conversationRequestType ??
-      leadContext.requestType ??
       state.requestType ??
-      routingRequestType ??
+      leadContext.requestType ??
       (hasOrder
         ? LeadConstants.REQUEST_TYPES.ORDER
         : LeadConstants.REQUEST_TYPES.EXPERT);
@@ -93,237 +47,146 @@ export default class LeadEngine {
     };
 
     /*
-     * =====================================================
-     * SAVE REQUEST TYPE
-     * =====================================================
+     * ==========================================================
+     * WHATSAPP NUMBER
+     * ==========================================================
+     *
+     * Never ask the customer for this.
      */
 
-    if (sessionId && requestType && conversationRequestType !== requestType) {
-      await leadService.updateConversationRequestType(sessionId, requestType);
+    const whatsappNumber =
+      state.whatsapp?.phoneNumber ??
+      state.whatsapp?.from ??
+      state.phoneNumber ??
+      null;
+
+    if (!whatsappNumber) {
+      throw new Error(
+        "WhatsApp phone number is required to create a lead.",
+      );
     }
 
-    const hasCustomerData =
-      Boolean(state.customer?.name || requirement.customer?.name) &&
-      Boolean(
-        state.customer?.email ||
-        state.customer?.emailId ||
-        requirement.customer?.email ||
-        requirement.customer?.emailId,
+    /*
+     * ==========================================================
+     * EXTRACT
+     * ==========================================================
+     */
+
+    const extractedLead =
+      leadExtractor.extract(state);
+
+    /*
+     * Channel identity is authoritative.
+     */
+
+    extractedLead.phoneNumber = whatsappNumber;
+
+    /*
+     * ==========================================================
+     * VALIDATE
+     * ==========================================================
+     */
+
+    const validatedLead =
+      leadValidator.validate(
+        extractedLead,
+        { channel },
       );
 
-    const isDirectSubmission =
-      hasCustomerData ||
-      state.action?.id === LeadConstants.ACTIONS.SUBMIT_LEAD;
-
     /*
-     * =====================================================
-     * FIRST LEAD ENTRY
-     * =====================================================
+     * ==========================================================
+     * REFERENCE NUMBER
+     * ==========================================================
      */
 
-    if (!isDirectSubmission) {
-      console.log("WhatsApp lead form required.");
-
-      /*
-       * IMPORTANT:
-       *
-       * WhatsAppResponseAdapter will render interactive
-       * lead collection controls.
-       */
-
-      if (isWhatsApp) {
-        return {
-          status: "COLLECTING_CUSTOMER",
-
-          completed: false,
-
-          interaction: "FORM",
-
-          requestType,
-
-          leadContext,
-
-          order: requirement,
-        };
-      }
-
-      /*
-       * =================================================
-       * WEBCHAT FALLBACK
-       * =================================================
-       *
-       * Keep only if WebChat is still used.
-       */
-
-      return {
-        status: "COLLECTING_CUSTOMER",
-
-        completed: false,
-
-        interaction: "FORM",
-
-        requestType,
-
-        form: {
-          step: "COLLECT_CUSTOMER",
-
-          type: "FORM",
-
-          title:
-            requestType === LeadConstants.REQUEST_TYPES.ORDER
-              ? "Complete Your Order"
-              : "Talk to Our Sales Team",
-
-          fields: [
-            {
-              id: "name",
-              label: "Full Name",
-              type: "text",
-              required: true,
-            },
-
-            {
-              id: "phoneNumber",
-              label: "Phone Number",
-              type: "tel",
-              required: true,
-            },
-
-            {
-              id: "emailId",
-              label: "Email Address",
-              type: "email",
-              required: false,
-            },
-
-            {
-              id: "companyName",
-              label: "Company Name",
-              type: "text",
-              required: false,
-            },
-          ],
-
-          submitAction: {
-            id: "SUBMIT_LEAD",
-            label: "Submit",
-          },
-        },
-      };
-    }
+    const refNo =
+      await leadService.getNextRefNumber();
 
     /*
-     * =====================================================
-     * EXTRACT WHATSAPP FLOW DATA
-     * =====================================================
-     */
-
-    const extractedLead = leadExtractor.extract(state);
-
-    console.log("Extracted WhatsApp Lead:");
-
-    console.dir(extractedLead, { depth: null });
-
-    /*
-     * =====================================================
-     * VALIDATE
-     * =====================================================
-     */
-
-    const validatedLead = leadValidator.validate(extractedLead, {
-      channel,
-    });
-
-    /*
-     * =====================================================
-     * REF NUMBER
-     * =====================================================
-     */
-
-    const refNo = await leadService.getNextRefNumber();
-
-    /*
-     * =====================================================
+     * ==========================================================
      * BUILD
-     * =====================================================
+     * ==========================================================
      */
 
-    const leadDocument = leadBuilder.build(
-      validatedLead,
-      refNo,
-      requirement,
-      channel,
-    );
+    const leadDocument =
+      leadBuilder.build(
+        validatedLead,
+        refNo,
+        requirement,
+        channel,
+      );
 
     /*
-     * =====================================================
-     * SAVE
-     * =====================================================
+     * ==========================================================
+     * CREATE LEAD
+     * ==========================================================
      */
 
-    const savedLead = await leadService.createLead(
-      leadDocument,
-      requestType === LeadConstants.REQUEST_TYPES.ORDER,
-    );
+    const isOrder =
+      requestType ===
+      LeadConstants.REQUEST_TYPES.ORDER;
+
+    const savedLead =
+      await leadService.createLead(
+        leadDocument,
+        isOrder,
+      );
 
     /*
-     * =====================================================
+     * ==========================================================
      * ATTACH LEAD TO ORDER
-     * =====================================================
+     * ==========================================================
      */
 
     let updatedOrder = null;
 
-    if (requestType === LeadConstants.REQUEST_TYPES.ORDER && hasOrder) {
+    if (isOrder && hasOrder) {
       const orderId =
-        requirement._id ??
-        requirement.id ??
-        state.orderContext?._id ??
         state.order?._id ??
-        state.liveRequirement?._id;
+        state.orderContext?._id ??
+        state.liveRequirement?._id ??
+        null;
 
-      const customer = {
-        name: savedLead.name ?? null,
+      if (!orderId) {
+        throw new Error(
+          "Current order _id is required before creating an order lead.",
+        );
+      }
 
-        company: savedLead.companyName ?? null,
-
-        phone: savedLead.phoneNumber ?? null,
-
-        email: savedLead.emailId ?? null,
-      };
-
-      if (orderId) {
-        updatedOrder = await leadService.updateOrderAfterLead(
+      updatedOrder =
+        await leadService.updateOrderAfterLead(
           orderId,
-          customer,
+          {
+            name:
+              savedLead.name ?? null,
+
+            phone:
+              savedLead.phoneNumber ?? null,
+
+            email:
+              savedLead.emailId ?? null,
+
+            company:
+              savedLead.companyName ?? null,
+          },
           savedLead._id,
           savedLead,
         );
-      }
     }
-
-    /*
-     * =====================================================
-     * COMPLETED
-     * =====================================================
-     */
 
     return {
       status: "COMPLETED",
-
       completed: true,
-
-      interaction: "WHATSAPP",
-
       lead: savedLead,
-
       order: updatedOrder,
-
-      whatsapp: {
-        phoneNumber: state.whatsapp?.phoneNumber ?? savedLead.phoneNumber,
-
-        message: "Thank you! Our sales team will contact you shortly.",
+      customer: {
+        name: savedLead.name,
+        phone: savedLead.phoneNumber,
+        email: savedLead.emailId ?? null,
+        company: savedLead.companyName ?? null,
       },
+      message:
+        "Thank you. Your details have been received successfully.",
     };
   }
 }

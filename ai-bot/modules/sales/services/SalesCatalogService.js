@@ -91,6 +91,37 @@ export default class SalesCatalogService {
     return this.catalog.filter((product) => product.featured === true);
   }
 
+  getTopLevelProduct(productId = "") {
+    if (productId === undefined || productId === null || productId === "") {
+      return null;
+    }
+    const idStr = String(productId).trim().toLowerCase();
+    return (
+      this.catalog.find(
+        (product) =>
+          product.id === productId ||
+          String(product.id).toLowerCase() === idStr ||
+          product.slug?.toLowerCase() === idStr,
+      ) ?? null
+    );
+  }
+
+  isSelectionOption(id = "") {
+    if (!id) return false;
+    const idStr = String(id).trim().toLowerCase();
+    for (const prod of this.catalog) {
+      const options = prod.selection?.options ?? [];
+      const matched = options.some(
+        (opt) =>
+          opt.id === id ||
+          String(opt.id).toLowerCase() === idStr ||
+          opt.slug?.toLowerCase() === idStr,
+      );
+      if (matched) return true;
+    }
+    return false;
+  }
+
   getProduct(productId = "") {
     if (productId === undefined || productId === null || productId === "") {
       return null;
@@ -313,9 +344,12 @@ export default class SalesCatalogService {
 
   findProducts(message = "") {
     const text = this.normalize(message);
-    if (!text) return [];
 
-    const tokens = new Set(this.tokenize(text));
+    if (!text) {
+      return [];
+    }
+
+    const tokens = this.tokenize(text);
     const scored = [];
 
     for (const product of this.catalog) {
@@ -324,48 +358,165 @@ export default class SalesCatalogService {
         product.slug?.replace(/[-_]/g, " "),
         ...(product.aliases ?? []),
         ...(product.synonyms ?? []),
-      ].filter(Boolean);
+      ]
+        .filter(Boolean)
+        .map((value) => this.normalize(value))
+        .filter(Boolean);
 
-      let score = 0;
+
+      let bestScore = 0;
+
       for (const candidate of candidates) {
-        const normalized = this.normalize(candidate);
-        if (!normalized) continue;
+        const candidateTokens = this.tokenize(candidate);
 
-        if (text === normalized) score = Math.max(score, 100);
-        else if (text.includes(normalized)) score = Math.max(score, 90);
-        else {
-          const candidateTokens = this.tokenize(normalized);
-          const overlap = candidateTokens.filter((token) => tokens.has(token));
-          if (overlap.length) {
-            const ratio = overlap.length / candidateTokens.length;
-            score = Math.max(score, Math.round(50 * ratio));
+        /*
+         * 1. Exact phrase
+         */
+        if (text === candidate) {
+          bestScore = Math.max(bestScore, 100);
+          continue;
+        }
+
+        /*
+         * 2. Full phrase contained in user message
+         *
+         * Example:
+         * "i want business cards"
+         */
+        if (text.includes(candidate)) {
+          bestScore = Math.max(bestScore, 95);
+          continue;
+        }
+
+        /*
+         * 3. Token-level matching
+         */
+        const tokenScores = tokens.map((inputToken) => {
+          let bestTokenScore = 0;
+
+          for (const candidateToken of candidateTokens) {
+            bestTokenScore = Math.max(
+              bestTokenScore,
+              this.similarity(inputToken, candidateToken),
+            );
           }
+
+          return bestTokenScore;
+        });
+
+        if (!tokenScores.length) {
+          continue;
+        }
+
+        const matchedTokens = tokenScores.filter(
+          (score) => score >= 0.82,
+        );
+
+        if (!matchedTokens.length) {
+          continue;
+        }
+
+        const averageScore =
+          matchedTokens.reduce((sum, score) => sum + score, 0) /
+          matchedTokens.length;
+
+        const coverage =
+          matchedTokens.length / candidateTokens.length;
+
+        /*
+         * Require reasonable candidate coverage.
+         *
+         * This prevents a single common word from accidentally
+         * selecting an unrelated product.
+         */
+        if (coverage >= 1) {
+          bestScore = Math.max(
+            bestScore,
+            Math.round(60 + averageScore * 35),
+          );
+        } else if (coverage >= 0.5) {
+          bestScore = Math.max(
+            bestScore,
+            Math.round(50 + averageScore * 30),
+          );
         }
       }
 
-      if (score > 0) scored.push({ product, score });
-    }
-
-    if (scored.length > 0) {
-      const topScore = Math.max(...scored.map((s) => s.score));
-      if (topScore >= 90) {
-        return scored
-          .filter((s) => s.score >= 80)
-          .sort(
-            (a, b) =>
-              b.score - a.score || a.product.name.localeCompare(b.product.name),
-          )
-          .map(({ product }) => product);
+      if (bestScore > 0) {
+        scored.push({
+          product,
+          score: bestScore,
+        });
       }
+
+
     }
 
-    return scored
+    const sorted = scored
+      .filter(({ score }) => score >= 70)
       .sort(
         (a, b) =>
-          b.score - a.score || a.product.name.localeCompare(b.product.name),
-      )
-      .map(({ product }) => product);
+          b.score - a.score ||
+          a.product.name.localeCompare(b.product.name),
+      );
+
+    if (
+      sorted.length > 1 &&
+      sorted[0].score >= 90 &&
+      sorted[0].score > sorted[1].score
+    ) {
+      return [sorted[0].product];
+    }
+
+    return sorted.map(({ product }) => product);
   }
+
+  similarity(a = "", b = "") {
+    if (!a || !b) {
+      return 0;
+    }
+
+    if (a === b) {
+      return 1;
+    }
+
+    const distance = this.levenshteinDistance(a, b);
+    const maxLength = Math.max(a.length, b.length);
+
+    if (!maxLength) {
+      return 1;
+    }
+
+    return 1 - distance / maxLength;
+  }
+
+  levenshteinDistance(a = "", b = "") {
+    const previous = Array.from(
+      { length: b.length + 1 },
+      (_, index) => index,
+    );
+
+    for (let i = 1; i <= a.length; i += 1) {
+      const current = [i];
+
+      for (let j = 1; j <= b.length; j += 1) {
+        const insertion = current[j - 1] + 1;
+        const deletion = previous[j] + 1;
+        const substitution =
+          previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+
+        current.push(
+          Math.min(insertion, deletion, substitution),
+        );
+      }
+
+      previous.splice(0, previous.length, ...current);
+
+    }
+
+    return previous[b.length];
+  }
+
 
   tokenize(value = "") {
     return this.normalize(value)
@@ -524,9 +675,40 @@ export default class SalesCatalogService {
   // Product Fields
 
   getProductFields(product = {}, item = {}) {
-    const selection = this.getSelectionOption(product, item.selection?.id);
+    const parent = product.parentProductId
+      ? product.parentProduct ?? this.getProduct(product.parentProductId)
+      : null;
+    const baseProduct = parent ?? product;
+    const selectionId =
+      item.selection?.id ||
+      item.selectionId ||
+      product.parentSelectionId ||
+      item.selectedProduct?.parentSelectionId;
+    const selection = selectionId
+      ? this.getSelectionOption(baseProduct, selectionId)
+      : null;
 
-    return selection?.fields ?? product.fields ?? [];
+    const candidateSources = [
+      baseProduct.fields,
+      selection?.fields,
+      product.fields,
+      item.selectedProduct?.fields,
+    ];
+
+    const fieldsMap = new Map();
+    for (const source of candidateSources) {
+      if (Array.isArray(source)) {
+        for (const field of source) {
+          if (field && field.id && !fieldsMap.has(field.id)) {
+            fieldsMap.set(field.id, field);
+          }
+        }
+      }
+    }
+
+    const allFields = Array.from(fieldsMap.values());
+    allFields.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    return allFields;
   }
 
   getProductField(product = {}, item = {}, fieldId = "") {
@@ -546,7 +728,7 @@ export default class SalesCatalogService {
   }
 
   getProductFieldOptions(product = {}, fieldId = "") {
-    return this.getProductField(product, fieldId)?.options ?? [];
+    return this.getProductField(product, {}, fieldId)?.options ?? [];
   }
 
   getCurrentField(product = {}, item = {}) {
@@ -554,8 +736,7 @@ export default class SalesCatalogService {
       this.getProductFields(product, item).find(
         (field) =>
           field.required !== false &&
-          item.productData?.[field.id] == null &&
-          item.formData?.[field.id] == null,
+          !this.isFieldCompleted(item, field),
       ) ?? null
     );
   }
@@ -565,16 +746,52 @@ export default class SalesCatalogService {
   }
 
   hasRemainingFields(product = {}, item = {}) {
+    const workflow = this.getProductWorkflow(product);
+    if (
+      workflow.length > 0 &&
+      !workflow.some((s) => s.type === "fields" || s.id === "fields")
+    ) {
+      return false;
+    }
     return this.getCurrentField(product, item) !== null;
   }
 
-  isFieldCompleted(item = {}, fieldId = "") {
-    return this.hasWorkflowValue(item, fieldId);
+  isFieldCompleted(item = {}, field = {}) {
+    const fieldId = typeof field === "string" ? field : field?.id;
+    if (!fieldId) return false;
+
+    if (
+      (typeof field === "object" && field?.mapsTo === "delivery.method") ||
+      fieldId === "deliveryMethod" ||
+      fieldId === "delivery"
+    ) {
+      return Boolean(item.delivery?.method);
+    }
+
+    const value =
+      item.workflow?.[fieldId] ??
+      item.productData?.[fieldId] ??
+      item.formData?.[fieldId];
+
+    return value !== undefined && value !== null && value !== "";
   }
 
   // Requirements
 
   getRequirements(product = {}) {
+    if (Array.isArray(product.requirements) && product.requirements.length > 0) {
+      return product.requirements;
+    }
+
+    if (product.parentProductId) {
+      const parent =
+        product.parentProduct ?? this.getProduct(product.parentProductId);
+
+      if (parent && Array.isArray(parent.requirements)) {
+        return parent.requirements;
+      }
+    }
+
     return product.requirements ?? [];
   }
 
@@ -603,15 +820,39 @@ export default class SalesCatalogService {
   }
 
   isRequirementCompleted(item = {}, requirementId = "") {
-    return this.hasWorkflowValue(item, requirementId);
+    if (requirementId === "designRequired" || requirementId === "artwork") {
+      if (
+        item.artwork?.received === true ||
+        item.artwork?.mediaId ||
+        item.artworkReceived === true ||
+        item.workflow?.artwork === true ||
+        item.workflow?.artworkReceived === true ||
+        item.workflow?.designRequired === "have_artwork" ||
+        item.workflow?.designRequired === "need_design" ||
+        item.productData?.designRequired === "need_design" ||
+        item.workflow?.artworkSkipped === true ||
+        item.workflow?.designRequiredSkipped === true
+      ) {
+        return true;
+      }
+    }
+
+    const val =
+      this.getWorkflowValue(item, requirementId) ??
+      item.workflow?.[requirementId] ??
+      item.productData?.[requirementId] ??
+      item.formData?.[requirementId];
+
+    if (val !== undefined && val !== null && val !== "") return true;
+    if (item.workflow?.[`${requirementId}Skipped`] === true) return true;
+    return false;
   }
 
   getCurrentRequirement(product = {}, item = {}) {
     return (
       this.getRequirements(product).find(
         (requirement) =>
-          requirement.required !== false &&
-          !this.hasWorkflowValue(item, requirement.id),
+          !this.isRequirementCompleted(item, requirement.id),
       ) ?? null
     );
   }
@@ -621,13 +862,57 @@ export default class SalesCatalogService {
   }
 
   hasRemainingRequirements(product = {}, item = {}) {
+    const workflow = this.getProductWorkflow(product);
+    if (
+      workflow.length > 0 &&
+      !workflow.some(
+        (s) =>
+          s.type === "requirements" ||
+          s.type === "requirement" ||
+          s.id === "requirements" ||
+          s.id === "requirement",
+      )
+    ) {
+      return false;
+    }
     return this.getCurrentRequirement(product, item) !== null;
   }
 
   // Product Workflow
 
   getProductWorkflow(product = {}) {
-    return Array.isArray(product.workflow) ? product.workflow : [];
+    let rawWorkflow = [];
+    if (Array.isArray(product.workflow) && product.workflow.length > 0) {
+      rawWorkflow = product.workflow;
+    } else if (product.parentProductId) {
+      const parent =
+        product.parentProduct ?? this.getProduct(product.parentProductId);
+
+      if (parent && Array.isArray(parent.workflow)) {
+        rawWorkflow = parent.workflow;
+      }
+    }
+
+    const normalized = rawWorkflow.map((step, index) => {
+      if (typeof step === "string") {
+        return {
+          id: step,
+          type: step,
+          required: true,
+          order: index + 1,
+        };
+      }
+      return {
+        id: step.id ?? step.type,
+        type: step.type ?? step.id,
+        required: step.required !== false,
+        order: step.order !== undefined ? step.order : index + 1,
+        ...step,
+      };
+    });
+
+    normalized.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return normalized;
   }
 
   // Workflow Data
@@ -919,7 +1204,8 @@ export default class SalesCatalogService {
   }
 
   isWorkflowStepCompleted(product = {}, item = {}, step = null) {
-    switch (this.getWorkflowStepType(step)) {
+    const stepType = this.getWorkflowStepType(step);
+    switch (stepType) {
       case "selection":
         return Boolean(
           item.selection?.id ||
@@ -933,6 +1219,7 @@ export default class SalesCatalogService {
         return !this.hasRemainingFields(product, item);
 
       case "requirements":
+      case "requirement":
         return !this.hasRemainingRequirements(product, item);
 
       case "addons": {
@@ -948,6 +1235,63 @@ export default class SalesCatalogService {
 
         return item.addons?.completed === true;
       }
+
+      case "artwork":
+        return Boolean(
+          item.artwork?.received === true ||
+          item.artwork?.mediaId ||
+          item.artworkReceived === true ||
+          item.workflow?.artwork === true ||
+          item.workflow?.artworkReceived === true ||
+          item.workflow?.designRequired === "need_design" ||
+          item.productData?.designRequired === "need_design" ||
+          item.workflow?.artworkSkipped === true ||
+          (step?.required === false && item.workflow?.artworkSkipped === true),
+        );
+
+      case "delivery":
+      case "deliveryMethod": {
+        const method = item.delivery?.method ?? null;
+        if (!method) return false;
+        if (String(method).toLowerCase() === "delivery") {
+          const addr = item.delivery?.address ?? null;
+          return Boolean(addr && (typeof addr === "string" ? addr.trim().length > 0 : Object.keys(addr).length > 0));
+        }
+        return true;
+      }
+
+      case "delivery_date":
+      case "deliveryDate":
+        return Boolean(
+          item.delivery?.requiredDate ??
+          item.workflow?.deliveryDate ??
+          item.productData?.deliveryDate,
+        );
+
+      case "quotation":
+        return Boolean(
+          item.quotation?.accepted === true ||
+          item.workflow?.quotationAccepted === true ||
+          item.quotationAccepted === true ||
+          step?.required === false,
+        );
+
+      case "confirmation":
+        return Boolean(item.confirmed || item.orderConfirmed || item.workflow?.confirmed === true);
+
+      case "production":
+        return Boolean(
+          item.production?.confirmed === true ||
+          item.workflow?.productionConfirmed === true ||
+          step?.required === false,
+        );
+
+      case "dispatch":
+        return Boolean(
+          item.dispatch?.confirmed === true ||
+          item.workflow?.dispatchConfirmed === true ||
+          step?.required === false,
+        );
 
       default:
         return true;

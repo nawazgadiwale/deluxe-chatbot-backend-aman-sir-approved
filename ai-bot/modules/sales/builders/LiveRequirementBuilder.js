@@ -102,6 +102,9 @@ export default class LiveRequirementBuilder {
 
       delivery: product.delivery ?? null,
 
+      artwork: product.artwork ?? null,
+      artworkReceived: product.artworkReceived ?? Boolean(product.artwork?.received),
+
       pricing: {
         currency: DEFAULT_CURRENCY,
         unitPrice: null,

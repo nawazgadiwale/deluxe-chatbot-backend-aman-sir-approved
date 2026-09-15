@@ -36,50 +36,106 @@ export default class SalesExtractor {
     const text = this.normalize(message);
     const currentItem = requirement.items?.[requirement.currentItem] ?? {};
 
+
     const rawProductMatches = productResolver.resolveMany(text);
+
+    const matchedProduct =
+      rawProductMatches.length === 1
+        ? rawProductMatches[0]
+        : null;
+
     const categoryProducts =
       rawProductMatches.length === 0
         ? catalogService.findCategoryProducts(text)
         : [];
+
+    const currentRootProductId =
+      currentItem.productId ??
+      currentItem.product?.parentProductId ??
+      currentItem.selectedProduct?.parentProductId ??
+      currentItem.product?.id ??
+      null;
+
+    const matchedRootProductId =
+      matchedProduct?.parentProductId ??
+      matchedProduct?.productId ??
+      matchedProduct?.id ??
+      null;
+
     const isNewProduct =
-      rawProductMatches.length > 0 &&
-      (!currentItem.product?.id ||
-        rawProductMatches[0].id !== currentItem.product.id);
+      Boolean(matchedProduct) &&
+      (!currentRootProductId ||
+        String(matchedRootProductId).toLowerCase() !==
+        String(currentRootProductId).toLowerCase());
+
     const isNewCategory =
       categoryProducts.length > 0 &&
-      (!currentItem.product?.id ||
-        !categoryProducts.some((p) => p.id === currentItem.product.id));
+      (!currentRootProductId ||
+        !categoryProducts.some((product) => {
+          const rootId =
+            product.parentProductId ??
+            product.productId ??
+            product.id;
 
-    // FINAL CATALOG FORM BOUNDARY:
-    // If in formMode and NOT requesting a new product or category, free text cannot mutate order fields
-    if (currentItem.formMode === true && !isNewProduct && !isNewCategory) {
+
+          return (
+            rootId &&
+            String(rootId).toLowerCase() ===
+            String(currentRootProductId).toLowerCase()
+          );
+        }));
+
+
+    if (
+      currentItem.formMode === true &&
+      !isNewProduct &&
+      !isNewCategory
+    ) {
       return {};
     }
 
     const productMatches =
-      isNewProduct || !currentItem.product?.id
+      isNewProduct || !currentRootProductId
         ? rawProductMatches
         : this.resolveProductMatches(currentItem, text);
-    const product = productMatches.length === 1 ? productMatches[0] : null;
+
+    const product =
+      isNewProduct || !currentRootProductId
+        ? matchedProduct
+        : null;
+
     const selection = isNewProduct
       ? null
       : this.resolveSelection(product, currentItem, text);
 
     const nestedProduct = isNewProduct
       ? null
-      : this.resolveNestedProduct(currentItem, selection, text);
+      : this.resolveNestedProduct(
+        currentItem,
+        selection,
+        text,
+      );
 
     return {
-      product: isNewProduct || !currentItem.product?.id ? product : null,
-      products: isNewProduct || !currentItem.product?.id ? productMatches : [],
+      product:
+        isNewProduct || !currentRootProductId
+          ? product
+          : null,
+
+      products:
+        isNewProduct || !currentRootProductId
+          ? productMatches
+          : [],
+
       categoryProducts,
+
       isNewProduct: isNewProduct || isNewCategory,
-      browseCatalog:
-        /\b(what products|show products|browse|catalog|products do you have|what do you print|something printed|want to print)\b/i.test(
-          text,
-        ),
+
+      browseCatalog: false,
+
       selection,
       nestedProduct,
+
       productData: {},
       requirements: [],
       quantity: null,
@@ -88,8 +144,11 @@ export default class SalesExtractor {
       address: null,
       requiredDate: null,
       confirmed: false,
-      addAnotherProduct: this.extractAddAnotherProduct(text),
+
+      addAnotherProduct:
+        this.extractAddAnotherProduct(text),
     };
+
   }
 
   // Customer
@@ -164,9 +223,16 @@ export default class SalesExtractor {
   // Product
 
   resolveProductMatches(currentItem = {}, text = "") {
-    if (currentItem.product?.id) {
-      const product = catalogService.getProduct(currentItem.product.id);
-      return product ? [product] : [];
+    const rootProductId =
+      currentItem.productId ??
+      currentItem.product?.parentProductId ??
+      currentItem.selectedProduct?.parentProductId ??
+      currentItem.product?.id ??
+      null;
+
+    if (rootProductId) {
+      const product = catalogService.getProduct(rootProductId);
+      if (product) return [product];
     }
 
     const matches = productResolver.resolveMany(text);
@@ -304,23 +370,21 @@ export default class SalesExtractor {
   extractDelivery(text = "", currentStep = null, message = "") {
     const delivery = deliveryService.parse(text);
 
-
     // Delivery Address
-
-
     if (
-      currentStep === "ASK_DELIVERY_ADDRESS" &&
+      (currentStep === "ASK_DELIVERY_ADDRESS" ||
+        currentStep === "DELIVERY_ADDRESS") &&
       !delivery.address &&
       message.trim()
     ) {
       delivery.address = message.trim();
     }
 
-
     // Delivery Date
-
-
-    if (currentStep === "ASK_DELIVERY_DATE") {
+    if (
+      currentStep === "ASK_DELIVERY_DATE" ||
+      currentStep === "DELIVERY_DATE"
+    ) {
       if (!delivery.requiredDate && message.trim()) {
         delivery.requiredDate = this.resolveDeliveryDate(message);
       }
@@ -329,22 +393,18 @@ export default class SalesExtractor {
     return delivery;
   }
 
-
   // Resolve Delivery Date
-
   resolveDeliveryDate(message = "") {
     const text = message.trim().toLowerCase();
 
     const today = new Date();
 
     // Today
-
     if (/\btoday\b/.test(text)) {
       return this.formatDate(today);
     }
 
     // Tomorrow
-
     if (/\btomorrow\b/.test(text)) {
       const date = new Date(today);
       date.setDate(date.getDate() + 1);
@@ -353,7 +413,6 @@ export default class SalesExtractor {
     }
 
     // Day names
-
     const days = {
       sunday: 0,
       monday: 1,
@@ -370,17 +429,65 @@ export default class SalesExtractor {
       }
     }
 
-    // Explicit date: If the customer says: 20/08/2026 or 20-08-2026, keep the existing value.
-
+    // Explicit date: DD/MM/YYYY or DD-MM-YYYY
     const explicitDate = this.extractExplicitDate(text);
-
     if (explicitDate) {
       return explicitDate;
     }
 
-    // Fallback
+    // Named Month date: "15 September" / "15th September 2026" / "September 15"
+    const namedMonthDate = this.extractNamedMonthDate(text, today);
+    if (namedMonthDate) {
+      return namedMonthDate;
+    }
 
+    // Fallback
     return message.trim();
+  }
+
+  extractNamedMonthDate(text = "", today = new Date()) {
+    const months = {
+      january: 1, jan: 1,
+      february: 2, feb: 2,
+      march: 3, mar: 3,
+      april: 4, apr: 4,
+      may: 5,
+      june: 6, jun: 6,
+      july: 7, jul: 7,
+      august: 8, aug: 8,
+      september: 9, sep: 9, sept: 9,
+      october: 10, oct: 10,
+      november: 11, nov: 11,
+      december: 12, dec: 12,
+    };
+
+    // Pattern 1: 15 September / 15th September 2026
+    const m1 = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?\b/i);
+    if (m1 && months[m1[2].toLowerCase()]) {
+      const day = Number(m1[1]);
+      const month = months[m1[2].toLowerCase()];
+      let year = m1[3] ? Number(m1[3]) : today.getFullYear();
+      const candidate = new Date(year, month - 1, day);
+      if (!m1[3] && candidate < today) {
+        year += 1;
+      }
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+
+    // Pattern 2: September 15 / September 15th 2026
+    const m2 = text.match(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{4}))?\b/i);
+    if (m2 && months[m2[1].toLowerCase()]) {
+      const month = months[m2[1].toLowerCase()];
+      const day = Number(m2[2]);
+      let year = m2[3] ? Number(m2[3]) : today.getFullYear();
+      const candidate = new Date(year, month - 1, day);
+      if (!m2[3] && candidate < today) {
+        year += 1;
+      }
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+
+    return null;
   }
 
   // Get Next Day
@@ -473,3 +580,13 @@ export default class SalesExtractor {
     return keywords.some((keyword) => text.includes(keyword));
   }
 }
+
+
+
+
+
+
+
+
+
+

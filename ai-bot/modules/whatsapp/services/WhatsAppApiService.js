@@ -1,22 +1,42 @@
 /**
  * WhatsAppApiService.js
  *
- * Direct Meta WhatsApp Business Cloud API Transport Service (Graph API).
+ * WhatsApp Transport Gateway Layer.
  *
- * Dedicated transport client for Meta Graph API messaging and media.
- * Provider-neutral wrappers and multi-provider dynamic resolution are eliminated.
+ * Delegates all messaging, media, and provider operations to the active WhatsApp provider adapter
+ * resolved dynamically by WhatsAppProviderFactory (Whapi vs Meta Cloud API).
+ *
+ * Backward-compatible with all existing callers.
  */
+
+import WhatsAppProviderFactory from "../providers/WhatsAppProviderFactory.js";
 
 export default class WhatsAppApiService {
   constructor({
     accessToken = process.env.WHATSAPP_ACCESS_TOKEN,
     phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID,
     graphApiVersion = process.env.WHATSAPP_GRAPH_API_VERSION || "v23.0",
+    whapiToken = process.env.WHAPI_TOKEN,
+    whapiApiUrl = process.env.WHAPI_API_BASE_URL ||
+      process.env.WHAPI_API_URL ||
+      "https://gate.whapi.cloud",
+    provider = null,
   } = {}) {
-    this.accessToken = accessToken || null;
-    this.phoneNumberId = phoneNumberId || null;
-    this.graphApiVersion = graphApiVersion || "v23.0";
+    this.accessToken = accessToken;
+    this.phoneNumberId = phoneNumberId;
+    this.graphApiVersion = graphApiVersion;
     this.baseUrl = `https://graph.facebook.com/${this.graphApiVersion}`;
+    this.whapiToken = whapiToken;
+    this.whapiApiUrl = (whapiApiUrl || "https://gate.whapi.cloud").replace(
+      /\/+$/,
+      "",
+    );
+    this.provider = provider || null;
+  }
+
+  getProvider() {
+    if (this.provider) return this.provider;
+    return WhatsAppProviderFactory.getProvider();
   }
 
   // =====================================================
@@ -128,92 +148,43 @@ export default class WhatsAppApiService {
     return this.sendMessage(to, payload, options);
   }
 
+  async sendFlowMessage(
+    to,
+    bodyText,
+    flowParams = {},
+    header = null,
+    footer = null,
+    options = {},
+  ) {
+    const payload = {
+      type: "interactive",
+      interactive: {
+        type: "flow",
+        body: {
+          text: bodyText,
+        },
+        action: {
+          name: "flow",
+          parameters: flowParams,
+        },
+        ...(header ? { header } : {}),
+        ...(footer ? { footer: { text: footer } } : {}),
+      },
+    };
+
+    return this.sendMessage(to, payload, options);
+  }
+
   // =====================================================
-  // BASE SEND (Meta WhatsApp Business Cloud API)
+  // BASE SEND
   // =====================================================
 
   async sendMessage(to, message, options = {}) {
-    if (!to) {
-      throw new Error("WhatsApp recipient phone number is required.");
-    }
+    return this.getProvider().sendMessage(to, message, options);
+  }
 
-    const token = this.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
-    if (!token) {
-      throw new Error("WHATSAPP_ACCESS_TOKEN is not configured.");
-    }
-
-    const phoneId = this.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
-    if (!phoneId) {
-      throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured.");
-    }
-
-    const cleanTo = String(to).replace(/\D/g, "");
-    const url = `${this.baseUrl}/${phoneId}/messages`;
-
-    let payload = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: cleanTo,
-    };
-
-    if (message?.type === "interactive") {
-      payload = {
-        ...payload,
-        type: "interactive",
-        interactive: message.interactive,
-      };
-    } else if (message?.type === "image") {
-      const imageUrl = message.image?.link || message.image?.url;
-      const caption = message.image?.caption || message.caption || "";
-      payload = {
-        ...payload,
-        type: "image",
-        image: {
-          link: imageUrl,
-          ...(caption ? { caption: String(caption).trim() } : {}),
-        },
-      };
-    } else if (message?.type === "text" || message?.text?.body) {
-      payload = {
-        ...payload,
-        type: "text",
-        text: {
-          preview_url: message.text?.preview_url ?? false,
-          body: message.text?.body || message.body || "",
-        },
-      };
-    } else {
-      payload = {
-        ...payload,
-        ...message,
-      };
-    }
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    const responseBody = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      console.error(
-        "[Meta Outbound] Error status:",
-        response.status,
-        responseBody?.error,
-      );
-      throw new Error(
-        responseBody?.error?.message ||
-          `Meta Graph API request failed with status ${response.status}`,
-      );
-    }
-
-    return responseBody;
+  async sendFlow(to, message, options = {}) {
+    return this.getProvider().sendFlow(to, message, options);
   }
 
   // =====================================================
@@ -221,14 +192,7 @@ export default class WhatsAppApiService {
   // =====================================================
 
   async getMediaMetadata(mediaId) {
-    if (!mediaId) throw new Error("Media ID required.");
-    const token = this.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
-    const response = await fetch(`${this.baseUrl}/${mediaId}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    return response.json();
+    return this.getProvider().getMediaMetadata(mediaId);
   }
 
   async getMedia(mediaId) {
@@ -236,14 +200,6 @@ export default class WhatsAppApiService {
   }
 
   async downloadMedia(mediaUrl) {
-    if (!mediaUrl) throw new Error("Media URL required.");
-    const token = this.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
-    const response = await fetch(mediaUrl, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return this.getProvider().downloadMedia(mediaUrl);
   }
 }

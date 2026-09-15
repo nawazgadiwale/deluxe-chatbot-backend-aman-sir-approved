@@ -1,12 +1,7 @@
 import mongoose from "mongoose";
 import Counter from "../../../models/Counter.js";
 import Data from "../../../models/Data.js";
-import Conversation from "../../../models/Conversation.js";
-
-import TelegramService from "../telegram/TelegramService.js";
 import OrderRepository from "../../repositories/OrderRequestRepository.js";
-
-const telegramService = new TelegramService();
 
 const orderRepository = new OrderRepository();
 
@@ -47,29 +42,6 @@ export default class LeadService {
     console.dir(savedLead.toObject?.() ?? savedLead, {
       depth: null,
     });
-
-    /*
-     * =================================================
-     * TELEGRAM
-     * =================================================
-     *
-     * For normal leads:
-     *     sendLead()
-     *
-     * For ORDER:
-     *     notification is sent later by
-     *     updateOrderAfterLead()
-     *
-     * This prevents duplicate ORDER notifications.
-     */
-
-    if (!isOrder) {
-      try {
-        await telegramService.sendLead(savedLead);
-      } catch (err) {
-        console.warn("Telegram sendLead skipped:", err.message);
-      }
-    }
 
     return savedLead;
   }
@@ -205,56 +177,41 @@ export default class LeadService {
     lead = null,
   ) {
     if (!orderId) {
-      console.warn("========== ORDER UPDATE SKIPPED ==========");
-
-      console.warn("Missing orderId while attaching lead.");
-
-      return null;
+      throw new Error(
+        "Missing orderId while attaching lead.",
+      );
     }
 
-    /*
-     * =================================================
-     * UPDATE EXISTING ORDER
-     * =================================================
-     */
-
-    let updatedOrder = null;
-    try {
-      updatedOrder = await orderRepository.attachLeadAndCustomer(
+    const updatedOrder =
+      await orderRepository.attachLeadAndCustomer(
         orderId,
         leadId,
         customer,
       );
-    } catch (err) {
-      console.warn("attachLeadAndCustomer skipped:", err.message);
-    }
-
-    if (!updatedOrder) {
-      console.warn("Order not found or DB disconnected:", orderId);
-      updatedOrder = { _id: orderId, leadId, customer };
-    }
-
-    console.log("========== ORDER UPDATED AFTER LEAD ==========");
-
-    console.dir(updatedOrder.toObject?.() ?? updatedOrder, {
-      depth: null,
-    });
 
     /*
-     * =================================================
-     * TELEGRAM
-     * =================================================
+     * NEVER create a fake order here.
+     *
+     * If Mongo didn't update the order,
+     * this is a persistence error.
      */
-
-    try {
-      if (lead) {
-        await telegramService.sendLeadWithOrder(lead, updatedOrder);
-      } else {
-        await telegramService.sendOrder(updatedOrder);
-      }
-    } catch (err) {
-      console.warn("Telegram notification skipped:", err.message);
+    if (!updatedOrder) {
+      throw new Error(
+        `Unable to attach lead ${leadId ?? "unknown"} to order ${orderId}`,
+      );
     }
+
+    console.log(
+      "========== ORDER UPDATED AFTER LEAD ==========",
+    );
+
+    console.dir(
+      updatedOrder.toObject?.() ??
+      updatedOrder,
+      {
+        depth: null,
+      },
+    );
 
     return updatedOrder;
   }

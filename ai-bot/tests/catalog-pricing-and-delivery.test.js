@@ -7,6 +7,7 @@ import DeliveryService, {
   DELIVERY_METHODS,
 } from "../modules/sales/services/DeliveryService.js";
 import SalesCatalogService from "../modules/sales/services/SalesCatalogService.js";
+import WhatsAppFlowSubmissionService from "../modules/whatsapp/flows/WhatsAppFlowSubmissionService.js";
 import WhatsAppResponseAdapter from "../modules/whatsapp/WhatsAppResponseAdapter.js";
 
 const pricingService = new PricingService();
@@ -199,8 +200,51 @@ describe("Product Details + Pricing — Catalog Driven Suite (13 Acceptance Test
     assert.equal(res3.pricing.subtotal, 450);
   });
 
-  // Test 13: Same configuration through direct calculation and caption renderer -> same price
-  it("13. Same configuration through direct calculation and caption renderer produces identical pricing", () => {
+  // Test 12: Flow submission -> same pricing implementation
+  it("12. WhatsApp Flow submission uses the same PricingService and DeliveryService", async () => {
+    process.env.WHATSAPP_FLOW_TOKEN_SECRET = "test_flow_secret_12345";
+    const flowService = new WhatsAppFlowSubmissionService();
+
+    const token = flowService.tokenService.create({
+      type: "order",
+      productId: "roll-up-banner",
+      phoneNumber: "918310412768",
+    });
+
+    const flowData = {
+      bannerType: "100x200", // 190 AED
+      quantity: 2, // 380 AED
+      deliveryMethod: "delivery", // 25 AED
+      artwork: "have_artwork",
+      deliveryDate: "2026-09-15",
+    };
+
+    const res = await flowService.handleFlowSubmission({
+      flowData,
+      flowToken: token,
+      messageId: `wamid_flow_pricing_test_${Date.now()}`,
+      customerWaId: "918310412768",
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.orderData.pricing.unitPrice, 190);
+    assert.equal(res.orderData.pricing.quantity, 2);
+    assert.equal(res.orderData.pricing.subtotal, 380);
+    assert.equal(res.orderData.pricing.deliveryCharge, 25);
+    assert.equal(res.orderData.pricing.totalBeforeVAT, 405);
+    assert.equal(res.orderData.pricing.total, 405);
+
+    // Verify response message contains customer-facing breakdown without VAT
+    assert.match(res.response.message, /Product price:\* AED 190/);
+    assert.match(res.response.message, /Quantity:\* 2/);
+    assert.match(res.response.message, /Subtotal:\* AED 380/);
+    assert.match(res.response.message, /Delivery charge:\* AED 25/);
+    assert.match(res.response.message, /Total before VAT:\* AED 405/);
+    assert.doesNotMatch(res.response.message, /(?<!before\s)VAT/i);
+  });
+
+  // Test 13: Same configuration through different input types -> same price
+  it("13. Same configuration through direct calculation, caption renderer, and flow produces identical pricing", () => {
     const product = catalogService.getProduct("roll-up-banner");
     const selection = catalogService.getSelectionOption(product, "85x200");
 
