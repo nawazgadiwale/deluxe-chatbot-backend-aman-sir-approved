@@ -363,22 +363,143 @@ export default class OrderRepository {
    */
 
   /*
-  * =====================================================
-  * SAVE DRAFT ORDER
-  * =====================================================
-  *
-  * Rules:
-  * - Existing order -> update by _id only.
-  * - New order -> create a new document.
-  * - sessionId is NOT an order identity.
-  * - Same customer/session may have multiple orders.
-  */
+   * =====================================================
+   * CLEAN / SANITIZE ORDER DATA FOR PERSISTENCE
+   * =====================================================
+   */
+
+  _cleanOrderForPersistence(order = {}) {
+    if (!order) return {};
+
+    const items = (Array.isArray(order.items) ? order.items : []).map((item) => {
+      if (!item) return {};
+
+      // 1. Minimal product snapshot
+      const product = item.product
+        ? {
+            id: item.product.id ?? item.product.productId ?? item.product.slug ?? null,
+            name: item.product.name ?? item.product.title ?? item.product.productName ?? null,
+            slug: item.product.slug ?? null,
+          }
+        : null;
+
+      // 2. Minimal selection snapshot
+      const selection = item.selection
+        ? {
+            id: item.selection.id ?? null,
+            name: item.selection.name ?? item.selection.label ?? null,
+          }
+        : null;
+
+      // 3. Clean selected addons only (no catalog option lists, no descriptions, no images)
+      let cleanAddons = [];
+      if (Array.isArray(item.addons)) {
+        cleanAddons = item.addons
+          .map((a) => {
+            if (typeof a === "string") return a;
+            if (a && typeof a === "object") {
+              const res = { id: a.id ?? a.value ?? a.name ?? null };
+              if (a.name) res.name = a.name;
+              if (a.price != null && (typeof a.price === "number" || typeof a.price === "object")) {
+                res.price = a.price;
+              }
+              return res.id ? res : null;
+            }
+            return null;
+          })
+          .filter(Boolean);
+      } else if (item.addons && typeof item.addons === "object") {
+        const rawItems = item.addons.items ?? item.addons.selected ?? [];
+        if (Array.isArray(rawItems)) {
+          cleanAddons = rawItems
+            .map((a) => {
+              if (typeof a === "string") return a;
+              if (a && typeof a === "object") {
+                const res = { id: a.id ?? a.value ?? a.name ?? null };
+                if (a.name) res.name = a.name;
+                if (a.price != null && (typeof a.price === "number" || typeof a.price === "object")) {
+                  res.price = a.price;
+                }
+                return res.id ? res : null;
+              }
+              return null;
+            })
+            .filter(Boolean);
+        }
+      }
+
+      // 4. Clean workflow (remove empty artwork objects)
+      const workflow = { ...(item.workflow ?? {}) };
+      if (
+        workflow.artwork &&
+        !workflow.artwork.status &&
+        !workflow.artwork.reference &&
+        (!workflow.artwork.files || !workflow.artwork.files.length)
+      ) {
+        delete workflow.artwork;
+      }
+
+      // 5. Clean productData (strip images / heavy blobs)
+      const rawProductData = item.formData ?? item.productData ?? {};
+      const productData = { ...rawProductData };
+      delete productData.image;
+      delete productData.images;
+      delete productData.options;
+
+      return {
+        product,
+        selection,
+        productData,
+        requirements: Array.isArray(item.requirements) ? item.requirements : [],
+        workflow,
+        pricing: item.pricing ?? {},
+        addons: cleanAddons,
+        notes: Array.isArray(item.notes) ? item.notes : [],
+        completed: item.completed ?? false,
+      };
+    });
+
+    // Clean delivery
+    const delivery = order.delivery
+      ? {
+          method: order.delivery.method ?? null,
+          address: order.delivery.address ?? null,
+          requiredDate: order.delivery.requiredDate ?? null,
+        }
+      : null;
+
+    return {
+      status: order.status ?? "COLLECTING",
+      confirmed: order.confirmed ?? false,
+      customer: order.customer ?? null,
+      delivery,
+      pricing: order.pricing ?? null,
+      items,
+      totalItems: items.length,
+      totalQuantity: order.totalQuantity ?? items.reduce((sum, it) => sum + (Number(it.productData?.quantity ?? it.workflow?.quantity ?? 0)), 0),
+      notes: Array.isArray(order.notes) ? order.notes : [],
+      orderNumber: order.orderNumber ?? null,
+    };
+  }
+
+  /*
+   * =====================================================
+   * SAVE DRAFT ORDER
+   * =====================================================
+   *
+   * Rules:
+   * - Existing order -> update by _id only.
+   * - New order -> create a new document.
+   * - sessionId is NOT an order identity.
+   * - Same customer/session may have multiple orders.
+   */
   async saveDraft(sessionId, conversationId, order = {}) {
     if (!sessionId || !order || !this.isConnected()) {
       return null;
     }
 
     const now = new Date();
+    const cleanData = this._cleanOrderForPersistence(order);
 
     /*
      * =====================================================
@@ -420,17 +541,17 @@ export default class OrderRepository {
         {
           $set: {
             conversationId,
-            status: order.status,
-            confirmed: order.confirmed,
-            customer: order.customer,
-            delivery: order.delivery,
-            pricing: order.pricing,
-            items: order.items,
-            totalItems: order.totalItems,
-            totalQuantity: order.totalQuantity,
-            notes: order.notes,
+            status: cleanData.status,
+            confirmed: cleanData.confirmed,
+            customer: cleanData.customer,
+            delivery: cleanData.delivery,
+            pricing: cleanData.pricing,
+            items: cleanData.items,
+            totalItems: cleanData.totalItems,
+            totalQuantity: cleanData.totalQuantity,
+            notes: cleanData.notes,
             leadId,
-            orderNumber: order.orderNumber,
+            orderNumber: cleanData.orderNumber,
             updatedAt: now,
           },
         },
@@ -452,17 +573,17 @@ export default class OrderRepository {
     return OrderModel.create({
       sessionId,
       conversationId,
-      status: order.status ?? "DRAFT",
-      confirmed: order.confirmed ?? false,
-      customer: order.customer ?? null,
-      delivery: order.delivery ?? null,
-      pricing: order.pricing ?? null,
-      items: order.items ?? [],
-      totalItems: order.totalItems ?? 0,
-      totalQuantity: order.totalQuantity ?? 0,
-      notes: order.notes ?? [],
+      status: cleanData.status ?? "DRAFT",
+      confirmed: cleanData.confirmed ?? false,
+      customer: cleanData.customer ?? null,
+      delivery: cleanData.delivery ?? null,
+      pricing: cleanData.pricing ?? null,
+      items: cleanData.items ?? [],
+      totalItems: cleanData.totalItems ?? 0,
+      totalQuantity: cleanData.totalQuantity ?? 0,
+      notes: cleanData.notes ?? [],
       leadId: leadId ?? null,
-      orderNumber: order.orderNumber ?? null,
+      orderNumber: cleanData.orderNumber ?? null,
       createdAt: now,
       updatedAt: now,
     });

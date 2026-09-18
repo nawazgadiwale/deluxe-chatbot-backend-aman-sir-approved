@@ -3,8 +3,8 @@
  *
  * Canonical Base Class for WhatsApp Transport & Channel Providers.
  *
- * All WhatsApp providers (Whapi, Meta Cloud API, etc.) MUST implement this interface.
- * The application core communicates exclusively through this provider-neutral contract.
+ * Implements the WhatsApp provider interface for Meta Cloud API transport.
+ * The application core communicates exclusively through this provider contract.
  */
 export default class BaseWhatsAppProvider {
   /**
@@ -15,11 +15,11 @@ export default class BaseWhatsAppProvider {
   }
 
   /**
-   * Provider identifier ("whapi" | "meta")
+   * Provider identifier ("meta")
    * @returns {string}
    */
   get name() {
-    return "base";
+    return "meta";
   }
 
   /**
@@ -144,6 +144,41 @@ export default class BaseWhatsAppProvider {
       },
     };
     return this.sendMessage(to, payload, options);
+  }
+
+  async sendImageMessage(to, imageUrl, caption = "", options = {}) {
+    return this.sendMessage(
+      to,
+      {
+        type: "image",
+        image: {
+          link: imageUrl,
+          ...(caption ? { caption: String(caption).trim() } : {}),
+        },
+      },
+      options,
+    );
+  }
+
+  async sendFlowMessage(
+    to,
+    bodyText,
+    flowParams = {},
+    header = null,
+    footer = null,
+    options = {},
+  ) {
+    const payload = {
+      type: "interactive",
+      interactive: {
+        type: "flow",
+        body: { text: bodyText },
+        action: { name: "flow", parameters: flowParams },
+        ...(header ? { header } : {}),
+        ...(footer ? { footer: { text: footer } } : {}),
+      },
+    };
+    return this.sendFlow(to, payload, options);
   }
 
   /**

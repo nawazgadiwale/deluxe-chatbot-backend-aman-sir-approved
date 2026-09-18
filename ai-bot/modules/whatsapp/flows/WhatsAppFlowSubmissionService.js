@@ -23,6 +23,7 @@ import OrderManager from "../../sales/services/OrderManager.js";
 import PricingService from "../../sales/services/PricingService.js";
 import ConversationRepository from "../../../repositories/ConversationRepository.js";
 import OrderRepository from "../../../repositories/OrderRequestRepository.js";
+import WhatsAppAllowlistPolicy from "../policies/WhatsAppAllowlistPolicy.js";
 
 export default class WhatsAppFlowSubmissionService {
   constructor({
@@ -34,6 +35,7 @@ export default class WhatsAppFlowSubmissionService {
     conversationRepository = null,
     orderRepository = null,
     flowBuilder = null,
+    allowlistPolicy = null,
   } = {}) {
     this.catalogService = catalogService || new SalesCatalogService();
     this.orderManager = orderManager || new OrderManager();
@@ -43,6 +45,7 @@ export default class WhatsAppFlowSubmissionService {
     this.conversationRepository = conversationRepository || new ConversationRepository();
     this.orderRepository = orderRepository || new OrderRepository();
     this.flowBuilder = flowBuilder || new WhatsAppFlowBuilder(this.tokenService);
+    this.allowlistPolicy = allowlistPolicy || new WhatsAppAllowlistPolicy();
 
     // In-memory idempotency cache (bounded LRU)
     this.processedSubmissionIds = new Set();
@@ -88,6 +91,14 @@ export default class WhatsAppFlowSubmissionService {
   } = {}) {
     const cid = correlationId || `flow_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
     const submissionKey = messageId || flowToken || `sub_${Date.now()}`;
+
+    // 0. Allowlist Guard
+    if (customerWaId && !this.allowlistPolicy.isAuthorized(customerWaId)) {
+      const maskedPhone = this.allowlistPolicy.maskPhone(customerWaId);
+      console.log(`[WhatsApp] Unauthorized sender ignored (${maskedPhone})`);
+      if (messageId) this.markProcessed(messageId);
+      return { handled: false, error: "UNAUTHORIZED_SENDER" };
+    }
 
     // 1. Idempotency Guard
     if (this.isDuplicate(submissionKey)) {

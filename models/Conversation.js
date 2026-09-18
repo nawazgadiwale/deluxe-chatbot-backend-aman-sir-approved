@@ -187,6 +187,69 @@ const conversationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+
+    visitorId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    site: {
+      type: String,
+      default: "exprintmart",
+      index: true,
+    },
+
+    visitorType: {
+      type: String,
+      enum: ["VISITOR", "CUSTOMER", "LEAD", "QUOTATION", "QOUTATION"],
+      default: "VISITOR",
+    },
+
+    previousSessionId: {
+      type: String,
+      default: null,
+    },
+
+    totalSessions: {
+      type: Number,
+      default: 1,
+    },
+
+    isReturningVisitor: {
+      type: Boolean,
+      default: false,
+    },
+
+    isPureVisitor: {
+      type: Boolean,
+      default: true,
+    },
+
+    isKnownCustomer: {
+      type: Boolean,
+      default: false,
+    },
+
+    isLead: {
+      type: Boolean,
+      default: false,
+    },
+
+    isQuotationCustomer: {
+      type: Boolean,
+      default: false,
+    },
+
+    visitorContext: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
+    },
+
+    engagement: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
+    },
   },
   {
     timestamps: true,

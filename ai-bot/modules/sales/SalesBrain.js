@@ -581,10 +581,16 @@ export default class SalesBrain {
             (state.currentStep === "DELIVERY_ADDRESS" ||
               state.currentStep === "ASK_DELIVERY_ADDRESS" ||
               state.currentStep === DecisionTypes.DELIVERY_ADDRESS) &&
-            userMessage &&
-            userMessage.trim()
+            userMessage?.trim()
           ) {
             const addr = userMessage.trim();
+
+            requirement.delivery = {
+              ...(requirement.delivery ?? {}),
+              method: "delivery",
+              address: addr,
+            };
+
             requirement = orderManager.updateCurrentItem(requirement, {
               delivery: {
                 ...(currentItem.delivery ?? {}),
@@ -604,6 +610,7 @@ export default class SalesBrain {
                 address: addr,
               },
             });
+
             resolvedAny = true;
           }
 
@@ -613,11 +620,17 @@ export default class SalesBrain {
             (state.currentStep === "DELIVERY_DATE" ||
               state.currentStep === "ASK_DELIVERY_DATE" ||
               state.currentStep === DecisionTypes.DELIVERY_DATE) &&
-            userMessage &&
-            userMessage.trim()
+            userMessage?.trim()
           ) {
             const resolvedDate = extractor.resolveDeliveryDate(userMessage);
+
             if (resolvedDate) {
+              requirement.delivery = {
+                ...(requirement.delivery ?? {}),
+                method: requirement.delivery?.method ?? "delivery",
+                requiredDate: resolvedDate,
+              };
+
               requirement = orderManager.updateCurrentItem(requirement, {
                 delivery: {
                   ...(currentItem.delivery ?? {}),
@@ -634,6 +647,7 @@ export default class SalesBrain {
                   requiredDate: resolvedDate,
                 },
               });
+
               resolvedAny = true;
             }
           }
@@ -1925,17 +1939,17 @@ export default class SalesBrain {
 
     const concreteProduct = selection
       ? (catalogService.resolveProduct({
-          parentProductId: topProduct.id,
-          selectionId: selection.id,
-          productId: selection.id,
-        }) ?? {
-          ...topProduct,
-          ...selection,
-          id: selection.id,
-          parentProductId: topProduct.id,
-          parentSelectionId: selection.id,
-          name: selection.name ?? selection.label ?? topProduct.name,
-        })
+        parentProductId: topProduct.id,
+        selectionId: selection.id,
+        productId: selection.id,
+      }) ?? {
+        ...topProduct,
+        ...selection,
+        id: selection.id,
+        parentProductId: topProduct.id,
+        parentSelectionId: selection.id,
+        name: selection.name ?? selection.label ?? topProduct.name,
+      })
       : topProduct;
 
     if (!currentItem) {

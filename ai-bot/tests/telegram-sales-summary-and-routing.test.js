@@ -6,6 +6,7 @@ import SalespersonRouter from "../modules/sales/services/SalespersonRouter.js";
 import SalesSummaryService from "../modules/sales/services/SalesSummaryService.js";
 import SalesHandoffService from "../modules/sales/services/SalesHandoffService.js";
 import SalesCatalogService from "../modules/sales/services/SalesCatalogService.js";
+import OrderRepository from "../repositories/OrderRequestRepository.js";
 
 // Mock Telegram Transport for testing
 class MockTelegramService extends TelegramService {
@@ -500,4 +501,132 @@ test("Test 18: Telegram summary is text-only, concise (<= 150 words), and contai
   // Assert word count <= 150 words
   const wordCount = formatted.split(/\s+/).filter(Boolean).length;
   assert.ok(wordCount <= 150, `Summary word count (${wordCount}) must be <= 150 words`);
+});
+
+// =========================================================
+// TEST 19: Order Persistence Sanitization
+// =========================================================
+test("Test 19: Order Request persistence sanitizes away unselected addon definitions, images, and catalog bloat", () => {
+  const repo = new OrderRepository();
+
+  const rawOrder = {
+    orderNumber: "ORD-TEST-1234",
+    status: "COLLECTING",
+    customer: { name: "Nawaz", phone: "918310412768" },
+    delivery: { method: "delivery", address: "Burj Al Jafar" },
+    items: [
+      {
+        product: {
+          id: "business-cards",
+          name: "Business Cards",
+          slug: "business-cards",
+          image: "https://dlxprint.com/cards.webp",
+          description: "Full heavy catalog description",
+          extraCatalogDetails: { foo: "bar" },
+        },
+        selection: {
+          id: "budget-friendly",
+          name: "Budget-Friendly Business Cards",
+        },
+        productData: {
+          quantity: 300,
+          image: "https://dlxprint.com/unneeded.png",
+          options: [{ id: "optionA" }, { id: "optionB" }],
+        },
+        workflow: {
+          quantity: 300,
+          artwork: { status: null, reference: null },
+        },
+        addons: {
+          label: "Finishing Options",
+          options: [
+            {
+              id: "round-corners",
+              name: "Round Corners",
+              image: "https://dlxprint.com/round.webp",
+              description: "Smooth edges",
+              price: { amount: 50 },
+            },
+            {
+              id: "colored-edge",
+              name: "Colored Edge",
+              image: "https://dlxprint.com/edge.webp",
+              description: "Color coated edge",
+              price: { amount: 100 },
+            },
+          ],
+          selected: ["colored-edge"],
+          items: [
+            {
+              id: "colored-edge",
+              name: "Colored Edge",
+              price: { amount: 100, currency: "AED" },
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const clean = repo._cleanOrderForPersistence(rawOrder);
+
+  // 1. Verify product snapshot is clean (no description, no images)
+  assert.strictEqual(clean.items[0].product.id, "business-cards");
+  assert.strictEqual(clean.items[0].product.name, "Business Cards");
+  assert.strictEqual(clean.items[0].product.image, undefined);
+  assert.strictEqual(clean.items[0].product.description, undefined);
+
+  // 2. Verify selection snapshot
+  assert.strictEqual(clean.items[0].selection.id, "budget-friendly");
+  assert.strictEqual(clean.items[0].selection.name, "Budget-Friendly Business Cards");
+
+  // 3. Verify addons: ONLY selected addon stored, NO unselected options, NO descriptions, NO images
+  assert.strictEqual(clean.items[0].addons.length, 1);
+  assert.strictEqual(clean.items[0].addons[0].id, "colored-edge");
+  assert.strictEqual(clean.items[0].addons[0].name, "Colored Edge");
+  assert.strictEqual(clean.items[0].addons[0].image, undefined);
+  assert.strictEqual(clean.items[0].addons[0].description, undefined);
+
+  // 4. Verify empty artwork object in workflow removed
+  assert.strictEqual(clean.items[0].workflow.artwork, undefined);
+
+  // 5. Verify productData stripped of presentation images and option definitions
+  assert.strictEqual(clean.items[0].productData.image, undefined);
+  assert.strictEqual(clean.items[0].productData.options, undefined);
+  assert.strictEqual(clean.items[0].productData.quantity, 300);
+});
+
+// =========================================================
+// TEST 20: Lead-Free Sales Handoff
+// =========================================================
+test("Test 20: Sales summary and Telegram dispatch execute without Lead creation or leadId", async () => {
+  const mockTelegram = new MockTelegramService();
+
+  const handoff = new SalesHandoffService({
+    telegramService: mockTelegram,
+    summaryService: new SalesSummaryService(),
+    router: new SalespersonRouter(),
+  });
+
+  // State with NO lead object and NO leadId
+  const leadFreeState = {
+    sessionId: "sess_leadfree_100",
+    customer: { name: "Nawaz Gadiwale", phone: "+971501112233" },
+    order: {
+      _id: "65d8a9f0e1b2c3d4e5f6a7b8",
+      items: [
+        {
+          productId: "business-cards",
+          selectionId: "budget-friendly",
+          formData: { quantity: 500 },
+        },
+      ],
+    },
+  };
+
+  const result = await handoff.triggerHandoff(leadFreeState, "SALES_HANDOFF");
+  assert.strictEqual(result.sent, true);
+  assert.strictEqual(mockTelegram.sentMessages.length, 1);
+  assert.ok(mockTelegram.sentMessages[0].text.includes("Nawaz Gadiwale"));
+  assert.ok(mockTelegram.sentMessages[0].text.includes("Business Cards"));
 });

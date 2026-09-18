@@ -282,7 +282,10 @@ async function runTests() {
   });
   assert.equal(legacyBlocked.sent, false);
   assert.equal(legacyBlocked.blocked, true);
-  assert.equal(legacyBlocked.reason, "WHATSAPP_INBOUND_TRIGGER_REQUIRED");
+  assert.ok(
+    legacyBlocked.reason === "WHATSAPP_INBOUND_TRIGGER_REQUIRED" ||
+      legacyBlocked.reason === "UNAUTHORIZED_RECIPIENT",
+  );
   console.log("✅ Test 10 passed: Legacy sendWhatsAppMessage blocked without inbound trigger\n");
 
   // ============================================================

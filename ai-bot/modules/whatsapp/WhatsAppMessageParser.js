@@ -1,6 +1,28 @@
+/**
+ * WhatsAppMessageParser.js
+ *
+ * Normalizes incoming raw WhatsApp messages into canonical internal AI/session inputs.
+ */
+
 import WhatsAppSessionService from "./WhatsAppSessionService.js";
 import WhatsAppFlowTokenService from "./WhatsappFlowTokenService.js";
 import WhatsappActionCodec from "./WhatsappActionCodec.js";
+
+const SUPPORTED_MESSAGE_TYPES = new Set([
+  "text",
+  "interactive",
+  "button_reply",
+  "list_reply",
+  "button",
+  "reply",
+  "image",
+  "document",
+  "audio",
+  "video",
+  "sticker",
+  "location",
+  "contacts",
+]);
 
 export default class WhatsAppMessageParser {
   constructor() {
@@ -9,140 +31,87 @@ export default class WhatsAppMessageParser {
   }
 
   isSupported(message = {}) {
-    return [
-      "text",
-      "interactive",
-      "button_reply",
-      "list_reply",
-      "button",
-      "reply",
-      "image",
-      "document",
-      "audio",
-      "video",
-      "sticker",
-      "location",
-      "contacts",
-    ].includes(message?.type);
+    return SUPPORTED_MESSAGE_TYPES.has(message?.type);
   }
 
   parse({ message = {}, metadata = {}, contacts = [] } = {}) {
-    if (!message?.type) {
-      return null;
-    }
-
-    const phoneNumber = message?.from ?? null;
-
-    if (!phoneNumber) {
-      return null;
-    }
+    if (!message?.type || !message?.from) return null;
 
     const contact = contacts?.[0] ?? {};
-
     const identity = this.sessionService.buildSession({
-      phoneNumber,
-
+      phoneNumber: message.from,
       name: contact?.profile?.name ?? null,
-
-      messageId: message?.id ?? null,
-
-      timestamp: message?.timestamp ?? null,
-
+      messageId: message.id ?? null,
+      timestamp: message.timestamp ?? null,
       phoneNumberId: metadata?.phone_number_id ?? null,
-
       businessAccountId: metadata?.business_account_id ?? null,
-
       displayPhoneNumber: metadata?.display_phone_number ?? null,
     });
 
-    switch (message.type) {
-      case "text":
-        return this.parseText({
-          message,
-          identity,
-        });
-
-      case "interactive":
-        return this.parseInteractive({
-          message,
-          identity,
-        });
-
-      case "button_reply":
-      case "button":
-        return this.parseButtonReply({
-          message,
-          identity,
-        });
-
-      case "list_reply":
-        return this.parseListReply({
-          message,
-          identity,
-        });
-
-      case "reply":
-        return this.parseReply({
-          message,
-          identity,
-        });
-
-      case "image":
-      case "document":
-      case "audio":
-      case "video":
-      case "sticker":
-        return this.parseMedia({
-          message,
-          identity,
-          mediaType: message.type,
-        });
-
-      case "location":
-        return this.parseLocation({
-          message,
-          identity,
-        });
-
-      case "contacts":
-        return this.parseContacts({
-          message,
-          identity,
-        });
-
-      default:
-        return null;
+    const type = message.type;
+    if (type === "text") {
+      return this.parseText({ message, identity });
     }
+    if (type === "interactive") {
+      return this.parseInteractive({ message, identity });
+    }
+    if (type === "button_reply" || type === "button" || type === "list_reply" || type === "reply") {
+      return this.parseReply({ message, identity });
+    }
+    if (["image", "document", "audio", "video", "sticker"].includes(type)) {
+      return this.parseMedia({ message, identity, mediaType: type });
+    }
+    if (type === "location") {
+      return this.parseLocation({ message, identity });
+    }
+    if (type === "contacts") {
+      return this.parseContacts({ message, identity });
+    }
+
+    return null;
   }
 
   // =====================================================
-  // REPLY (WHAPI BUTTON / LIST / QUOTED REPLY)
+  // INTERACTIVE BUTTON / LIST / REPLY
   // =====================================================
 
+  parseInteractive({ message, identity }) {
+    const inter = message?.interactive ?? {};
+    if (inter.type === "nfm_reply") {
+      return this.parseFlowReply({ message, identity });
+    }
+    return this.parseReply({ message, identity });
+  }
+
   parseReply({ message, identity }) {
-    const replyObj = message?.reply || {};
-    const replyButtonObj =
-      replyObj.buttons_reply || replyObj.button_reply || {};
-    const replyListObj = replyObj.list_reply || {};
+    const inter = message?.interactive ?? {};
+    const reply =
+      inter.button_reply ??
+      inter.list_reply ??
+      message?.reply?.buttons_reply ??
+      message?.reply?.button_reply ??
+      message?.reply?.list_reply ??
+      message?.reply ??
+      message?.button_reply ??
+      message?.list_reply ??
+      message?.button ??
+      message?.action ??
+      {};
 
     const id =
-      replyObj.id ??
-      replyButtonObj.id ??
-      replyListObj.id ??
-      message?.button_reply?.id ??
-      message?.action?.id ??
+      reply.id ??
+      message?.reply?.id ??
       message?.selected_id ??
       null;
 
-    const title =
-      replyObj.title ??
-      replyButtonObj.title ??
-      replyListObj.title ??
-      message?.button_reply?.title ??
-      message?.action?.title ??
-      replyObj.text ??
+    const title = (
+      reply.title ??
+      reply.label ??
+      message?.reply?.title ??
+      message?.reply?.text ??
       message?.body ??
-      "";
+      ""
+    ).trim();
 
     if (id) {
       const decoded = WhatsappActionCodec.decode(id);
@@ -150,7 +119,7 @@ export default class WhatsAppMessageParser {
       const actionType = decoded?.type || decoded?.id || actionId;
       const actionPayload = decoded?.payload ?? { value: id, label: title };
 
-      console.log("[Whapi Interactive] INBOUND_REPLY_RECEIVED:", {
+      console.log("[WhatsApp Interactive] INBOUND_INTERACTIVE_ACTION:", {
         actionId,
         type: actionType,
         id,
@@ -159,13 +128,8 @@ export default class WhatsAppMessageParser {
       });
 
       return {
-        ...this.baseAIInput({
-          identity,
-          message,
-        }),
-
+        ...this.baseAIInput({ identity, message }),
         message: title || String(actionId),
-
         action: {
           id: actionId,
           type: actionType,
@@ -173,38 +137,35 @@ export default class WhatsAppMessageParser {
             ...actionPayload,
             label: actionPayload.label ?? title,
             value: actionPayload.value ?? id,
+            ...(reply.description ? { description: reply.description } : {}),
           },
         },
-
         attachments: [],
-
         eventType: "ACTION",
-
         isFlowSubmission: false,
       };
     }
 
-    const text = (title || message?.body || "").trim();
-    if (text) {
+    if (title) {
       return {
-        ...this.baseAIInput({
-          identity,
-          message,
-        }),
-
-        message: text,
-
+        ...this.baseAIInput({ identity, message }),
+        message: title,
         action: null,
-
         attachments: [],
-
         eventType: "MESSAGE",
-
         isFlowSubmission: false,
       };
     }
 
     return null;
+  }
+
+  parseButtonReply(params) {
+    return this.parseReply(params);
+  }
+
+  parseListReply(params) {
+    return this.parseReply(params);
   }
 
   // =====================================================
@@ -213,182 +174,24 @@ export default class WhatsAppMessageParser {
 
   parseText({ message, identity }) {
     const text = message?.text?.body?.trim() ?? "";
-
-    if (!text) {
-      return null;
-    }
+    if (!text) return null;
 
     return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
+      ...this.baseAIInput({ identity, message }),
       message: text,
-
       action: null,
-
       attachments: [],
-
       eventType: "MESSAGE",
-
       isFlowSubmission: false,
     };
   }
 
   // =====================================================
-  // INTERACTIVE
-  // =====================================================
-
-  parseInteractive({ message, identity }) {
-    const interactive = message?.interactive ?? {};
-
-    switch (interactive?.type) {
-      case "button_reply":
-        return this.parseButtonReply({
-          message,
-          identity,
-        });
-
-      case "list_reply":
-        return this.parseListReply({
-          message,
-          identity,
-        });
-
-      case "nfm_reply":
-        return this.parseFlowReply({
-          message,
-          identity,
-        });
-
-      default:
-        return null;
-    }
-  }
-
-  // =====================================================
-  // BUTTON
-  // =====================================================
-
-  parseButtonReply({ message, identity }) {
-    const reply =
-      message?.interactive?.button_reply ??
-      message?.button_reply ??
-      message?.button ??
-      {};
-
-    const id = reply?.id ?? message?.action?.id ?? null;
-    const title = reply?.title?.trim() ?? reply?.label?.trim() ?? "";
-
-    if (!id) {
-      return null;
-    }
-
-    const decoded = WhatsappActionCodec.decode(id);
-    const actionId = decoded?.id || decoded?.type || id;
-    const actionType = decoded?.type || decoded?.id || actionId;
-    const actionPayload = decoded?.payload ?? { value: id, label: title };
-
-    console.log("[Whapi Interactive] INBOUND_INTERACTIVE_ACTION:", {
-      actionId,
-      type: actionType,
-      id,
-      title,
-      payload: actionPayload,
-    });
-
-    return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
-      message: title || String(actionId),
-
-      action: {
-        id: actionId,
-        type: actionType,
-        payload: {
-          ...actionPayload,
-          label: actionPayload.label ?? title,
-          value: actionPayload.value ?? id,
-        },
-      },
-
-      attachments: [],
-
-      eventType: "ACTION",
-
-      isFlowSubmission: false,
-    };
-  }
-
-  // =====================================================
-  // LIST
-  // =====================================================
-
-  parseListReply({ message, identity }) {
-    const reply =
-      message?.interactive?.list_reply ??
-      message?.list_reply ??
-      message?.action ??
-      {};
-
-    const id = reply?.id ?? null;
-    const title = reply?.title?.trim() ?? reply?.label?.trim() ?? "";
-
-    if (!id) {
-      return null;
-    }
-
-    const decoded = WhatsappActionCodec.decode(id);
-    const actionId = decoded?.id || decoded?.type || id;
-    const actionType = decoded?.type || decoded?.id || actionId;
-    const actionPayload = decoded?.payload ?? { value: id, label: title };
-
-    console.log("[Whapi Interactive] INBOUND_INTERACTIVE_ACTION:", {
-      actionId,
-      type: actionType,
-      id,
-      title,
-      payload: actionPayload,
-    });
-
-    return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
-      message: title || String(actionId),
-
-      action: {
-        id: actionId,
-        type: actionType,
-        payload: {
-          ...actionPayload,
-          value: actionPayload.value ?? id,
-          label: actionPayload.label ?? title,
-          description: actionPayload.description ?? reply?.description ?? null,
-        },
-      },
-
-      attachments: [],
-
-      eventType: "ACTION",
-
-      isFlowSubmission: false,
-    };
-  }
-
-  // =====================================================
-  // WHATSAPP FLOW
+  // WHATSAPP FLOW (NFM)
   // =====================================================
 
   parseFlowReply({ message, identity }) {
     const nfm = message?.interactive?.nfm_reply ?? {};
-
     let responseJson = null;
 
     if (nfm?.response_json) {
@@ -397,92 +200,52 @@ export default class WhatsAppMessageParser {
           typeof nfm.response_json === "string"
             ? JSON.parse(nfm.response_json)
             : nfm.response_json;
-      } catch (error) {
-        console.error("WhatsApp Flow response JSON parse error:", error);
-
+      } catch (err) {
+        console.error("WhatsApp Flow response JSON parse error:", err.message);
         return null;
       }
     }
 
     if (!responseJson || typeof responseJson !== "object") {
       console.warn("WhatsApp Flow submitted without response data.");
-
       return null;
     }
 
-    /*
-     * Meta's nfm_reply.body is used as the Flow token.
-     */
     const flowToken = nfm?.body ?? null;
-
     const tokenPayload = this.flowTokenService.verify(flowToken);
 
-    /*
-     * Never trust a client supplied flow type.
-     */
     if (!tokenPayload) {
       console.error("Invalid or expired WhatsApp Flow token.");
-
       return {
-        ...this.baseAIInput({
-          identity,
-          message,
-        }),
-
+        ...this.baseAIInput({ identity, message }),
         message: "",
-
-        action: {
-          id: "INVALID_FLOW",
-
-          payload: {
-            responseJson,
-          },
-        },
-
+        action: { id: "INVALID_FLOW", payload: { responseJson } },
         attachments: [],
-
         eventType: "FLOW_SUBMISSION",
-
         isFlowSubmission: true,
-
-        flow: {
-          responseJson,
-          flowToken,
-          tokenPayload: null,
-          valid: false,
-        },
+        flow: { responseJson, flowToken, tokenPayload: null, valid: false },
       };
     }
 
-    /*
-     * Make sure the Flow belongs to the same
-     * WhatsApp user that submitted it.
-     */
     if (
       tokenPayload.phoneNumber &&
       String(tokenPayload.phoneNumber) !==
         String(identity?.whatsapp?.phoneNumber)
     ) {
       console.error("WhatsApp Flow phone mismatch.");
-
       return null;
     }
 
-    let actionId;
+    const actionId =
+      tokenPayload.type === "ORDER_FORM"
+        ? "SUBMIT_ORDER_FORM"
+        : tokenPayload.type === "LEAD_FORM"
+          ? "SUBMIT_LEAD"
+          : null;
 
-    switch (tokenPayload.type) {
-      case "ORDER_FORM":
-        actionId = "SUBMIT_ORDER_FORM";
-        break;
-
-      case "LEAD_FORM":
-        actionId = "SUBMIT_LEAD";
-        break;
-
-      default:
-        console.error("Unknown WhatsApp Flow type:", tokenPayload.type);
-
-        return null;
+    if (!actionId) {
+      console.error("Unknown WhatsApp Flow type:", tokenPayload.type);
+      return null;
     }
 
     const formId =
@@ -498,203 +261,113 @@ export default class WhatsAppMessageParser {
       responseJson;
 
     return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
+      ...this.baseAIInput({ identity, message }),
       message: "",
-
       flowType: tokenPayload.type,
-
       flowToken,
-
       flowResponse: responseJson,
-
       flowData: responseJson,
-
-      flowContext: {
-        ...tokenPayload,
-        formId,
-      },
-
+      flowContext: { ...tokenPayload, formId },
       action: {
         id: actionId,
-
         payload: {
           ...responseJson,
-
           formId,
-
           productId: tokenPayload?.productId ?? null,
-
           workflow: tokenPayload?.workflow ?? "SALES",
-
           values,
-
           responseJson,
-
           flowResponse: responseJson,
-
           flowToken,
-
           tokenPayload,
         },
       },
-
       attachments: [],
-
       eventType: "FLOW_SUBMISSION",
-
       isFlowSubmission: true,
-
       flow: {
         responseJson,
         flowToken,
         flowName: nfm?.name ?? null,
-
         type: tokenPayload.type,
-
         tokenPayload,
-
         valid: true,
       },
     };
   }
 
   // =====================================================
-  // MEDIA
+  // MEDIA, LOCATION, CONTACTS
   // =====================================================
 
   parseMedia({ message, identity, mediaType }) {
     const media = message?.[mediaType] ?? {};
-
-    if (!media?.id) {
-      return null;
-    }
+    if (!media?.id) return null;
 
     return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
+      ...this.baseAIInput({ identity, message }),
       message: media?.caption?.trim() ?? "",
-
       action: null,
-
       attachments: [
         {
           mediaId: media.id,
-
           mimeType: media?.mime_type ?? null,
-
           filename: media?.filename ?? null,
-
           sha256: media?.sha256 ?? null,
-
           type: mediaType,
-
           caption: media?.caption ?? null,
-
           downloaded: false,
         },
       ],
-
       eventType: "MEDIA",
-
       isFlowSubmission: false,
     };
   }
-
-  // =====================================================
-  // LOCATION
-  // =====================================================
 
   parseLocation({ message, identity }) {
-    const location = message?.location ?? {};
-
+    const loc = message?.location ?? {};
     return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
+      ...this.baseAIInput({ identity, message }),
       message: "",
-
       action: null,
-
       attachments: [],
-
       location: {
-        latitude: location?.latitude ?? null,
-
-        longitude: location?.longitude ?? null,
-
-        name: location?.name ?? null,
-
-        address: location?.address ?? null,
+        latitude: loc?.latitude ?? null,
+        longitude: loc?.longitude ?? null,
+        name: loc?.name ?? null,
+        address: loc?.address ?? null,
       },
-
       eventType: "LOCATION",
-
       isFlowSubmission: false,
     };
   }
-
-  // =====================================================
-  // CONTACTS
-  // =====================================================
 
   parseContacts({ message, identity }) {
     return {
-      ...this.baseAIInput({
-        identity,
-        message,
-      }),
-
+      ...this.baseAIInput({ identity, message }),
       message: "",
-
       action: null,
-
       attachments: [],
-
       contacts: Array.isArray(message?.contacts) ? message.contacts : [],
-
       eventType: "CONTACTS",
-
       isFlowSubmission: false,
     };
   }
-
-  // =====================================================
-  // BASE INPUT
-  // =====================================================
 
   baseAIInput({ identity, message }) {
     return {
       sessionId: identity?.sessionId,
-
       visitorId: identity?.visitorId,
-
       site: "exprintmart",
-
       visitor: identity?.visitor,
-
       channel: "WHATSAPP",
-
       whatsapp: {
         ...identity?.whatsapp,
-
         messageId: message?.id ?? null,
-
         timestamp: message?.timestamp ?? null,
       },
-
       ipAddress: null,
-
       initiatedByCustomer: true,
-
       originalMessage: message,
     };
   }

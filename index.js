@@ -42,6 +42,9 @@ const supplierRoutes = require("./routes/supplier");
 // AI ROUTES
 const aiRoutes = require("./routes/ai");
 
+// WHATSAPP WEBHOOK ROUTES
+const whatsappRoutes = require("./routes/whatsapp");
+
 // =====================================================
 // EXPRESS APP
 // =====================================================
@@ -54,7 +57,21 @@ const app = express();
 
 app.use(cors());
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  }),
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    verify: (req, res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  }),
+);
 
 // =====================================================
 // API ROUTES
@@ -112,6 +129,14 @@ app.use("/v1/api/supplier", supplierRoutes);
 app.use("/v1/api/ai", aiRoutes);
 
 // =====================================================
+// WHATSAPP WEBHOOKS
+// =====================================================
+
+app.use("/webhooks/whatsapp", whatsappRoutes);
+app.use("/webhooks", whatsappRoutes);
+app.use("/webhook", whatsappRoutes);
+
+// =====================================================
 // STATIC FILES
 // =====================================================
 
@@ -153,4 +178,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server Running on port ${PORT} for Deluxe Management`);
+  console.log(`[WhatsApp] Meta webhook route: /webhooks/whatsapp`);
 });

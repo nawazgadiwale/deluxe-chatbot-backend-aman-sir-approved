@@ -39,7 +39,7 @@ export default class RoutingService {
     // Continue current workflow if condition met
     if (workflow.shouldContinue(state)) {
       console.log("[WhatsApp][Routing] classification=WORKFLOW");
-      console.log("[Whapi Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
+      console.log("[WhatsApp Interactive] ACTIVE_WORKFLOW_PRESERVED:", {
         workflow: state.workflow,
         currentStep: state.currentStep,
         awaitingDecision: state.awaitingDecision,

@@ -35,7 +35,7 @@ export default class SalesExtractor {
   extract(requirement = {}, message = "", currentStep = null) {
     const text = this.normalize(message);
     const currentItem = requirement.items?.[requirement.currentItem] ?? {};
-
+    const delivery = this.extractDelivery(text, currentStep, message);
 
     const rawProductMatches = productResolver.resolveMany(text);
 
@@ -77,14 +77,12 @@ export default class SalesExtractor {
             product.productId ??
             product.id;
 
-
           return (
             rootId &&
             String(rootId).toLowerCase() ===
             String(currentRootProductId).toLowerCase()
           );
         }));
-
 
     if (
       currentItem.formMode === true &&
@@ -113,7 +111,7 @@ export default class SalesExtractor {
       : this.resolveNestedProduct(
         currentItem,
         selection,
-        text,
+        text
       );
 
     return {
@@ -140,15 +138,17 @@ export default class SalesExtractor {
       requirements: [],
       quantity: null,
       artwork: null,
-      deliveryMethod: null,
-      address: null,
-      requiredDate: null,
+
+      deliveryMethod: delivery.method ?? null,
+      address: delivery.address ?? null,
+      requiredDate: delivery.requiredDate ?? null,
+      delivery,
+
       confirmed: false,
 
       addAnotherProduct:
         this.extractAddAnotherProduct(text),
     };
-
   }
 
   // Customer

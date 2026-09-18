@@ -240,8 +240,73 @@ export function resolveCatalogImage(catalogItem, options = {}) {
   return normalized;
 }
 
+// In-memory cache for validated image URLs (TTL 1 hour)
+const mediaValidationCache = new Map();
+
+/**
+ * Validates that an image URL is publicly accessible and returns a supported image content-type.
+ * Uses a fast HEAD / GET request with a 1500ms timeout and in-memory caching.
+ *
+ * @param {string} rawUrl
+ * @returns {Promise<boolean>}
+ */
+export async function validateMediaUrl(rawUrl) {
+  const normalized = normalizeImageUrl(rawUrl);
+  if (!normalized) {
+    console.log(`[WhatsApp][Media] rejected reason=INVALID_URL url=${rawUrl}`);
+    return false;
+  }
+
+  const cached = mediaValidationCache.get(normalized);
+  if (cached && Date.now() - cached.timestamp < 3600000) {
+    if (!cached.valid) {
+      console.log(`[WhatsApp][Media] rejected reason=${cached.reason || "CACHE_REJECTED"} url=${normalized}`);
+    }
+    return cached.valid;
+  }
+
+  try {
+    // 1. Try HEAD request first for minimal bandwidth
+    let res = await fetch(normalized, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(1500),
+    }).catch(() => null);
+
+    // If server rejects HEAD (e.g. 405 Method Not Allowed), retry with GET
+    if (!res || !res.ok || res.status === 405) {
+      res = await fetch(normalized, {
+        method: "GET",
+        headers: { Range: "bytes=0-1024" },
+        signal: AbortSignal.timeout(1500),
+      }).catch(() => null);
+    }
+
+    if (!res || !res.ok) {
+      console.log(`[WhatsApp][Media] rejected reason=NOT_PUBLIC status=${res?.status || "TIMEOUT"} url=${normalized}`);
+      mediaValidationCache.set(normalized, { valid: false, reason: "NOT_PUBLIC", timestamp: Date.now() });
+      return false;
+    }
+
+    const contentType = (res.headers.get("content-type") || "").toLowerCase();
+    // SVG is not supported by Meta WhatsApp image messages
+    if (!contentType.startsWith("image/") || contentType.includes("svg")) {
+      console.log(`[WhatsApp][Media] rejected reason=INVALID_CONTENT_TYPE contentType=${contentType} url=${normalized}`);
+      mediaValidationCache.set(normalized, { valid: false, reason: "INVALID_CONTENT_TYPE", timestamp: Date.now() });
+      return false;
+    }
+
+    mediaValidationCache.set(normalized, { valid: true, timestamp: Date.now() });
+    return true;
+  } catch (err) {
+    console.log(`[WhatsApp][Media] rejected reason=PREFLIGHT_ERROR error=${err.message} url=${normalized}`);
+    mediaValidationCache.set(normalized, { valid: false, reason: "PREFLIGHT_ERROR", timestamp: Date.now() });
+    return false;
+  }
+}
+
 export default {
   normalizeImageUrl,
   resolveCatalogImage,
+  validateMediaUrl,
 };
 

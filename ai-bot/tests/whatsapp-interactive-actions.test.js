@@ -27,6 +27,7 @@ async function runInteractiveTests() {
   const customerNumber = "8310412768";
   const otherNumber = "9876543210";
 
+  process.env.WHATSAPP_PROVIDER = "whapi";
   process.env.WHAPI_TOKEN = testWhapiToken;
   process.env.WHAPI_WEBHOOK_SECRET = testWebhookSecret;
   process.env.WHATSAPP_BOT_NUMBER = botNumber;

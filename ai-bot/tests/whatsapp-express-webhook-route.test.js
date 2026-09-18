@@ -338,33 +338,64 @@ async function runTests() {
       return originalHandleWebhook(body, ctx);
     };
 
-    const localTestPayload = {
-      messages: [
+    // Test 10: Meta POST /webhooks/whatsapp Body Key Verification & Whapi Rejection
+    // ============================================================
+    console.log("Test 10: Meta POST /webhooks/whatsapp Body Key Verification");
+
+    // 10a. Unsigned Whapi request must be rejected with HTTP 403
+    const unsignedWhapiRes = await fetch(`${baseUrl}/webhooks/whatsapp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "whapi-secret": "test_whapi_secret",
+      },
+      body: JSON.stringify({ messages: [{ id: "whapi_msg" }] }),
+    });
+    assert.equal(unsignedWhapiRes.status, 403, "Unsigned Whapi request must be rejected with 403");
+
+    // 10b. Valid Meta payload with HMAC signature must be accepted
+    const localMetaPayload = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [
         {
-          id: "LOCAL_BODY_TEST_123",
-          from_me: false,
-          type: "text",
-          timestamp: 1788519207,
-          chat_id: "918310412768@s.whatsapp.net",
-          from: "918310412768",
-          text: {
-            body: "i want to order stamps",
-          },
+          id: "WABA_ENTRY_123",
+          changes: [
+            {
+              field: "messages",
+              value: {
+                messaging_product: "whatsapp",
+                metadata: {
+                  phone_number_id: "735218809665742",
+                  display_phone_number: "+97142725202",
+                },
+                messages: [
+                  {
+                    from: "918310412768",
+                    id: "LOCAL_BODY_TEST_123",
+                    timestamp: "1788519207",
+                    text: { body: "i want to order stamps" },
+                    type: "text",
+                  },
+                ],
+              },
+            },
+          ],
         },
       ],
-      channel_id: "HAWKEY-J9A6V",
-    };
+    });
 
-    const localWhapiSecret = process.env.WHAPI_WEBHOOK_SECRET || "test_whapi_secret_local";
-    whatsappService.whapiWebhookSecret = localWhapiSecret;
+    const metaHmac = crypto
+      .createHmac("sha256", testAppSecret)
+      .update(Buffer.from(localMetaPayload, "utf8"))
+      .digest("hex");
 
     const localPostRes = await fetch(`${baseUrl}/webhooks/whatsapp`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "whapi-secret": localWhapiSecret,
+        "x-hub-signature-256": `sha256=${metaHmac}`,
       },
-      body: JSON.stringify(localTestPayload),
+      body: localMetaPayload,
     });
 
     assert.equal(localPostRes.status, 200);
@@ -375,10 +406,9 @@ async function runTests() {
     await new Promise((r) => setTimeout(r, 400));
 
     assert.ok(interceptedInboundBody, "handleWebhook must receive non-empty parsed body");
-    assert.ok(Array.isArray(interceptedInboundBody.messages), "body must contain messages array");
-    assert.equal(interceptedInboundBody.channel_id, "HAWKEY-J9A6V");
-    assert.equal(interceptedInboundBody.messages[0].id, "LOCAL_BODY_TEST_123");
-    console.log("✅ Test 10 passed: Express handler correctly receives bodyKeys=messages,channel_id\n");
+    assert.equal(interceptedInboundBody.object, "whatsapp_business_account");
+    assert.ok(Array.isArray(interceptedInboundBody.entry), "body must contain entry array");
+    console.log("✅ Test 10 passed: Meta Express webhook handler correctly authenticated and parsed body\n");
 
     console.log("=================================================");
     console.log("🎉 ALL EXPRESS WHATSAPP ROUTE TESTS PASSED!");

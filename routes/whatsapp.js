@@ -22,44 +22,19 @@ function setWebhookHandler(handler) {
 // =====================================================
 // GET /webhooks/whatsapp (Verification Challenge)
 // =====================================================
-
 router.get("/", async (req, res, next) => {
   try {
-    const handler = await getWebhookHandler();
-    return handler.verify(req, res);
-  } catch (err) {
-    return next(err);
+    return (await getWebhookHandler()).verify(req, res);
+  } catch (error) {
+    next(error);
   }
 });
-
-router.get("/whatsapp", async (req, res, next) => {
-  try {
-    const handler = await getWebhookHandler();
-    return handler.verify(req, res);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// =====================================================
-// POST /webhooks/whatsapp (Inbound Events)
-// =====================================================
 
 router.post("/", async (req, res, next) => {
   try {
-    const handler = await getWebhookHandler();
-    return await handler.handle(req, res);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-router.post("/whatsapp", async (req, res, next) => {
-  try {
-    const handler = await getWebhookHandler();
-    return await handler.handle(req, res);
-  } catch (err) {
-    return next(err);
+    return await (await getWebhookHandler()).handle(req, res);
+  } catch (error) {
+    next(error);
   }
 });
 

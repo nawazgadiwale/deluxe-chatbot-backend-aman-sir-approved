@@ -2,79 +2,91 @@ import ResponseBuilder from "../../../core/responses/Apiresponse.js";
 
 const responseBuilder = new ResponseBuilder();
 
-const BRAND_GREETING_LOGO_URL =
-  "https://www.dlxprint.com/images/dlxprint.svg";
-
 export default class GreetingNode {
   async execute(state) {
-    /**
-     * Greeting is stateless.
-     * It must not start or modify an order.
-     */
+    // Greeting is stateless. Never start or modify an order.
     state.workflow = null;
     state.currentStep = null;
     state.awaitingDecision = false;
+    state.transientExecution = null;
 
-    /**
-     * Visitor Context
-     */
-    const visitorType = state.visitorType ?? "VISITOR";
-    const customer = state.customer ?? {};
-    const name = customer.name?.trim() || null;
+    const rawName = state.customer?.name?.trim() || null;
+    const isPlaceholder = (val) =>
+      !val ||
+      /^(test user|unknown|undefined|null|n\/a)$/i.test(String(val).trim());
+    const name = !isPlaceholder(rawName) ? rawName : null;
+
+    const totalSessions = Number.isFinite(state.totalSessions)
+      ? state.totalSessions
+      : 1;
+
+    const isNewVisitor =
+      state.isPureVisitor === true &&
+      !state.hasOrdered &&
+      !state.hasSubmittedLead &&
+      !state.hasRequestedQuote &&
+      !state.hasRequirement &&
+      !state.leadId &&
+      !state.isReturningVisitor &&
+      totalSessions <= 1 &&
+      !state.previousSessionId &&
+      (!state.history || state.history.length === 0);
+
+    const isReturning =
+      !isNewVisitor &&
+      (state.isReturningVisitor === true ||
+        state.isKnownCustomer === true ||
+        state.hasSubmittedLead === true ||
+        state.hasRequestedQuote === true ||
+        state.hasOrdered === true ||
+        state.hasRequirement === true ||
+        Boolean(state.conversationId) ||
+        Boolean(state.leadId));
+
+    console.log("[GreetingNode] State before greeting:", {
+      "customer.name": state.customer?.name ?? null,
+      isReturning,
+      workflow: state.workflow,
+      currentStep: state.currentStep,
+      classification:
+        state.routing?.classification ?? state.routing?.source ?? "GREETING",
+      capability: state.capability ?? "greeting",
+      selectedProduct:
+        state.selectedProduct?.name ??
+        state.selectedProduct?.id ??
+        state.selectedProduct ??
+        null,
+    });
 
     let message;
-
-    switch (visitorType) {
-      case "CUSTOMER":
-        message = name
-          ? `Welcome back, ${name}! 👋 How can I help you today? You can place another order, explore products, or ask questions.`
-          : "Welcome back! 👋 How can I help you today? You can place another order, explore products, or ask questions.";
-        break;
-
-      case "QOUTATION":
-      case "LEAD":
-        message = name
-          ? `Welcome back, ${name}! 👋 I can help you with your printing requirements, quotations, or product options. What would you like to explore?`
-          : "Welcome back! 👋 I can help you with your printing requirements, quotations, or product options. What would you like to explore?";
-        break;
-
-      case "VISITOR":
-      default:
-        message =
-          "Hi! 👋 Welcome to Deluxe Printing.\n\n" +
-          "What would you like to order today?\n\n" +
-          "Simply type the product you need, for example:\n" +
-          "• Business Cards\n" +
-          "• Flyers\n" +
-          "• Brochures";
-        break;
+    if (isReturning) {
+      message = name
+        ? `Welcome back, ${name}! 👋\n\nWhat can I help you with today?`
+        : "Welcome back! 👋\n\nWhat can I help you with today?";
+    } else {
+      message = "Hi there! 👋\n\nWhat are you looking to print today?";
     }
 
-    /**
-     * Persistence
-     */
     state.persistence.conversation = {
       ...state.persistence.conversation,
       dirty: true,
       updatedAt: new Date(),
     };
 
-    /**
-     * Response
-     */
+    const brandLogo =
+      state.site === "exprintmart"
+        ? "https://www.exprintmart.com/_next/static/media/exprint_logo.41b1dc5b.svg"
+        : "https://www.dlxprint.com/images/dlxprint.svg";
+
     state.response = responseBuilder.success({
       type: "greeting",
       message,
       actions: [],
-      data: {
-        brandAsset: BRAND_GREETING_LOGO_URL,
-        image: BRAND_GREETING_LOGO_URL,
-      },
-      metadata: {
-        brandAsset: BRAND_GREETING_LOGO_URL,
-      },
+      data: { brandAsset: brandLogo },
+      metadata: { brandAsset: brandLogo },
     });
 
     return state;
   }
 }
+

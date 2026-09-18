@@ -172,7 +172,7 @@ export default class WhatsappActionCodec {
       }
     }
 
-    // Strip common provider/transport wrapper prefixes (e.g., "ButtonsV3:", "ButtonsV2:", "Buttons:", "Button:", "quick_reply:", "whapi:", "meta:")
+    // Strip common provider/transport wrapper prefixes (e.g., "ButtonsV3:", "ButtonsV2:", "Buttons:", "Button:", "quick_reply:", "meta:")
     const orderNowIdx = text.indexOf("order_now:");
     if (orderNowIdx !== -1) {
       text = text.slice(orderNowIdx);

@@ -15,16 +15,27 @@ try {
       const result = originalInit.apply(this, arguments);
       if (!this._whatsappWebhooksMounted) {
         this._whatsappWebhooksMounted = true;
+        const jsonParserWithRaw = express.json({
+          verify: (req, res, buf) => {
+            req.rawBody = Buffer.from(buf);
+          },
+        });
+        const urlencodedWithRaw = express.urlencoded({
+          extended: true,
+          verify: (req, res, buf) => {
+            req.rawBody = Buffer.from(buf);
+          },
+        });
         this.use(
           "/webhooks/whatsapp",
-          express.json(),
-          express.urlencoded({ extended: true }),
+          jsonParserWithRaw,
+          urlencodedWithRaw,
           whatsappRoutes,
         );
         this.use(
           "/webhooks",
-          express.json(),
-          express.urlencoded({ extended: true }),
+          jsonParserWithRaw,
+          urlencodedWithRaw,
           whatsappRoutes,
         );
       }
@@ -37,16 +48,27 @@ try {
     express.application.listen = function () {
       if (!this._whatsappWebhooksMounted) {
         this._whatsappWebhooksMounted = true;
+        const jsonParserWithRaw = express.json({
+          verify: (req, res, buf) => {
+            req.rawBody = Buffer.from(buf);
+          },
+        });
+        const urlencodedWithRaw = express.urlencoded({
+          extended: true,
+          verify: (req, res, buf) => {
+            req.rawBody = Buffer.from(buf);
+          },
+        });
         this.use(
           "/webhooks/whatsapp",
-          express.json(),
-          express.urlencoded({ extended: true }),
+          jsonParserWithRaw,
+          urlencodedWithRaw,
           whatsappRoutes,
         );
         this.use(
           "/webhooks",
-          express.json(),
-          express.urlencoded({ extended: true }),
+          jsonParserWithRaw,
+          urlencodedWithRaw,
           whatsappRoutes,
         );
       }

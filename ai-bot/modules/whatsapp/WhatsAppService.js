@@ -2,17 +2,14 @@
  * WhatsAppService.js
  *
  * Canonical WhatsApp Gateway Orchestration Layer for ExprintMart AI Backend.
- *
  * Thin provider-neutral transport orchestration:
- * 1. Webhook receiving & HMAC/token authentication
- * 2. Provider normalization (Whapi.Cloud & Meta WhatsApp Cloud API)
+ * 1. Webhook receiving & verification
+ * 2. Provider normalization (Meta WhatsApp Cloud API)
  * 3. Authoritative inbound single-sender allowlist gate
- * 4. Inbound event deduplication
- * 5. Per-session concurrency serialization
- * 6. Session & window policy recording
- * 7. AI conversation graph dispatch
- * 8. Outbound response formatting & delivery
- * 9. Safe, isolated error handling
+ * 4. Deduplication & session-level concurrency serialization
+ * 5. AI conversation graph dispatch
+ * 6. Customer service window & outbound policy enforcement
+ * 7. Outbound response delivery & async 131053 media fallback
  */
 
 import crypto from "crypto";
@@ -44,43 +41,34 @@ export default class WhatsAppService {
     realtimeService = null,
     aiServiceInstance = null,
     provider = null,
+    allowlistPolicy = null,
   ) {
     this.verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
-    this.appSecret = process.env.WHATSAPP_APP_SECRET;
-    this.whapiToken = process.env.WHAPI_TOKEN;
-    this.whapiWebhookSecret = process.env.WHAPI_WEBHOOK_SECRET;
-
     this.provider = provider || WhatsAppProviderFactory.getProvider();
     this.apiService =
       apiService || new WhatsAppApiService({ provider: this.provider });
-
     this.windowPolicy =
       windowPolicy || new WhatsAppCustomerServiceWindowPolicy();
-
+    this.allowlistPolicy = allowlistPolicy || new WhatsAppAllowlistPolicy();
+    this.sessionService = new WhatsAppSessionService(this.allowlistPolicy);
     this.outboundPolicy =
       outboundPolicy ||
       new WhatsAppOutboundPolicy({
         windowPolicy: this.windowPolicy,
+        allowlistPolicy: this.allowlistPolicy,
       });
-
     this.mediaService =
       mediaService || new WhatsAppMediaService(this.apiService);
-
     this.conversationRepository =
       conversationRepository || new ConversationRepository();
-
     this.realtimeService =
       realtimeService || WhatsAppRealtimeService.getInstance();
-
     this.aiService = aiServiceInstance || new AIService();
     this.messageParser = new WhatsAppMessageParser();
     this.responseAdapter = new WhatsAppResponseAdapter();
-
-    this.allowlistPolicy = new WhatsAppAllowlistPolicy();
-    this.sessionService = new WhatsAppSessionService(this.allowlistPolicy);
-
     this.flowSubmissionService = new WhatsAppFlowSubmissionService({
       conversationRepository: this.conversationRepository,
+      allowlistPolicy: this.allowlistPolicy,
     });
 
     this.processedMessageIds = new Set();
@@ -88,19 +76,22 @@ export default class WhatsAppService {
     this.lastAvailableActions = new Map();
     this.maxTrackedSessions = 5000;
     this.sessionQueues = new Map();
+
+    // In-memory correlation map for outbound media messages to handle async 131053 failures
+    this.outboundMediaFallbacks = new Map();
+    this.maxTrackedFallbacks = 2000;
   }
 
   // =====================================================
-  // SESSION CONCURRENCY QUEUE
+  // SESSION CONCURRENCY & DEDUPLICATION
   // =====================================================
 
   enqueueSessionTask(sessionId, fn) {
     if (!sessionId || typeof fn !== "function") {
       return typeof fn === "function" ? fn() : Promise.resolve();
     }
-    const previousPromise =
-      this.sessionQueues.get(sessionId) || Promise.resolve();
-    const nextPromise = previousPromise
+    const prev = this.sessionQueues.get(sessionId) || Promise.resolve();
+    const next = prev
       .catch((err) => {
         console.error(
           `[WhatsAppService] Queued session task error for ${sessionId}:`,
@@ -109,52 +100,53 @@ export default class WhatsAppService {
       })
       .then(() => fn())
       .finally(() => {
-        if (this.sessionQueues.get(sessionId) === nextPromise) {
+        if (this.sessionQueues.get(sessionId) === next) {
           this.sessionQueues.delete(sessionId);
         }
       });
-
-    this.sessionQueues.set(sessionId, nextPromise);
-    return nextPromise;
+    this.sessionQueues.set(sessionId, next);
+    return next;
   }
 
   setAvailableActions(key, actions) {
     if (!key) return;
     if (this.lastAvailableActions.size >= this.maxTrackedSessions) {
-      const oldestKey = this.lastAvailableActions.keys().next().value;
-      if (oldestKey) this.lastAvailableActions.delete(oldestKey);
+      const oldest = this.lastAvailableActions.keys().next().value;
+      if (oldest) this.lastAvailableActions.delete(oldest);
     }
     this.lastAvailableActions.set(key, actions);
   }
 
-  // =====================================================
-  // IDEMPOTENCY / DUPLICATE PROTECTION
-  // =====================================================
-
   isDuplicateMessage(messageId) {
-    if (!messageId) return false;
-    return this.processedMessageIds.has(String(messageId));
+    return Boolean(
+      messageId && this.processedMessageIds.has(String(messageId)),
+    );
   }
 
   markMessageProcessed(messageId) {
     if (!messageId) return;
     if (this.processedMessageIds.size >= this.maxProcessedMessageIds) {
-      const firstItem = this.processedMessageIds.values().next().value;
-      if (firstItem) this.processedMessageIds.delete(firstItem);
+      const oldest = this.processedMessageIds.values().next().value;
+      if (oldest) this.processedMessageIds.delete(oldest);
     }
     this.processedMessageIds.add(String(messageId));
   }
 
+  isSenderAllowed(phoneNumber) {
+    return this.allowlistPolicy.isAuthorized(phoneNumber);
+  }
+
   // =====================================================
-  // WEBHOOK VERIFICATION & AUTHENTICATION
+  // WEBHOOK VERIFICATION (GET)
   // =====================================================
 
   verifyWebhook(mode, token, challenge) {
     if (mode !== "subscribe") return false;
     const verifyToken = this.verifyToken || process.env.WHATSAPP_VERIFY_TOKEN;
-    if (!verifyToken || !token || !challenge) return false;
-    if (token !== verifyToken) {
-      console.error("[WhatsApp] Webhook verification token mismatch.");
+    if (!verifyToken || !token || !challenge || token !== verifyToken) {
+      if (token && token !== verifyToken) {
+        console.error("[WhatsApp] Webhook verification token mismatch.");
+      }
       return false;
     }
     return challenge;
@@ -174,19 +166,20 @@ export default class WhatsAppService {
         .update(rawBody)
         .digest("hex");
 
-      const expectedBuffer = Buffer.from(expectedHex, "utf8");
-      const receivedBuffer = Buffer.from(cleanSignature, "utf8");
+      const expBuf = Buffer.from(expectedHex, "utf8");
+      const recBuf = Buffer.from(cleanSignature, "utf8");
 
-      if (expectedBuffer.length !== receivedBuffer.length) return false;
-      return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-    } catch (err) {
-      console.error("[WhatsApp] Signature verification error:", err.message);
+      return (
+        expBuf.length === recBuf.length &&
+        crypto.timingSafeEqual(expBuf, recBuf)
+      );
+    } catch {
       return false;
     }
   }
 
   // =====================================================
-  // WEBHOOK EVENT INGESTION (POST)
+  // CANONICAL INBOUND WEBHOOK PIPELINE (POST)
   // =====================================================
 
   async handleWebhook(body = {}, authContext = {}) {
@@ -198,16 +191,21 @@ export default class WhatsAppService {
       authContext?.provider ||
       (body.object === "whatsapp_business_account"
         ? "meta"
-        : this.provider?.name || "whapi");
+        : process.env.WHATSAPP_PROVIDER || this.provider?.name || "meta");
 
-    const activeProvider =
-      this.provider?.name === providerName
-        ? this.provider
-        : WhatsAppProviderFactory.getProvider(providerName);
+    let activeProvider = this.provider;
+    if (providerName && this.provider?.name !== providerName) {
+      try {
+        activeProvider = WhatsAppProviderFactory.getProvider(providerName);
+      } catch {
+        activeProvider = this.provider;
+      }
+    }
 
-    const payloadKeys = Object.keys(body).join(",");
+    console.log(`[WhatsApp] Provider: ${activeProvider.name}`);
+    console.log("[WhatsApp] Webhook received");
     console.log(
-      `[WhatsApp][Service] correlationId=${correlationId} handleWebhook start provider=${activeProvider.name} payloadKeys=${payloadKeys}`,
+      `[WhatsApp][Service] correlationId=${correlationId} handleWebhook start provider=${activeProvider.name} payloadKeys=${Object.keys(body).join(",")}`,
     );
 
     const normalizedEvents = activeProvider.normalizeInbound(
@@ -220,7 +218,6 @@ export default class WhatsAppService {
       console.log(
         `[WhatsApp][Normalize] correlationId=${correlationId} provider=${activeProvider.name} count=${normalizedEvents.length} types=${normalizedEvents.map((e) => e.eventType).join(",")}`,
       );
-
       for (const event of normalizedEvents) {
         if (event.eventType === "STATUS") {
           await this.processStatuses([event.rawProviderEvent || event]);
@@ -234,31 +231,20 @@ export default class WhatsAppService {
       return;
     }
 
-    console.warn(
-      `[WhatsApp][Normalize] correlationId=${correlationId} provider=${activeProvider.name} returned 0 normalized events from payload (payloadKeys=${payloadKeys})`,
-    );
-
     // Fallback for raw Meta webhook structure if provider returned empty
     if (body.object === "whatsapp_business_account") {
       const entries = Array.isArray(body.entry) ? body.entry : [];
-      for (const entry of entries) {
-        await this.processEntry(entry);
-      }
+      for (const entry of entries) await this.processEntry(entry);
     }
   }
-
-  // =====================================================
-  // INBOUND EVENT ORCHESTRATION PIPELINE
-  // =====================================================
 
   async processNormalizedEvent(event = {}, authContext = {}) {
     if (!event) return;
 
     const customerWaId = event.customerWaId;
     if (!this.allowlistPolicy.isAuthorized(customerWaId)) {
-      const maskedPhone = this.allowlistPolicy.maskPhone(customerWaId);
       console.log(
-        `[WhatsApp Inbound Gate] Inbound message from non-allowlisted sender ${maskedPhone} rejected. Automation halted.`,
+        `[WhatsApp] Unauthorized sender ignored (${this.allowlistPolicy.maskPhone(customerWaId)})`,
       );
       if (event.messageId) this.markMessageProcessed(event.messageId);
       return;
@@ -267,8 +253,7 @@ export default class WhatsAppService {
     const sessionDigits =
       this.allowlistPolicy.normalizeToSessionDigits(customerWaId) ||
       customerWaId;
-    const sessionQueueKey = `whatsapp:${sessionDigits}`;
-    return this.enqueueSessionTask(sessionQueueKey, () =>
+    return this.enqueueSessionTask(`whatsapp:${sessionDigits}`, () =>
       this._processNormalizedEventInternal(event, authContext),
     );
   }
@@ -282,49 +267,46 @@ export default class WhatsAppService {
 
     const messageId = event.messageId;
     const customerWaId = event.customerWaId;
-    const provider = event.provider || this.provider?.name || "whapi";
     const correlationId = authContext?.correlationId || crypto.randomUUID();
-    const sanitizedPhone = this.allowlistPolicy.maskPhone(customerWaId);
+    const provider =
+      event.provider ||
+      process.env.WHATSAPP_PROVIDER ||
+      this.provider?.name ||
+      "meta";
 
+    const normalizedSender =
+      this.allowlistPolicy.normalizeToE164(customerWaId) || customerWaId;
+    console.log(`[WhatsApp] Inbound sender: ${normalizedSender}`);
     console.log(
-      `[WhatsApp][Inbound] correlationId=${correlationId} received messageId=${messageId} sender=${sanitizedPhone} provider=${provider}`,
+      `[WhatsApp][Inbound] correlationId=${correlationId} received messageId=${messageId} sender=${this.allowlistPolicy.maskPhone(customerWaId)} provider=${provider}`,
     );
 
-    // 1. Duplicate event check
+    // 1. Deduplication check
     const isDuplicate = this.isDuplicateMessage(messageId);
     console.log(
       `[WhatsApp][Duplicate] correlationId=${correlationId} messageId=${messageId} duplicate=${isDuplicate}`,
     );
 
     if (messageId && isDuplicate) {
-      console.log(
-        `[${provider === "whapi" ? "Whapi Interactive" : "WhatsApp"}] DUPLICATE_EVENT_IGNORED:`,
-        { correlationId, messageId },
-      );
+      console.log("[WhatsApp] DUPLICATE_EVENT_IGNORED:", {
+        correlationId,
+        messageId,
+      });
       return;
     }
-
     if (!messageId) {
       console.warn("[WhatsApp] Inbound event missing messageId. Dropping.");
       return;
     }
 
-    // 2. Authoritative allowlist gate check
-    if (!this.allowlistPolicy.isAuthorized(customerWaId)) {
-      console.log(
-        `[WhatsApp Inbound Gate] Sender ${sanitizedPhone} not in allowlist. Dropping event.`,
-      );
-      this.markMessageProcessed(messageId);
-      return;
-    }
-
+    console.log("[WhatsApp] Allowlist: MATCH");
     this.markMessageProcessed(messageId);
 
     const receivedAt = Date.now();
     const customerTimestamp = event.timestamp || receivedAt;
     const phoneNumberId = event.phoneNumberId || this.apiService?.phoneNumberId;
 
-    // 3. Customer Service Window & session isolation
+    // 2. Customer service window & session identity
     const sessionDigits =
       this.allowlistPolicy.normalizeToSessionDigits(customerWaId) ||
       customerWaId;
@@ -364,7 +346,7 @@ export default class WhatsAppService {
       provider,
     });
 
-    // 4. Persist inbound message to MongoDB
+    // 3. Persist inbound message to MongoDB
     const persistedInboundMessage = {
       messageId: crypto.randomUUID(),
       role: "user",
@@ -411,11 +393,11 @@ export default class WhatsAppService {
         sessionId,
         persistedInboundMessage,
       );
-    } catch (err) {
-      // Non-fatal if DB is offline in unit tests
+    } catch {
+      // Non-fatal if DB offline
     }
 
-    // 5. CRM Realtime event emissions
+    // 4. CRM Realtime event emissions
     this.realtimeService.emitEvent(WhatsAppEvents.MESSAGE_RECEIVED, {
       sessionId,
       customerWaId,
@@ -429,14 +411,14 @@ export default class WhatsAppService {
       lastInboundMessageId: messageId,
     });
 
-    // 6. Resolve media attachments
+    // 5. Media attachments resolution
     let resolvedAttachments = event.attachments || [];
     if (resolvedAttachments.length > 0) {
       resolvedAttachments =
         await this.mediaService.resolveAttachments(resolvedAttachments);
     }
 
-    // 7. Fast-Path: Deterministic Flow Submission Handler
+    // 6. Fast-Path: Deterministic Flow Submission Handler
     if (
       event.isFlowSubmission === true ||
       event.eventType === "FLOW_SUBMISSION"
@@ -457,7 +439,7 @@ export default class WhatsAppService {
         correlationId,
       });
 
-      if (flowResult && flowResult.response) {
+      if (flowResult?.response) {
         await this.sendResult(
           {
             sessionId,
@@ -468,7 +450,7 @@ export default class WhatsAppService {
           { inboundTriggerContext, receivedAt, correlationId },
         );
         return;
-      } else if (flowResult && flowResult.userMessage) {
+      } else if (flowResult?.userMessage) {
         await this.sendMessage(
           customerWaId,
           { type: "text", text: { body: flowResult.userMessage } },
@@ -478,13 +460,12 @@ export default class WhatsAppService {
       }
     }
 
-    // 8. Action extraction and security validation
+    // 7. Action extraction, decoding, and validation
     const availableActions = this.extractAvailableActions(
       conv,
       sessionId,
       customerWaId,
     );
-
     let finalAction = event.action || null;
     let finalEventType = event.eventType || "MESSAGE";
 
@@ -524,32 +505,29 @@ export default class WhatsAppService {
           payload: finalAction.payload,
         });
       }
-    } else if (event.text && typeof event.text === "string") {
-      // Deterministic numeric / text choice matching ("1", "2", "standard")
-      if (availableActions && availableActions.length > 0) {
-        const resolved = this.resolveTextAction(event.text, availableActions);
-        if (resolved) {
-          finalAction = {
-            id: resolved.id || resolved.type,
-            type: resolved.type || resolved.id,
+    } else if (event.text && typeof event.text === "string" && availableActions.length > 0) {
+      const resolved = this.resolveTextAction(event.text, availableActions);
+      if (resolved) {
+        finalAction = {
+          id: resolved.id || resolved.type,
+          type: resolved.type || resolved.id,
+          label: resolved.label || resolved.title || resolved.name,
+          payload: {
+            ...(resolved.payload || {}),
             label: resolved.label || resolved.title || resolved.name,
-            payload: {
-              ...(resolved.payload || {}),
-              label: resolved.label || resolved.title || resolved.name,
-            },
-          };
-          finalEventType = "ACTION";
-          console.log("[WhatsApp] ACTION_RESOLVED:", {
-            text: event.text,
-            actionId: finalAction.id,
-            type: finalAction.type,
-            payload: finalAction.payload,
-          });
-        }
+          },
+        };
+        finalEventType = "ACTION";
+        console.log("[WhatsApp] ACTION_RESOLVED:", {
+          text: event.text,
+          actionId: finalAction.id,
+          type: finalAction.type,
+          payload: finalAction.payload,
+        });
       }
     }
 
-    // 9. Build incoming payload for AI conversation graph
+    // 8. AI Conversation Dispatch
     console.log(
       `[WhatsApp][Process] messageId=${messageId} sessionId=${sessionId}`,
     );
@@ -578,7 +556,6 @@ export default class WhatsAppService {
       originalMessage: event.rawProviderEvent,
     };
 
-    // 10. AI Service conversation processing
     try {
       const processingStartedAt = Date.now();
       console.log(
@@ -613,7 +590,7 @@ export default class WhatsAppService {
   }
 
   // =====================================================
-  // DIRECT RAW MESSAGE PROCESSING (DELEGATION TO PIPELINE)
+  // COMPATIBILITY RAW ENTRY / MESSAGE DISPATCH
   // =====================================================
 
   async processMessage({
@@ -632,38 +609,44 @@ export default class WhatsAppService {
     if (!incoming || !incoming.whatsapp?.phoneNumber) return;
 
     const customerWaId = incoming.whatsapp.phoneNumber;
-    const messageId = message.id || incoming.whatsapp.messageId;
-    const timestamp = message.timestamp
-      ? Number(message.timestamp) * 1000
-      : Date.now();
-    const phoneNumberId =
-      metadata?.phone_number_id || this.apiService?.phoneNumberId;
-    const provider =
-      message?.provider || (process.env.WHAPI_TOKEN ? "whapi" : "meta");
+    if (!this.allowlistPolicy.isAuthorized(customerWaId)) {
+      console.log(
+        `[WhatsApp] Unauthorized sender ignored (${this.allowlistPolicy.maskPhone(customerWaId)})`,
+      );
+      if (message.id) this.markMessageProcessed(message.id);
+      return;
+    }
 
-    const normalizedEvent = {
-      provider,
-      eventType: incoming.eventType || "MESSAGE",
-      messageType: message.type || "text",
-      messageId,
-      customerWaId,
-      phoneNumberId,
-      timestamp,
-      text: incoming.message || null,
-      action: incoming.action || null,
-      attachments: incoming.attachments || [],
-      fromName: incoming.visitor?.name || null,
-      rawProviderEvent: message,
-      isFlowSubmission: incoming.isFlowSubmission === true,
-      flow: incoming.flow || null,
-    };
-
-    return this.processNormalizedEvent(normalizedEvent, authContext);
+    return this.processNormalizedEvent(
+      {
+        provider:
+          message?.provider ||
+          process.env.WHATSAPP_PROVIDER ||
+          this.provider?.name ||
+          "meta",
+        eventType: incoming.eventType || "MESSAGE",
+        messageType: message.type || "text",
+        messageId: message.id || incoming.whatsapp.messageId,
+        customerWaId,
+        phoneNumberId:
+          metadata?.phone_number_id || this.apiService?.phoneNumberId,
+        timestamp: message.timestamp
+          ? Number(message.timestamp) * 1000
+          : Date.now(),
+        text: incoming.message || null,
+        action: incoming.action || null,
+        attachments: incoming.attachments || [],
+        fromName: incoming.visitor?.name || null,
+        rawProviderEvent: message,
+        isFlowSubmission: incoming.isFlowSubmission === true,
+        flow: incoming.flow || null,
+      },
+      authContext,
+    );
   }
 
   async processEntry(entry = {}) {
-    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-    for (const change of changes) {
+    for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
       await this.processChange(change);
     }
   }
@@ -671,32 +654,16 @@ export default class WhatsAppService {
   async processChange(change = {}) {
     if (change?.field !== "messages") return;
     const value = change?.value || {};
-    if (Array.isArray(value.statuses)) {
-      await this.processStatuses(value.statuses);
-    }
-    if (!Array.isArray(value.messages) || value.messages.length === 0) return;
-
-    for (const message of value.messages) {
+    if (Array.isArray(value.statuses)) await this.processStatuses(value.statuses);
+    for (const message of Array.isArray(value.messages) ? value.messages : []) {
       try {
         await this.processMessage({
           message,
           metadata: value.metadata || {},
           contacts: value.contacts || [],
         });
-      } catch (error) {
-        console.error("[WhatsApp] Message processing error:", error.message);
-      }
-    }
-  }
-
-  async processWhapiPayload(body = {}, authContext = {}) {
-    const whapiAdapter = WhatsAppProviderFactory.getProvider("whapi");
-    const events = whapiAdapter.normalizeInbound(body, authContext);
-    for (const event of events) {
-      if (event.eventType === "STATUS") {
-        await this.processStatuses([event.rawProviderEvent || event]);
-      } else {
-        await this.processNormalizedEvent(event, authContext);
+      } catch (err) {
+        console.error("[WhatsApp] Message processing error:", err.message);
       }
     }
   }
@@ -705,16 +672,59 @@ export default class WhatsAppService {
   // OUTBOUND DISPATCH & RESULT DELIVERY
   // =====================================================
 
+  _resetCancelledResult(result) {
+    const cleanMeta = (meta = {}) => ({
+      ...meta,
+      stage: "CANCELLED",
+      cancelled: true,
+      product: null,
+      selectedProduct: null,
+      selection: null,
+      image: null,
+      images: [],
+      attachments: [],
+    });
+
+    return {
+      ...result,
+      workflow: "NONE",
+      currentStep: null,
+      nextStep: null,
+      action: null,
+      actions: [],
+      liveRequirement: null,
+      order: null,
+      orderContext: null,
+      product: null,
+      productId: null,
+      selectedProduct: null,
+      selectedProductId: null,
+      selection: null,
+      selectionId: null,
+      attachments: [],
+      mediaContext: null,
+      discoveryMatches: [],
+      metadata: cleanMeta(result?.metadata),
+      response: {
+        ...(result?.response ?? {}),
+        workflow: "NONE",
+        currentStep: null,
+        nextStep: null,
+        action: null,
+        actions: [],
+        liveRequirement: null,
+        metadata: cleanMeta(result?.response?.metadata),
+      },
+    };
+  }
+
   async sendResult(incoming, result, timing = {}) {
     const inboundTriggerContext =
       timing.inboundTriggerContext || incoming?.inboundTriggerContext;
-
     const conversationKey =
       incoming?.whatsapp?.phoneNumber || incoming?.sessionId;
-
     const targetSessionId =
-      incoming?.sessionId ||
-      `whatsapp:${incoming?.whatsapp?.phoneNumber}`;
+      incoming?.sessionId || `whatsapp:${incoming?.whatsapp?.phoneNumber}`;
 
     const isCancelled =
       result?.metadata?.cancelled === true ||
@@ -724,145 +734,44 @@ export default class WhatsAppService {
       result?.action?.id === "CANCEL_ORDER" ||
       result?.response?.action?.id === "CANCEL_ORDER";
 
-    // =====================================================
-    // CANCELLATION = HARD RESET
-    // =====================================================
     if (isCancelled) {
-      console.log(
-        `[CANCEL][OUTBOUND][RESET] session=${targetSessionId}`,
-      );
-
-      // Remove stale interactive actions from memory.
+      console.log(`[CANCEL][OUTBOUND][RESET] session=${targetSessionId}`);
       this.lastAvailableActions.delete(targetSessionId);
-
       if (incoming?.whatsapp?.phoneNumber) {
-        this.lastAvailableActions.delete(
-          incoming.whatsapp.phoneNumber,
-        );
+        this.lastAvailableActions.delete(incoming.whatsapp.phoneNumber);
       }
-
-      // Never allow stale result data to reach the normal
-      // product/image/interactive-message pipeline.
-      result = {
-        ...result,
-
-        workflow: "NONE",
-        currentStep: null,
-        nextStep: null,
-
-        action: null,
-        actions: [],
-
-        liveRequirement: null,
-        order: null,
-        orderContext: null,
-        product: null,
-        productId: null,
-        selectedProduct: null,
-        selectedProductId: null,
-        selection: null,
-        selectionId: null,
-
-        attachments: [],
-        mediaContext: null,
-        discoveryMatches: [],
-
-        metadata: {
-          ...(result?.metadata ?? {}),
-          stage: "CANCELLED",
-          cancelled: true,
-          product: null,
-          selectedProduct: null,
-          selection: null,
-          image: null,
-          images: [],
-          attachments: [],
-        },
-
-        response: {
-          ...(result?.response ?? {}),
-          workflow: "NONE",
-          currentStep: null,
-          nextStep: null,
-          action: null,
-          actions: [],
-          liveRequirement: null,
-
-          metadata: {
-            ...(result?.response?.metadata ?? {}),
-            stage: "CANCELLED",
-            cancelled: true,
-            product: null,
-            selectedProduct: null,
-            selection: null,
-            image: null,
-            images: [],
-            attachments: [],
-          },
-        },
-      };
-
+      result = this._resetCancelledResult(result);
       console.log("[CANCEL][OUTBOUND][MEDIA_BLOCKED]");
     } else {
-      // =====================================================
-      // NORMAL ACTION CACHE
-      // =====================================================
       const actions = this.responseAdapter.extractActions(result);
-
       if (actions?.length > 0) {
         this.setAvailableActions(targetSessionId, actions);
-
         if (incoming?.whatsapp?.phoneNumber) {
-          this.setAvailableActions(
-            incoming.whatsapp.phoneNumber,
-            actions,
-          );
+          this.setAvailableActions(incoming.whatsapp.phoneNumber, actions);
         }
       }
     }
 
-    // =====================================================
-    // BUILD OUTBOUND WHATSAPP MESSAGES
-    // =====================================================
     const outboundWorkflow =
       result?.workflow ??
       result?.response?.workflow ??
       incoming?.workflow ??
       null;
 
-    const outgoingMessages =
-      this.responseAdapter.toWhatsAppMessages({
-        ...result,
-
-        workflow: outboundWorkflow,
-
-        sessionId:
-          result?.sessionId ??
-          incoming?.sessionId ??
-          null,
-
-        visitorId:
-          result?.visitorId ??
-          incoming?.visitorId ??
-          null,
-
-        whatsapp:
-          result?.whatsapp ??
-          incoming?.whatsapp ??
-          null,
-
-        liveRequirement:
-          result?.liveRequirement ?? null,
-      });
+    const outgoingMessages = this.responseAdapter.toWhatsAppMessages({
+      ...result,
+      workflow: outboundWorkflow,
+      sessionId: result?.sessionId ?? incoming?.sessionId ?? null,
+      visitorId: result?.visitorId ?? incoming?.visitorId ?? null,
+      whatsapp: result?.whatsapp ?? incoming?.whatsapp ?? null,
+      liveRequirement: result?.liveRequirement ?? null,
+    });
 
     if (isCancelled) {
-      console.log(
-        `[CANCEL][OUTBOUND] messages=${outgoingMessages.length}`,
-      );
+      console.log(`[CANCEL][OUTBOUND] messages=${outgoingMessages.length}`);
     }
 
     const sendResults = [];
-
     for (const outgoing of outgoingMessages) {
       try {
         const sendRes = await this.sendMessage(
@@ -875,17 +784,13 @@ export default class WhatsAppService {
             timing,
           },
         );
-
         sendResults.push(sendRes);
       } catch (err) {
-        console.error(
-          "[WhatsApp] Outbound message send failure:",
-          {
-            to: incoming.whatsapp?.phoneNumber,
-            type: outgoing?.type,
-            error: err.message,
-          },
-        );
+        console.error("[WhatsApp] Outbound message send failure:", {
+          to: incoming.whatsapp?.phoneNumber,
+          type: outgoing?.type,
+          error: err.message,
+        });
       }
     }
 
@@ -903,13 +808,16 @@ export default class WhatsAppService {
       inboundTriggerContext.customerWaId ||
       to;
 
+    const recordedTimestamp =
+      this.windowPolicy.getLastUserMessageAt(conversationKey);
+    const inboundTimestamp = inboundTriggerContext.inboundReceivedAt;
     const lastUserMessageAt =
       options.lastUserMessageAt !== undefined
         ? options.lastUserMessageAt
-        : this.windowPolicy.getLastUserMessageAt(conversationKey) ||
-        inboundTriggerContext.inboundReceivedAt;
+        : inboundTimestamp && (!recordedTimestamp || inboundTimestamp > recordedTimestamp)
+          ? inboundTimestamp
+          : recordedTimestamp || inboundTimestamp;
 
-    // Outbound hard policy authorization guard
     const authorization = this.outboundPolicy.authorizeOutbound({
       to,
       message,
@@ -919,7 +827,6 @@ export default class WhatsAppService {
       credentials: {
         accessToken: this.apiService?.accessToken,
         phoneNumberId: this.apiService?.phoneNumberId,
-        whapiToken: this.whapiToken,
       },
     });
 
@@ -944,6 +851,9 @@ export default class WhatsAppService {
       };
     }
 
+    const normalizedRecipient =
+      this.allowlistPolicy.normalizeToE164(to) || to;
+    console.log(`[WhatsApp] Replying to: ${normalizedRecipient}`);
     console.log("[WhatsApp] OUTBOUND_DISPATCH:", {
       recipient: to,
       type: message?.type,
@@ -1006,6 +916,46 @@ export default class WhatsAppService {
       flowData: message?.interactive?.action?.parameters || null,
     };
 
+    // Correlate outbound media message for async 131053 error handling
+    if (metaWamid && !options.isFallback) {
+      const hasMediaHeader =
+        message?.type === "interactive" &&
+        message?.interactive?.header?.type === "image";
+      const isDirectImage = message?.type === "image";
+
+      if (hasMediaHeader || isDirectImage) {
+        let fallbackMessage = null;
+        if (hasMediaHeader) {
+          const { header, ...interactiveWithoutHeader } = message.interactive;
+          fallbackMessage = {
+            ...message,
+            interactive: interactiveWithoutHeader,
+          };
+        } else {
+          const caption = message.image?.caption || message.caption || "";
+          fallbackMessage = {
+            type: "text",
+            text: {
+              preview_url: false,
+              body: caption || "Here are the details for your request.",
+            },
+          };
+        }
+
+        if (this.outboundMediaFallbacks.size >= this.maxTrackedFallbacks) {
+          const oldest = this.outboundMediaFallbacks.keys().next().value;
+          if (oldest) this.outboundMediaFallbacks.delete(oldest);
+        }
+        this.outboundMediaFallbacks.set(metaWamid, {
+          to,
+          fallbackMessage,
+          options: { ...options, isFallback: true },
+          fallenBack: false,
+          createdAt: Date.now(),
+        });
+      }
+    }
+
     const targetSessionId =
       options.sessionId ||
       (options.conversationKey?.startsWith("whatsapp:")
@@ -1017,8 +967,8 @@ export default class WhatsAppService {
         targetSessionId,
         persistedOutboundMessage,
       );
-    } catch (err) {
-      // Non-fatal if DB is disconnected
+    } catch {
+      // Non-fatal if DB offline
     }
 
     this.realtimeService.emitEvent(WhatsAppEvents.MESSAGE_SENT, {
@@ -1045,7 +995,7 @@ export default class WhatsAppService {
   }
 
   // =====================================================
-  // CONVENIENCE MESSAGING APIS
+  // CONVENIENCE OUTBOUND APIS
   // =====================================================
 
   async sendTextMessage(to, body, options = {}) {
@@ -1082,27 +1032,30 @@ export default class WhatsAppService {
     footer = null,
     options = {},
   ) {
-    const payload = {
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: bodyText },
-        action: {
-          buttons: buttons.map((b, index) => ({
-            type: "reply",
-            reply: {
-              id: b.id ?? `btn_${index}`,
-              title: String(b.title ?? b.label ?? `Option ${index + 1}`)
-                .trim()
-                .slice(0, 20),
-            },
-          })),
+    return this.sendMessage(
+      to,
+      {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: bodyText },
+          action: {
+            buttons: buttons.map((b, index) => ({
+              type: "reply",
+              reply: {
+                id: b.id ?? `btn_${index}`,
+                title: String(b.title ?? b.label ?? `Option ${index + 1}`)
+                  .trim()
+                  .slice(0, 20),
+              },
+            })),
+          },
+          ...(header ? { header } : {}),
+          ...(footer ? { footer: { text: footer } } : {}),
         },
-        ...(header ? { header } : {}),
-        ...(footer ? { footer: { text: footer } } : {}),
       },
-    };
-    return this.sendMessage(to, payload, options);
+      options,
+    );
   }
 
   async sendListMessage(
@@ -1114,35 +1067,38 @@ export default class WhatsAppService {
     footer = null,
     options = {},
   ) {
-    const payload = {
-      type: "interactive",
-      interactive: {
-        type: "list",
-        body: { text: bodyText },
-        action: {
-          button: String(buttonText || "Choose Option")
-            .trim()
-            .slice(0, 20),
-          sections: sections.map((sec) => ({
-            title: String(sec.title || "Options")
+    return this.sendMessage(
+      to,
+      {
+        type: "interactive",
+        interactive: {
+          type: "list",
+          body: { text: bodyText },
+          action: {
+            button: String(buttonText || "Choose Option")
               .trim()
-              .slice(0, 24),
-            rows: (sec.rows || []).map((row, rIdx) => ({
-              id: row.id ?? `row_${rIdx}`,
-              title: String(row.title ?? row.label ?? `Item ${rIdx + 1}`)
+              .slice(0, 20),
+            sections: sections.map((sec) => ({
+              title: String(sec.title || "Options")
                 .trim()
                 .slice(0, 24),
-              ...(row.description
-                ? { description: String(row.description).trim().slice(0, 72) }
-                : {}),
+              rows: (sec.rows || []).map((row, rIdx) => ({
+                id: row.id ?? `row_${rIdx}`,
+                title: String(row.title ?? row.label ?? `Item ${rIdx + 1}`)
+                  .trim()
+                  .slice(0, 24),
+                ...(row.description
+                  ? { description: String(row.description).trim().slice(0, 72) }
+                  : {}),
+              })),
             })),
-          })),
+          },
+          ...(header ? { header } : {}),
+          ...(footer ? { footer: { text: footer } } : {}),
         },
-        ...(header ? { header } : {}),
-        ...(footer ? { footer: { text: footer } } : {}),
       },
-    };
-    return this.sendMessage(to, payload, options);
+      options,
+    );
   }
 
   async sendFlowMessage(
@@ -1153,22 +1109,21 @@ export default class WhatsAppService {
     footer = null,
     options = {},
   ) {
-    const payload = {
-      type: "interactive",
-      interactive: {
-        type: "flow",
-        body: { text: bodyText },
-        action: { name: "flow", parameters: flowParams },
-        ...(header ? { header } : {}),
-        ...(footer ? { footer: { text: footer } } : {}),
+    return this.sendMessage(
+      to,
+      {
+        type: "interactive",
+        interactive: {
+          type: "flow",
+          body: { text: bodyText },
+          action: { name: "flow", parameters: flowParams },
+          ...(header ? { header } : {}),
+          ...(footer ? { footer: { text: footer } } : {}),
+        },
       },
-    };
-    return this.sendMessage(to, payload, options);
+      options,
+    );
   }
-
-  // =====================================================
-  // CRM HUMAN AGENT MESSAGE DISPATCH
-  // =====================================================
 
   async sendAgentMessage({
     sessionId,
@@ -1189,30 +1144,18 @@ export default class WhatsAppService {
       sessionId.trim(),
     );
     if (!conversation) {
-      return {
-        sent: false,
-        blocked: true,
-        reason: "CONVERSATION_NOT_FOUND",
-      };
+      return { sent: false, blocked: true, reason: "CONVERSATION_NOT_FOUND" };
     }
-
     if (conversation.channel !== "WHATSAPP") {
       return { sent: false, blocked: true, reason: "INVALID_CHANNEL" };
     }
 
     const customerWaId = conversation.customerWaId;
-    if (!customerWaId) {
-      return {
-        sent: false,
-        blocked: true,
-        reason: "INVALID_CUSTOMER_IDENTITY",
-      };
+    if (!customerWaId || !this.allowlistPolicy.isAuthorized(customerWaId)) {
+      return { sent: false, blocked: true, reason: "UNAUTHORIZED_RECIPIENT" };
     }
 
-    const phoneNumberId =
-      conversation.metadata?.phoneNumberId || this.apiService?.phoneNumberId;
     const lastUserMessageAt = conversation.lastUserMessageAt;
-
     if (!lastUserMessageAt) {
       return {
         sent: false,
@@ -1234,12 +1177,13 @@ export default class WhatsAppService {
       triggeredByInboundMessage: true,
       inboundMessageId: lastInboundMessageId,
       customerWaId,
-      phoneNumberId,
+      phoneNumberId:
+        conversation.metadata?.phoneNumberId || this.apiService?.phoneNumberId,
       inboundReceivedAt: lastUserMessageAt,
       authenticated: true,
       senderType: "agent",
       agentId,
-      provider: this.provider?.name || "whapi",
+      provider: this.provider?.name || process.env.WHATSAPP_PROVIDER || "meta",
     };
 
     return this.sendTextMessage(customerWaId, message.trim(), {
@@ -1253,35 +1197,74 @@ export default class WhatsAppService {
   }
 
   // =====================================================
-  // STATUS EVENTS
+  // ASYNC STATUS EVENTS & 131053 MEDIA FALLBACK
   // =====================================================
 
   async processStatuses(statuses = []) {
     for (const status of statuses) {
+      const errors = status?.errors || [];
+      const isFailed = status?.status === "failed";
+      const isMedia131053 =
+        isFailed &&
+        errors.some(
+          (e) =>
+            e.code === 131053 ||
+            String(e.title || "").toLowerCase().includes("media upload error") ||
+            String(e.message || "").toLowerCase().includes("media upload error"),
+        );
+
+      if (isMedia131053) {
+        console.log("[Meta Media] Media delivery failed: 131053");
+        const wamid = status?.id;
+        const fallbackItem = wamid
+          ? this.outboundMediaFallbacks.get(wamid)
+          : null;
+
+        if (fallbackItem) {
+          if (fallbackItem.fallenBack) {
+            console.log("[Meta Media] Fallback already sent, skipping");
+          } else {
+            fallbackItem.fallenBack = true;
+            console.log("[Meta Media] Sending media-free fallback");
+            try {
+              await this.sendMessage(
+                fallbackItem.to,
+                fallbackItem.fallbackMessage,
+                fallbackItem.options,
+              );
+            } catch (fallbackErr) {
+              console.error(
+                "[Meta Media] Failed to send media-free fallback:",
+                fallbackErr.message,
+              );
+            }
+          }
+        }
+      }
+
       console.log("[WhatsApp Status]", {
         id: status?.id,
         status: status?.status,
         recipientId: status?.recipient_id,
         timestamp: status?.timestamp,
+        errors,
       });
 
       const wamid = status?.id;
       const statusType = status?.status;
-
       if (wamid && statusType) {
         try {
           await this.conversationRepository.updateMessageStatus(
             wamid,
             statusType,
           );
-        } catch (err) {
-          // Non-fatal if DB is offline
+        } catch {
+          // Non-fatal
         }
 
         let eventName = WhatsAppEvents.MESSAGE_DELIVERED;
         if (statusType === "read") eventName = WhatsAppEvents.MESSAGE_READ;
-        else if (statusType === "failed")
-          eventName = WhatsAppEvents.MESSAGE_FAILED;
+        else if (statusType === "failed") eventName = WhatsAppEvents.MESSAGE_FAILED;
         else if (statusType === "sent") eventName = WhatsAppEvents.MESSAGE_SENT;
 
         this.realtimeService.emitEvent(eventName, {
@@ -1295,7 +1278,7 @@ export default class WhatsAppService {
   }
 
   // =====================================================
-  // ACTION SECURITY VALIDATION & RESOLUTION
+  // ACTION VALIDATION & RESOLUTION
   // =====================================================
 
   validateActionAgainstCurrentState(
@@ -1316,7 +1299,6 @@ export default class WhatsAppService {
         (rawId.includes(":") ||
           rawId.startsWith("Buttons") ||
           rawId.startsWith("quick_reply") ||
-          rawId.startsWith("whapi") ||
           rawId.startsWith("meta"))
       ) {
         const decoded = WhatsappActionCodec.decode(rawId);
@@ -1335,85 +1317,49 @@ export default class WhatsAppService {
     }
 
     const targetId = targetAction.id || targetAction.type;
-    const targetPayload = targetAction.payload || {};
+    const tp = targetAction.payload || {};
 
     if (!availableActions || availableActions.length === 0) {
-      if (targetId && typeof targetId === "string") {
-        return { valid: true, reason: null, matchedAction: targetAction };
-      }
-      return { valid: false, reason: "MALFORMED_ACTION" };
+      return targetId && typeof targetId === "string"
+        ? { valid: true, reason: null, matchedAction: targetAction }
+        : { valid: false, reason: "MALFORMED_ACTION" };
     }
+
+    const eq = (a, b) =>
+      !a || !b || String(a).toLowerCase() === String(b).toLowerCase();
 
     for (const avail of availableActions) {
       const availId = avail.id || avail.type;
-      const availPayload = avail.payload || {};
+      if (targetId !== availId) continue;
+      const ap = avail.payload || {};
 
-      if (targetId === availId) {
-        if (targetId === "SELECT_SELECTION") {
-          const matchProduct =
-            !targetPayload.productId ||
-            !availPayload.productId ||
-            String(targetPayload.productId).toLowerCase() ===
-            String(availPayload.productId).toLowerCase();
-          const matchSelection =
-            !targetPayload.selectionId ||
-            !availPayload.selectionId ||
-            String(targetPayload.selectionId).toLowerCase() ===
-            String(availPayload.selectionId).toLowerCase();
-          if (matchProduct && matchSelection)
-            return { valid: true, matchedAction: avail };
-        } else if (targetId === "SELECT_NESTED_PRODUCT") {
-          const matchProduct =
-            !targetPayload.productId ||
-            !availPayload.productId ||
-            String(targetPayload.productId).toLowerCase() ===
-            String(availPayload.productId).toLowerCase();
-          const matchSelection =
-            !targetPayload.selectionId ||
-            !availPayload.selectionId ||
-            String(targetPayload.selectionId).toLowerCase() ===
-            String(availPayload.selectionId).toLowerCase();
-          const matchNested =
-            !targetPayload.nestedProductId ||
-            !availPayload.nestedProductId ||
-            String(targetPayload.nestedProductId).toLowerCase() ===
-            String(availPayload.nestedProductId).toLowerCase();
-          if (matchProduct && matchSelection && matchNested)
-            return { valid: true, matchedAction: avail };
-        } else if (targetId === "SELECT_PRODUCT") {
-          const matchProduct =
-            !targetPayload.productId ||
-            !availPayload.productId ||
-            String(targetPayload.productId).toLowerCase() ===
-            String(availPayload.productId).toLowerCase();
-          if (matchProduct) return { valid: true, matchedAction: avail };
-        } else if (
-          targetId === "SET_FORM_FIELD" ||
-          targetId === "FORM_FIELD_VALUE"
-        ) {
-          const matchField =
-            !targetPayload.fieldId ||
-            !availPayload.fieldId ||
-            String(targetPayload.fieldId).toLowerCase() ===
-            String(availPayload.fieldId).toLowerCase();
-          const matchValue =
-            targetPayload.value == null ||
-            availPayload.value == null ||
-            String(targetPayload.value).toLowerCase() ===
-            String(availPayload.value).toLowerCase();
-          if (matchField && matchValue)
-            return { valid: true, matchedAction: avail };
-        } else if (targetId === "SUBMIT_ORDER_FORM") {
-          const matchForm =
-            !targetPayload.formId ||
-            !availPayload.formId ||
-            String(targetPayload.formId).toLowerCase() ===
-            String(availPayload.formId).toLowerCase();
-          if (matchForm) return { valid: true, matchedAction: avail };
-        } else {
-          return { valid: true, matchedAction: avail };
-        }
+      if (
+        targetId === "SELECT_SELECTION" &&
+        (!eq(tp.productId, ap.productId) || !eq(tp.selectionId, ap.selectionId))
+      ) {
+        continue;
       }
+      if (
+        targetId === "SELECT_NESTED_PRODUCT" &&
+        (!eq(tp.productId, ap.productId) ||
+          !eq(tp.selectionId, ap.selectionId) ||
+          !eq(tp.nestedProductId, ap.nestedProductId))
+      ) {
+        continue;
+      }
+      if (targetId === "SELECT_PRODUCT" && !eq(tp.productId, ap.productId)) {
+        continue;
+      }
+      if (
+        (targetId === "SET_FORM_FIELD" || targetId === "FORM_FIELD_VALUE") &&
+        (!eq(tp.fieldId, ap.fieldId) || !eq(tp.value, ap.value))
+      ) {
+        continue;
+      }
+      if (targetId === "SUBMIT_ORDER_FORM" && !eq(tp.formId, ap.formId)) {
+        continue;
+      }
+      return { valid: true, matchedAction: avail };
     }
 
     return { valid: false, reason: "FORGED_OR_STALE_ACTION" };
@@ -1501,7 +1447,7 @@ export default class WhatsAppService {
             }));
           }
         }
-      } catch (err) {
+      } catch {
         // Non-fatal
       }
     }
@@ -1568,22 +1514,20 @@ export default class WhatsAppService {
       .trim();
     if (!cleanUserText) return null;
 
-    for (const action of availableActions) {
-      const actionLabel = String(
-        action.label || action.title || action.name || "",
-      )
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      const selectionId = String(
-        action.payload?.selectionId || action.payload?.productId || "",
-      )
+    const normalizeStr = (s) =>
+      String(s || "")
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
 
+    for (const action of availableActions) {
+      const actionLabel = normalizeStr(
+        action.label || action.title || action.name,
+      );
+      const selectionId = normalizeStr(
+        action.payload?.selectionId || action.payload?.productId,
+      );
       if (cleanUserText === actionLabel || cleanUserText === selectionId) {
         return action;
       }
@@ -1591,20 +1535,12 @@ export default class WhatsAppService {
 
     const matches = [];
     for (const action of availableActions) {
-      const actionLabel = String(
-        action.label || action.title || action.name || "",
-      )
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      const selectionId = String(
-        action.payload?.selectionId || action.payload?.productId || "",
-      )
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+      const actionLabel = normalizeStr(
+        action.label || action.title || action.name,
+      );
+      const selectionId = normalizeStr(
+        action.payload?.selectionId || action.payload?.productId,
+      );
 
       const userTokens = cleanUserText.split(" ").filter((t) => t.length > 1);
       const labelTokens = actionLabel.split(" ").filter((t) => t.length > 1);
@@ -1626,10 +1562,7 @@ export default class WhatsAppService {
       const matchedTokens = userTokens.filter(
         (t) => labelTokens.includes(t) || selectionTokens.includes(t),
       );
-      if (
-        matchedTokens.length > 0 &&
-        matchedTokens.length === userTokens.length
-      ) {
+      if (matchedTokens.length > 0 && matchedTokens.length === userTokens.length) {
         matches.push({
           action,
           score: matchedTokens.length / Math.max(labelTokens.length, 1),
@@ -1644,9 +1577,5 @@ export default class WhatsAppService {
     }
 
     return null;
-  }
-
-  isSenderAllowed(phoneNumber) {
-    return this.allowlistPolicy.isAuthorized(phoneNumber);
   }
 }
